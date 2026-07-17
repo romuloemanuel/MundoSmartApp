@@ -1,0 +1,121 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Comiss&otilde;es</h2>
+  </div>
+
+  <p class="formula-hint">
+    Base l&iacute;quida por OS = valor total − juros − custo das pe&ccedil;as (FIFO).
+    Somente OS com situa&ccedil;&atilde;o <strong>Conclu&iacute;do</strong>.
+    O servi&ccedil;o &eacute; executado na assist&ecirc;ncia de <strong>Mococa</strong> —
+    o padr&atilde;o do relat&oacute;rio &eacute; <strong>todas as lojas</strong>;
+    use o filtro se quiser ver s&oacute; uma origem.
+  </p>
+
+  <div class="filtros-comissao">
+    <div class="form-group">
+      <label>Conclus&atilde;o de</label>
+      <input type="date" [(ngModel)]="dataInicio" name="dataInicio" />
+    </div>
+    <div class="form-group">
+      <label>at&eacute;</label>
+      <input type="date" [(ngModel)]="dataFim" name="dataFim" />
+    </div>
+    <div class="form-group">
+      <label>Loja de origem</label>
+      <select [(ngModel)]="filtroLoja" name="filtroLoja">
+        <option *ngFor="let l of lojasFiltro" [value]="l.value">{{ l.label }}</option>
+      </select>
+      <span class="campo-hint">Padr&atilde;o: todas (MCC, ARCE, SJ, CJR…)</span>
+    </div>
+    <div class="form-group" style="flex:1;min-width:240px">
+      <label>
+        T&eacute;cnicos
+        <button type="button" class="btn-link" style="margin-left:8px;font-size:11px" (click)="selecionarTodos()">todos</button>
+        <button type="button" class="btn-link" style="margin-left:4px;font-size:11px" (click)="limparTecnicos()">limpar</button>
+      </label>
+      <div class="tecnicos-lista" *ngIf="tecnicos.length; else semTecnicos">
+        <label *ngFor="let t of tecnicos">
+          <input
+            type="checkbox"
+            [checked]="isTecnicoSelecionado(t.nome)"
+            (change)="toggleTecnico(t.nome, $any($event.target).checked)"
+          />
+          {{ t.nome }}
+        </label>
+      </div>
+      <ng-template #semTecnicos>
+        <span class="campo-hint">Nenhum t&eacute;cnico cadastrado.</span>
+      </ng-template>
+      <span class="campo-hint" *ngIf="tecnicosSelecionados.size === 0">
+        Nenhum selecionado = todos os t&eacute;cnicos no per&iacute;odo.
+      </span>
+      <label style="margin-top:6px;font-weight:500;cursor:pointer">
+        <input type="checkbox" [(ngModel)]="incluirSemTecnico" name="incluirSemTecnico" />
+        Incluir OS sem t&eacute;cnico
+      </label>
+    </div>
+    <button type="button" (click)="gerar()" [disabled]="carregando">
+      {{ carregando ? 'Gerando...' : 'Gerar relat&oacute;rio' }}
+    </button>
+  </div>
+
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="carregando">Carregando...</p>
+
+  <ng-container *ngIf="relatorio && !carregando">
+    <div class="resumo-geral">
+      <span>Escopo: <strong>{{ rotuloEscopoLoja }}</strong></span>
+      <span>{{ relatorio.quantidadeOs }} OS</span>
+      <span>Total: {{ formatarMoeda(relatorio.totalValor) }}</span>
+      <span>Juros: {{ formatarMoeda(relatorio.totalJuros) }}</span>
+      <span>Pe&ccedil;as: {{ formatarMoeda(relatorio.totalPecas) }}</span>
+      <span class="destaque">L&iacute;quido: {{ formatarMoeda(relatorio.totalLiquido) }}</span>
+    </div>
+
+    <div class="resumo-cards" *ngIf="relatorio.porTecnico.length">
+      <div class="resumo-card" *ngFor="let t of relatorio.porTecnico; trackBy: trackTecnico">
+        <h3>{{ t.tecnicoNome }}</h3>
+        <div class="linha"><span>OS</span><strong>{{ t.quantidadeOs }}</strong></div>
+        <div class="linha"><span>Total</span><strong>{{ formatarMoeda(t.totalValor) }}</strong></div>
+        <div class="linha"><span>Juros</span><strong>{{ formatarMoeda(t.totalJuros) }}</strong></div>
+        <div class="linha"><span>Pe&ccedil;as</span><strong>{{ formatarMoeda(t.totalPecas) }}</strong></div>
+        <div class="liquido"><span>L&iacute;quido</span><span>{{ formatarMoeda(t.totalLiquido) }}</span></div>
+      </div>
+    </div>
+
+    <p *ngIf="relatorio.ordens.length === 0">Nenhuma OS conclu&iacute;da no filtro.</p>
+
+    <table class="data-grid" *ngIf="relatorio.ordens.length > 0">
+      <thead>
+        <tr>
+          <th>OS</th>
+          <th>Loja</th>
+          <th>T&eacute;cnico</th>
+          <th>Cliente</th>
+          <th>Equipamento</th>
+          <th>Conclus&atilde;o</th>
+          <th class="col-num">Total</th>
+          <th class="col-num">Juros</th>
+          <th class="col-num">Pe&ccedil;as</th>
+          <th class="col-num">L&iacute;quido</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let o of relatorio.ordens">
+          <td>
+            <a [routerLink]="['/ordens-servico', o.id]">#{{ o.numero || o.id }}</a>
+          </td>
+          <td [title]="labelLoja(o.lojaOrigem)">{{ siglaLoja(o.lojaOrigem) }}</td>
+          <td>{{ o.tecnicoNome || '—' }}</td>
+          <td>{{ o.clienteNome || '—' }}</td>
+          <td>{{ o.equipamento || '—' }}</td>
+          <td>{{ formatarData(o.dataConclusao) }}</td>
+          <td class="col-num">{{ formatarMoeda(o.valorTotal) }}</td>
+          <td class="col-num">{{ formatarMoeda(o.juros) }}</td>
+          <td class="col-num">{{ formatarMoeda(o.valorPecas) }}</td>
+          <td class="col-num liquido-cell">{{ formatarMoeda(o.valorLiquido) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </ng-container>
+</div>

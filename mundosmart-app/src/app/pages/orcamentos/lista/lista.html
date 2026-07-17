@@ -1,0 +1,173 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Orçamentos</h2>
+    <button (click)="novo()">+ Novo Orçamento</button>
+  </div>
+
+  <div class="filtros-bar" *ngIf="!carregando">
+    <input
+      class="filtro-cliente"
+      type="search"
+      [(ngModel)]="filtroCliente"
+      name="filtroCliente"
+      placeholder="Cliente, nº ou aparelho..."
+      (keyup.enter)="aplicarFiltros()"
+      (ngModelChange)="aplicarFiltros()"
+    />
+    <select
+      [(ngModel)]="filtroSituacao"
+      name="filtroSituacao"
+      (ngModelChange)="aplicarFiltros()"
+    >
+      <option *ngFor="let s of situacoes" [value]="s.id">{{ s.label }}</option>
+    </select>
+    <select
+      [(ngModel)]="filtroValidade"
+      name="filtroValidade"
+      (ngModelChange)="aplicarFiltros()"
+    >
+      <option *ngFor="let v of validades" [value]="v.id">{{ v.label }}</option>
+    </select>
+    <select
+      [(ngModel)]="filtroLoja"
+      name="filtroLoja"
+      (ngModelChange)="aplicarFiltros()"
+      [disabled]="lojaFiltroTravada"
+      title="Loja de origem"
+    >
+      <option *ngFor="let l of lojasFiltro" [value]="l.value">{{ l.label }}</option>
+    </select>
+    <button type="button" (click)="filtrarVencidos()">Só vencidos</button>
+    <button
+      type="button"
+      class="btn-limpar"
+      *ngIf="filtrosAtivos > 0"
+      (click)="limparFiltros()"
+    >
+      Limpar
+    </button>
+  </div>
+
+  <p class="orc-filtro-resumo" *ngIf="!carregando && orcamentos.length">
+    Exibindo <strong>{{ orcamentosFiltrados.length }}</strong> de {{ orcamentos.length }}
+    <span *ngIf="totalVencidos > 0">
+      · <strong>{{ totalVencidos }}</strong> vencido(s) em aberto
+    </span>
+  </p>
+
+  <p *ngIf="carregando">Carregando...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <app-orcamento-converter-modal
+    *ngIf="converterOrcamento as o"
+    [orcamento]="o"
+    [convertendo]="convertendoId === o.id"
+    [erro]="erroConverter"
+    (confirmar)="confirmarConversao()"
+    (cancelar)="fecharConverter()"
+  />
+
+  <app-grid-paginator
+    *ngIf="!carregando && orcamentosFiltrados.length > 0"
+    [total]="orcamentosFiltrados.length"
+    [page]="grid.page"
+    [pageSize]="grid.pageSize"
+    (pageChange)="grid.onPageChange($event)"
+    (pageSizeChange)="grid.onPageSizeChange($event)"
+  />
+
+  <table class="data-grid" *ngIf="!carregando && orcamentosFiltrados.length > 0">
+    <thead>
+      <tr>
+        <th>Número</th>
+        <th>Loja</th>
+        <th>Cliente</th>
+        <th>Contato</th>
+        <th>Aparelho</th>
+        <th>Situação</th>
+        <th>Data</th>
+        <th>Validade</th>
+        <th>Retorno / justificativa</th>
+        <th>Valor</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let o of orcamentosPaginados">
+        <td>{{ o.numero }}</td>
+        <td [title]="tituloLoja(o)">
+          <span class="grid-loja-sigla">{{ siglaLoja(o) }}</span>
+        </td>
+        <td>{{ o.contato?.nome || '-' }}</td>
+        <td>
+          <span class="orc-tipo-contato">{{ labelTipoContato(o) }}</span>
+        </td>
+        <td>{{ o.equipamento || ((o.marcaNome || '') + ' ' + (o.modeloNome || '')).trim() || '—' }}</td>
+        <td>
+          <span class="badge" [class.orc-convertido-badge]="jaConvertido(o)">{{ o.situacao }}</span>
+          <span *ngIf="o.osGeradaNumero" class="campo-hint">OS #{{ o.osGeradaNumero }}</span>
+        </td>
+        <td>{{ o.data | date:'dd/MM/yyyy' }}</td>
+        <td [class.orc-vencido]="vencido(o)">
+          {{ o.validade | date:'dd/MM/yyyy' }}
+          <span *ngIf="vencido(o)"> (vencido)</span>
+        </td>
+        <td class="orc-retorno-cell">
+          <ng-container *ngIf="temRetorno(o); else semRetorno">
+            <span
+              *ngIf="o.dataRetornoMensagem"
+              class="orc-retorno-data"
+              [ngClass]="classeDataRetorno(o)"
+              [title]="o.justificativaAguardo || ''"
+            >
+              {{ o.dataRetornoMensagem | date:'dd/MM/yyyy' }}
+            </span>
+            <span
+              class="orc-retorno-just"
+              *ngIf="o.justificativaAguardo"
+              [title]="o.justificativaAguardo"
+            >
+              {{ o.justificativaAguardo }}
+            </span>
+          </ng-container>
+          <ng-template #semRetorno>—</ng-template>
+        </td>
+        <td>{{ valorExibido(o) | currency:'BRL' }}</td>
+        <td class="grid-acoes-cell">
+          <div class="grid-acoes orc-grid-acoes">
+            <app-grid-acao tipo="editar" (acao)="editar(o.id!)" />
+            <app-grid-acao
+              tipo="imprimir"
+              titulo="Imprimir pré-orçamento"
+              (acao)="imprimir(o)"
+            />
+            <button
+              type="button"
+              class="btn-transformar-os"
+              *ngIf="!jaConvertido(o)"
+              [disabled]="!!convertendoId || !!vencido(o)"
+              [title]="vencido(o) ? 'Orçamento vencido — renove a validade antes de transformar' : 'Transformar orçamento em Ordem de Serviço'"
+              (click)="abrirConverter(o)"
+            >
+              Transformar em OS
+            </button>
+            <button
+              type="button"
+              class="btn-abrir-os"
+              *ngIf="jaConvertido(o)"
+              (click)="abrirOs(o)"
+            >
+              Abrir OS
+            </button>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p *ngIf="!carregando && orcamentos.length === 0 && !erro">Nenhum orçamento encontrado.</p>
+  <p *ngIf="!carregando && orcamentos.length > 0 && orcamentosFiltrados.length === 0 && !erro">
+    Nenhum orçamento corresponde aos filtros.
+    <button type="button" class="btn-link" (click)="limparFiltros()">Limpar filtros</button>
+  </p>
+</div>

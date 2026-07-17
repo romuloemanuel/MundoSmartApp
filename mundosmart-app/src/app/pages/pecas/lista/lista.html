@@ -1,0 +1,98 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Cadastro de Pe&ccedil;as</h2>
+    <button type="button" (click)="novo()">+ Nova pe&ccedil;a</button>
+  </div>
+
+  <nav class="breadcrumb" aria-label="Navegação">
+    <a routerLink="/estoque">Estoque</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <span class="breadcrumb-atual">Pe&ccedil;as</span>
+  </nav>
+
+  <div class="filtros">
+    <input
+      [(ngModel)]="busca"
+      class="filtro-busca-principal"
+      placeholder="Buscar pe&ccedil;a ou modelo (ex: Tela, A54)..."
+      (keyup.enter)="carregar()"
+    />
+    <select
+      class="pecas-filtro-nivel"
+      [(ngModel)]="filtroNivel"
+      name="filtroNivel"
+      (ngModelChange)="onFiltroNivelChange()"
+    >
+      <option *ngFor="let o of opcoesFiltroNivel" [ngValue]="o.id">{{ o.label }}</option>
+    </select>
+    <button type="button" (click)="carregar()">Buscar</button>
+    <button *ngIf="filtrosAtivos" type="button" class="btn-limpar" (click)="limparFiltros()">Limpar</button>
+  </div>
+
+  <p *ngIf="carregando" class="campo-hint">Carregando...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <app-grid-paginator
+    *ngIf="!carregando && pecasFiltradas.length > 0"
+    [total]="pecasFiltradas.length"
+    [page]="grid.page"
+    [pageSize]="grid.pageSize"
+    (pageChange)="grid.onPageChange($event)"
+    (pageSizeChange)="grid.onPageSizeChange($event)"
+  />
+
+  <table class="data-grid" *ngIf="!carregando && pecasFiltradas.length > 0">
+    <thead>
+      <tr>
+        <th>Pe&ccedil;a</th>
+        <th>Fornecedor</th>
+        <th>Modelos</th>
+        <th>Pre&ccedil;o</th>
+        <th>Estoque</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let p of pecasPaginadas">
+        <td>
+          <strong>{{ inferirCategoria(p) }}</strong>
+          <div *ngIf="p.nome && p.nome.trim().toLowerCase() !== inferirCategoria(p).toLowerCase()" class="campo-hint">
+            {{ p.nome }}
+          </div>
+          <div *ngIf="p.descricao" class="campo-hint">{{ p.descricao }}</div>
+        </td>
+        <td>{{ p.marcaPeca || '—' }}</td>
+        <td class="pecas-modelos-col" [title]="tooltipModelosCompativeis(p)">
+          <ng-container *ngIf="modelosDaPeca(p).length; else semModelo">
+            {{ modelosDaPeca(p).join(', ') }}
+          </ng-container>
+          <ng-template #semModelo>—</ng-template>
+        </td>
+        <td>
+          <span *ngIf="!temPrecoPorModelo(p)">
+            {{ formatarMoeda(p.valorSugeridoTroca) }}
+            <span class="campo-hint" *ngIf="p.valorSugeridoMinimo != null">
+              (m&iacute;n. {{ formatarMoeda(p.valorSugeridoMinimo) }})
+            </span>
+          </span>
+          <span *ngIf="temPrecoPorModelo(p)" class="campo-hint">Por modelo</span>
+        </td>
+        <td>
+          <span class="pecas-estoque-qtd" [ngClass]="nivelClasses[nivelDaPeca(p)]">
+            {{ p.quantidadeEstoque ?? 0 }}
+          </span>
+        </td>
+        <td class="grid-acoes-cell">
+          <div class="grid-acoes">
+            <app-grid-acao tipo="editar" (acao)="editar(p.id!)" />
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p *ngIf="!carregando && pecas.length === 0 && !erro">Nenhuma pe&ccedil;a cadastrada.</p>
+  <p *ngIf="!carregando && pecas.length > 0 && pecasFiltradas.length === 0 && !erro">
+    Nenhuma pe&ccedil;a neste n&iacute;vel de estoque.
+  </p>
+</div>

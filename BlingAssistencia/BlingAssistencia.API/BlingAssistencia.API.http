@@ -1,0 +1,6 @@
+@BlingAssistencia.API_HostAddress = http://localhost:5276
+
+GET {{BlingAssistencia.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

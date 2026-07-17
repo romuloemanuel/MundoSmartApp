@@ -1,0 +1,286 @@
+<div class="page">
+  <h2>{{ editando ? 'Editar Peça' : 'Nova Peça' }}</h2>
+
+  <nav class="breadcrumb" aria-label="Navegação">
+    <a routerLink="/pecas">Pe&ccedil;as</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <span class="breadcrumb-atual">{{ editando ? 'Editar' : 'Nova' }}</span>
+  </nav>
+
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <form (ngSubmit)="salvar()">
+    <h3>Dados da pe&ccedil;a</h3>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Categoria <span class="campo-obrigatorio">*</span></label>
+        <select [(ngModel)]="peca.categoria" name="categoria" required (ngModelChange)="onCategoriaChange()">
+          <option value="">Selecione o tipo de pe&ccedil;a...</option>
+          <option *ngFor="let c of categoriasPeca" [value]="c">{{ c }}</option>
+        </select>
+        <p class="nome-exemplo">
+          Cada categoria &eacute; um cadastro &uacute;nico — ex: <strong>Tela Incell com Aro</strong> e
+          <strong>Tela Incell</strong> s&atilde;o pe&ccedil;as diferentes. Os modelos de celular (A14, A24…) v&atilde;o abaixo.
+        </p>
+      </div>
+      <div class="form-group">
+        <label>Nome / identifica&ccedil;&atilde;o</label>
+        <input [(ngModel)]="peca.nome" name="nome" [placeholder]="peca.categoria || 'Ex: mesma da categoria ou fornecedor'" />
+        <p class="compat-hint" style="margin-top:4px">Opcional se for igual &agrave; categoria. Use para diferenciar fornecedores.</p>
+      </div>
+      <div class="form-group">
+        <label>Fornecedor / qualidade</label>
+        <input [(ngModel)]="peca.marcaPeca" name="marcaPeca" placeholder="Ex: Incell, OLED, Original" />
+      </div>
+      <div class="form-group" *ngIf="!usaCoresPorModelo">
+        <label>Estoque inicial</label>
+        <input type="number" min="0" [(ngModel)]="peca.quantidadeEstoque" name="quantidadeEstoque" />
+      </div>
+      <div class="form-group" *ngIf="usaCoresPorModelo">
+        <label>Estoque total</label>
+        <input type="number" [ngModel]="totalEstoqueCores" name="quantidadeEstoqueCores" disabled />
+        <p class="estoque-total-hint">Soma das cores por modelo</p>
+      </div>
+    </div>
+
+    <div class="preco-toggle" style="margin-bottom:12px">
+      <input
+        type="checkbox"
+        id="estoqueNaLoja"
+        [(ngModel)]="peca.estoqueNaLoja"
+        name="estoqueNaLoja"
+      />
+      <label for="estoqueNaLoja">Estoque na loja (entra na reposi&ccedil;&atilde;o)</label>
+    </div>
+    <p class="compat-hint" *ngIf="peca.estoqueNaLoja === false" style="margin-top:-8px;margin-bottom:12px">
+      Pe&ccedil;a somente via fornecedor externo na OS — n&atilde;o sai do estoque da loja e n&atilde;o aparece no relat&oacute;rio de reposi&ccedil;&atilde;o.
+    </p>
+
+    <div class="preco-toggle" style="margin-bottom:12px">
+      <input
+        type="checkbox"
+        id="ignorarAlertaEstoque"
+        [(ngModel)]="peca.ignorarAlertaEstoque"
+        name="ignorarAlertaEstoque"
+      />
+      <label for="ignorarAlertaEstoque">N&atilde;o alertar falta desta pe&ccedil;a</label>
+    </div>
+    <p class="compat-hint" *ngIf="peca.ignorarAlertaEstoque" style="margin-top:-8px;margin-bottom:12px">
+      Ideal para aparelhos obsoletos / fora de linha que quase n&atilde;o entram mais na assist&ecirc;ncia.
+      Continua no cadastro, mas some dos alertas de estoque baixo ou sem pe&ccedil;a.
+    </p>
+
+    <div class="form-group">
+      <label>Descri&ccedil;&atilde;o</label>
+      <textarea [(ngModel)]="peca.descricao" name="descricao" rows="2"
+        placeholder="Detalhes extras: programação, cor, observações..."></textarea>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Garantia</label>
+        <input [(ngModel)]="peca.garantia" name="garantia" placeholder="Ex: 6 meses" />
+      </div>
+      <div class="form-group">
+        <label>Parcelamento m&aacute;x.</label>
+        <input type="number" min="1" [(ngModel)]="peca.parcelamento" name="parcelamento" placeholder="Ex: 10" />
+      </div>
+    </div>
+
+    <div class="secao-precos">
+      <h3>Pre&ccedil;o de venda (total ao cliente)</h3>
+      <p class="compat-hint" style="margin-top:0">
+        Valor cobrado do cliente (pe&ccedil;a + servi&ccedil;o).
+        O <strong>custo da pe&ccedil;a</strong> vem dos lotes de compra no estoque.
+      </p>
+
+      <div class="preco-toggle">
+        <input
+          type="checkbox"
+          id="precoUnico"
+          [(ngModel)]="precoUnico"
+          name="precoUnico"
+          (ngModelChange)="onPrecoUnicoChange()"
+        />
+        <label for="precoUnico">Mesmo pre&ccedil;o para todos os modelos</label>
+      </div>
+
+      <p class="compat-hint" *ngIf="precoUnico">
+        Os valores abaixo valem para todos os modelos compat&iacute;veis desta pe&ccedil;a.
+      </p>
+      <p class="compat-hint" *ngIf="!precoUnico">
+        Defina valores padr&atilde;o abaixo. Na tabela de modelos, preencha apenas onde o pre&ccedil;o for diferente
+        (campos vazios usam o padr&atilde;o).
+      </p>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Pre&ccedil;o m&iacute;n. total</label>
+          <input type="number" min="0" step="0.01" [(ngModel)]="peca.valorSugeridoMinimo" name="valorMinimo" />
+        </div>
+        <div class="form-group">
+          <label>Pre&ccedil;o sugerido total</label>
+          <input type="number" min="0" step="0.01" [(ngModel)]="peca.valorSugeridoTroca" name="valorSugerido" />
+        </div>
+      </div>
+    </div>
+
+    <div class="secao-variacoes">
+      <h3>Varia&ccedil;&otilde;es de servi&ccedil;o (opcional)</h3>
+      <p class="compat-hint" style="margin-top:0">
+        Use quando a <strong>mesma pe&ccedil;a</strong> tem op&ccedil;&otilde;es com pre&ccedil;o diferente na OS.
+        Ex: bateria com <strong>Sem programação</strong> / <strong>Com programação</strong>;
+        ou <strong>Bateria Calibrada</strong> como pe&ccedil;a separada s&oacute; para linha iPhone.
+      </p>
+      <button type="button" (click)="adicionarVariacao()">+ Adicionar varia&ccedil;&atilde;o</button>
+
+      <table class="variacoes-table" *ngIf="peca.variacoes?.length">
+        <thead>
+          <tr>
+            <th>R&oacute;tulo</th>
+            <th>Detalhe</th>
+            <th>M&iacute;nimo</th>
+            <th>Sugerido</th>
+            <th>Garantia</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let v of peca.variacoes; let vi = index">
+            <td>
+              <input [(ngModel)]="v.rotulo" [name]="'var_rotulo_' + vi" placeholder="Ex: Calibrada" required />
+            </td>
+            <td>
+              <input [(ngModel)]="v.detalhe" [name]="'var_det_' + vi" placeholder="Observação para o técnico" />
+            </td>
+            <td>
+              <input type="number" min="0" step="0.01" [(ngModel)]="v.valorSugeridoMinimo" [name]="'var_min_' + vi" />
+            </td>
+            <td>
+              <input type="number" min="0" step="0.01" [(ngModel)]="v.valorSugeridoTroca" [name]="'var_sug_' + vi" />
+            </td>
+            <td>
+              <input [(ngModel)]="v.garantia" [name]="'var_gar_' + vi" placeholder="Opcional" />
+            </td>
+            <td><button type="button" (click)="removerVariacao(vi)">Remover</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Modelos compat&iacute;veis</h3>
+    <p class="compat-hint">
+      Vincule aqui os aparelhos que usam <strong>esta mesma pe&ccedil;a</strong> (mesma marca).
+      Na OS e no estoque, a pe&ccedil;a aparece automaticamente ao selecionar qualquer um desses modelos.
+    </p>
+    <p class="compat-hint" *ngIf="usaCoresPorModelo">
+      Em <strong>Tampa traseira</strong> e <strong>Vidro Traseiro</strong>, informe as <strong>cores</strong> e a <strong>quantidade</strong> de cada cor dentro do modelo.
+    </p>
+    <p class="compat-aviso" *ngIf="marcaVinculada">
+      Marca desta pe&ccedil;a: <strong>{{ marcaVinculada }}</strong> — s&oacute; &eacute; poss&iacute;vel adicionar modelos dessa marca.
+    </p>
+
+    <div class="compat-add">
+      <div class="form-group" style="flex:2">
+        <label>Buscar modelo</label>
+        <input [(ngModel)]="buscaModelo" name="buscaModelo"
+          placeholder="Marca ou modelo (ex: Samsung, A14)..."
+          (focus)="onBuscaModeloFocus()"
+          (ngModelChange)="onBuscaModeloChange()" />
+      </div>
+      <div class="form-group">
+        <label>Filtrar marca</label>
+        <select [(ngModel)]="filtroMarcaModelo" name="filtroMarcaModelo"
+          (ngModelChange)="onFiltroMarcaChange()"
+          [disabled]="!!marcaVinculada">
+          <option value="">Todas</option>
+          <option *ngFor="let marca of marcasModeloDisponiveis" [value]="marca">{{ marca }}</option>
+        </select>
+      </div>
+    </div>
+
+    <p *ngIf="buscandoModelos" class="compat-hint">Buscando modelos...</p>
+    <p *ngIf="avisoModelo" class="compat-erro">{{ avisoModelo }}</p>
+
+    <div class="resultados-modelos" *ngIf="!buscandoModelos && modelosBusca.length > 0">
+      <div class="resultado-modelo"
+        *ngFor="let m of modelosBusca"
+        [class.ja-vinculado]="modeloJaVinculado(m.id)">
+        <span>{{ m.marcaNome }} {{ m.nome }} <small class="cadastro-modelo">({{ formatarCadastro(m) }})</small></span>
+        <button type="button"
+          (click)="adicionarModelo(m)"
+          [disabled]="modeloJaVinculado(m.id)">
+          {{ modeloJaVinculado(m.id) ? 'Já vinculado' : 'Adicionar' }}
+        </button>
+      </div>
+    </div>
+
+    <p *ngIf="!buscandoModelos && modelosBusca.length === 0" class="compat-hint">
+      Nenhum modelo encontrado.
+      <a routerLink="/modelos/novo">Cadastrar novo modelo</a>
+    </p>
+
+    <table class="compat-table" *ngIf="peca.modelosCompativeis?.length">
+      <thead>
+        <tr>
+          <th>Modelo</th>
+          <th>Marca</th>
+          <th *ngIf="!precoUnico">M&iacute;nimo</th>
+          <th *ngIf="!precoUnico">Sugerido</th>
+          <th *ngIf="usaCoresPorModelo">Cores / qtd</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let m of peca.modelosCompativeis; let i = index">
+          <td>{{ m.modeloNome || m.modeloId }}</td>
+          <td>{{ m.marcaNome || '—' }}</td>
+          <td *ngIf="!precoUnico">
+            <input type="number" min="0" step="0.01" [(ngModel)]="m.valorSugeridoMinimo" [name]="'min_' + i"
+              placeholder="Padrão" />
+          </td>
+          <td *ngIf="!precoUnico">
+            <input type="number" min="0" step="0.01" [(ngModel)]="m.valorSugeridoTroca" [name]="'sug_' + i"
+              placeholder="Padrão" />
+          </td>
+          <td *ngIf="usaCoresPorModelo">
+            <div class="cores-modelo">
+              <p class="cores-modelo-titulo">Cor + quantidade neste modelo</p>
+              <div class="cor-linha" *ngFor="let c of m.cores; let ci = index">
+                <input
+                  type="text"
+                  [(ngModel)]="c.cor"
+                  [name]="'cor_' + i + '_' + ci"
+                  placeholder="Cor (ex: Preto)"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  [(ngModel)]="c.quantidade"
+                  [name]="'cor_qtd_' + i + '_' + ci"
+                  title="Quantidade desta cor neste modelo"
+                  placeholder="Qtd"
+                />
+                <button type="button" (click)="removerCor(i, ci)" title="Remover cor">✕</button>
+              </div>
+              <button type="button" class="btn-add-cor" (click)="adicionarCor(i)">+ Cor neste modelo</button>
+              <p class="estoque-total-hint" *ngIf="(m.cores?.length ?? 0) > 0">
+                Subtotal modelo: {{ totalCoresModelo(m) }}
+              </p>
+            </div>
+          </td>
+          <td><button type="button" (click)="removerModelo(i)">Remover</button></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p *ngIf="!peca.modelosCompativeis?.length" class="compat-hint">
+      Nenhum modelo vinculado. A pe&ccedil;a n&atilde;o aparecer&aacute; no painel da OS at&eacute; vincular modelos.
+    </p>
+
+    <div class="form-actions">
+      <button type="submit" [disabled]="salvando">{{ salvando ? 'Salvando...' : 'Salvar' }}</button>
+      <button type="button" (click)="cancelar()">Cancelar</button>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,94 @@
+<div class="page os-historico">
+  <nav class="breadcrumb" aria-label="Navegação">
+    <a routerLink="/ordens-servico">Ordens de Serviço</a>
+    <span class="breadcrumb-sep">/</span>
+    <a [routerLink]="['/ordens-servico', osId]">OS #{{ osNumero || osId }}</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-atual">Histórico</span>
+  </nav>
+
+  <div class="os-historico-topo">
+    <h2>Histórico de versões — OS #{{ osNumero || osId }}</h2>
+    <button type="button" class="btn-sec" (click)="voltar()">Voltar à OS</button>
+  </div>
+
+  <p class="hint">
+    Cada criação, edição, mudança de situação ou exclusão gera uma versão com o estado completo do registro.
+  </p>
+
+  <p class="erro" *ngIf="erro">{{ erro }}</p>
+  <p *ngIf="carregando">Carregando histórico…</p>
+
+  <div class="os-historico-layout" *ngIf="!carregando && !erro">
+    <aside class="os-historico-lista">
+      <p class="vazio" *ngIf="!versoes.length">Nenhuma versão registrada ainda.</p>
+      <button
+        type="button"
+        class="versao-item"
+        *ngFor="let v of versoes"
+        [class.ativo]="selecionada?.versao === v.versao"
+        (click)="selecionar(v)"
+      >
+        <span class="versao-num">v{{ v.versao }}</span>
+        <span class="versao-acao" [ngClass]="classeAcao(v.acao)">{{ rotuloAcao(v.acao) }}</span>
+        <span class="versao-resumo">{{ v.resumo }}</span>
+        <span class="versao-meta">
+          {{ v.criadoEm | date:'dd/MM/yyyy HH:mm':tz }}
+          <span *ngIf="v.usuarioNome"> · {{ v.usuarioNome }}</span>
+        </span>
+      </button>
+    </aside>
+
+    <section class="os-historico-detalhe" *ngIf="selecionada">
+      <header>
+        <h3>Versão {{ selecionada.versao }} — {{ rotuloAcao(selecionada.acao) }}</h3>
+        <p>
+          {{ selecionada.criadoEm | date:'dd/MM/yyyy HH:mm:ss':tz }}
+          <span *ngIf="selecionada.usuarioNome"> · {{ selecionada.usuarioNome }}</span>
+        </p>
+        <p class="versao-resumo-det">{{ selecionada.resumo }}</p>
+      </header>
+
+      <p *ngIf="carregandoDetalhe">Carregando detalhes…</p>
+
+      <div class="snapshot-grid" *ngIf="!carregandoDetalhe && snapshot as s">
+        <div><label>Número</label><span>{{ s.numero || s.id }}</span></div>
+        <div><label>Situação</label><span>{{ s.situacao || '—' }}</span></div>
+        <div><label>Cliente</label><span>{{ s.contato?.nome || '—' }}</span></div>
+        <div><label>Aparelho</label><span>{{ s.marcaNome }} {{ s.modeloNome }}</span></div>
+        <div><label>IMEI</label><span>{{ s.imei || '—' }}</span></div>
+        <div><label>Loja</label><span>{{ s.lojaOrigem || '—' }}</span></div>
+        <div><label>Técnico</label><span>{{ s.tecnicoNome || '—' }}</span></div>
+        <div><label>Tipo serviço</label><span>{{ s.tipoServico || '—' }}</span></div>
+        <div class="full"><label>Defeito</label><span>{{ s.defeito || '—' }}</span></div>
+        <div class="full"><label>Observações</label><span>{{ s.observacoes || '—' }}</span></div>
+        <div><label>Valor acordado</label><span>{{ s.valorTotalAcordado ?? s.valorTotal ?? 0 | number:'1.2-2' }}</span></div>
+        <div><label>Senha</label><span>{{ s.senhaDispositivoTipo || '—' }}</span></div>
+        <div><label>Fotos</label><span>{{ s.fotosAparelho?.length || 0 }}</span></div>
+        <div><label>Itens</label><span>{{ s.itens?.length || 0 }}</span></div>
+      </div>
+
+      <div class="snapshot-itens" *ngIf="snapshot?.itens?.length">
+        <h4>Itens na versão</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th>Qtd</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let i of snapshot!.itens">
+              <td>{{ i.descricao || '—' }}</td>
+              <td>{{ i.quantidade || 1 }}</td>
+              <td>{{ i.valorAcontado ?? i.valorUnitario ?? 0 | number:'1.2-2' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="vazio" *ngIf="!carregandoDetalhe && !snapshot">Snapshot indisponível nesta versão.</p>
+    </section>
+  </div>
+</div>

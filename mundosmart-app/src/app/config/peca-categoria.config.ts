@@ -1,0 +1,119 @@
+export const CATEGORIAS_PECA = [
+  'Bateria',
+  'Tela Incell com Aro',
+  'Tela Incell',
+  'Tela OLED com Aro',
+  'Tela OLED',
+  'Tampa traseira',
+  'Vidro Traseiro',
+  'Vidro para Display',
+  'Conector de carga',
+  'Placa conectora',
+  'Lentes',
+  'Câmeras',
+  'Flex',
+  'Tags',
+  'Outros',
+] as const;
+
+export type CategoriaPeca = (typeof CATEGORIAS_PECA)[number];
+
+function normalizarTextoPeca(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+export function inferirCategoriaPeca(nome: string, categoria?: string): string {
+  const cat = categoria?.trim();
+  if (cat) return cat;
+
+  const n = normalizarTextoPeca(nome);
+
+  if (n.includes('oled') && (n.includes('com aro') || n.includes('c/ aro') || n.includes('c aro'))) {
+    return 'Tela OLED com Aro';
+  }
+  if (n.includes('oled')) return 'Tela OLED';
+
+  if ((n.includes('incell') || n.includes('in cell')) &&
+      (n.includes('com aro') || n.includes('c/ aro') || n.includes('c aro'))) {
+    return 'Tela Incell com Aro';
+  }
+  if (n.includes('incell') || n.includes('in cell')) return 'Tela Incell';
+
+  if (n.includes('placa conectora') || n.includes('placa do conector')) return 'Placa conectora';
+  if (n.includes('conector') && (n.includes('carga') || n.includes('carreg'))) return 'Conector de carga';
+  if (n.includes('dock') || n.includes('entrada de carga')) return 'Conector de carga';
+
+  if (n.includes('vidro') && (n.includes('display') || n.includes('tela') || n.includes('frontal'))) {
+    return 'Vidro para Display';
+  }
+  if (n.includes('vidro traseiro') || n.includes('back glass')) return 'Vidro Traseiro';
+  if (n.includes('tampa') || n.includes('back cover')) return 'Tampa traseira';
+  if (n.includes('lente')) return 'Lentes';
+  if (n.includes('camera') || n.includes('cam ')) return 'Câmeras';
+  if (n.includes('flex')) return 'Flex';
+  if (n.includes('tag') || n.includes('nfc tag')) return 'Tags';
+  if (n.includes('bateria')) return 'Bateria';
+
+  if (n.includes('tela') || n.includes('display') || n.includes('lcd')) return 'Tela Incell';
+
+  return 'Outros';
+}
+
+/** Categorias que controlam estoque por cor dentro de cada modelo. */
+export function categoriaUsaCoresPorModelo(categoria?: string): boolean {
+  const cat = (categoria ?? '').trim();
+  return cat === 'Tampa traseira' || cat === 'Vidro Traseiro';
+}
+
+export function indiceCategoriaPeca(categoria?: string): number {
+  const cat = categoria?.trim();
+  if (!cat) return 999;
+  const idx = CATEGORIAS_PECA.indexOf(cat as CategoriaPeca);
+  return idx >= 0 ? idx : 998;
+}
+
+export function agruparPecasPorCategoria<T extends { nome: string; categoria?: string }>(
+  pecas: T[],
+): { categoria: string; pecas: T[] }[] {
+  const map = new Map<string, T[]>();
+  for (const p of pecas) {
+    const cat = inferirCategoriaPeca(p.nome, p.categoria);
+    if (!map.has(cat)) map.set(cat, []);
+    map.get(cat)!.push(p);
+  }
+
+  const grupos = Array.from(map.entries()).map(([categoria, itens]) => ({ categoria, pecas: itens }));
+  grupos.sort((a, b) => {
+    const diff = indiceCategoriaPeca(a.categoria) - indiceCategoriaPeca(b.categoria);
+    if (diff !== 0) return diff;
+    return a.categoria.localeCompare(b.categoria, 'pt-BR');
+  });
+  for (const g of grupos) {
+    g.pecas.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }
+  return grupos;
+}
+
+export function labelPecaCatalogo(
+  nome: string,
+  categoria?: string,
+  marcaPeca?: string,
+  extras?: { estoque?: number; variacoes?: number },
+): string {
+  const cat = inferirCategoriaPeca(nome, categoria);
+  const partes: string[] = [];
+  if (nome.trim() && nome.trim().toLowerCase() !== cat.toLowerCase()) {
+    partes.push(nome.trim());
+  } else {
+    partes.push(cat);
+  }
+  if (marcaPeca?.trim()) partes.push(marcaPeca.trim());
+  if (extras?.estoque != null) {
+    const vars = extras.variacoes ? ` · ${extras.variacoes} var.` : '';
+    partes.push(`(${extras.estoque} est.${vars})`);
+  }
+  return partes.join(' · ');
+}

@@ -1,0 +1,400 @@
+<div class="intake-mobile">
+  <header class="intake-mobile-header">
+    <div class="intake-mobile-brand">
+      <span class="intake-mobile-logo">MUNDO SMART</span>
+      <span class="intake-mobile-tag">Recepção do aparelho</span>
+    </div>
+    <div class="intake-mobile-os" *ngIf="sessao">
+      <span class="intake-mobile-os-num">OS #{{ sessao.osNumero || sessao.osId }}</span>
+      <span class="intake-mobile-os-cli" *ngIf="sessao.clienteNome">{{ sessao.clienteNome }}</span>
+      <span class="intake-mobile-os-aparelho" *ngIf="sessao.modeloNome">
+        {{ sessao.marcaNome }} {{ sessao.modeloNome }}
+      </span>
+    </div>
+  </header>
+
+  <div class="intake-mobile-loading" *ngIf="carregando">
+    <div class="intake-mobile-spinner"></div>
+    <p>Carregando recepção...</p>
+  </div>
+
+  <div class="intake-mobile-toast intake-mobile-toast--erro" *ngIf="erro && !carregando" role="alert">
+    <span class="intake-mobile-toast-ico">!</span>
+    <p>{{ erro }}</p>
+    <button type="button" class="intake-mobile-toast-fechar" (click)="erro = ''" aria-label="Fechar">✕</button>
+  </div>
+
+  <div class="intake-mobile-toast intake-mobile-toast--ok" *ngIf="sucesso && !carregando" role="status">
+    <span class="intake-mobile-toast-ico">✓</span>
+    <p>{{ sucesso }}</p>
+    <button type="button" class="intake-mobile-toast-fechar" (click)="sucesso = ''" aria-label="Fechar">✕</button>
+  </div>
+
+  <ng-container *ngIf="sessao && !carregando">
+    <div class="intake-mobile-progresso">
+      <div class="intake-mobile-passo" [class.ativo]="passoAtual >= 1" [class.concluido]="sessao.totalFotos > 0">
+        <span>1</span> Fotos
+      </div>
+      <div class="intake-mobile-passo-linha" [class.ativo]="passoAtual >= 2"></div>
+      <div class="intake-mobile-passo" [class.ativo]="passoAtual >= 2" [class.concluido]="sessao.senhaPreenchida">
+        <span>2</span> Senha
+      </div>
+    </div>
+
+    <!-- Etapa: Fotos por ângulo -->
+    <section class="intake-mobile-card" *ngIf="etapaAtiva === 'fotos'">
+      <h2>Fotografar o aparelho</h2>
+      <p class="intake-mobile-hint">
+        Em cada ângulo use <strong>Câmera</strong> para fotografar ou <strong>Galeria</strong> para escolher uma imagem. Depois, toque na miniatura para ver ou substituir.
+      </p>
+
+      <button
+        type="button"
+        class="intake-mobile-btn-sec intake-mobile-btn-sec--destaque"
+        (click)="irParaSenha()"
+      >
+        {{ sessao.senhaPreenchida ? 'Editar senha do aparelho →' : 'Preencher senha do aparelho →' }}
+      </button>
+      <p class="intake-mobile-atalho-hint">
+        <ng-container *ngIf="!sessao.senhaPreenchida">
+          Pode tirar as fotos e, a qualquer momento, pedir para o cliente digitar ou desenhar a senha.
+        </ng-container>
+        <ng-container *ngIf="sessao.senhaPreenchida">
+          Senha já registrada — toque acima para o cliente informar uma nova (padrão ou números/letras).
+        </ng-container>
+      </p>
+
+      <div class="intake-foto-preview-envio" *ngIf="enviandoFoto">
+        <img *ngIf="previewLocalUrl" [src]="previewLocalUrl" alt="Enviando…" />
+        <p>Enviando foto{{ previewCategoria ? ' (' + rotuloFoto(previewCategoria) + ')' : '' }}…</p>
+      </div>
+
+      <div
+        class="intake-foto-slot"
+        *ngFor="let cat of categoriasGuiadas"
+        [attr.data-cat]="cat.id"
+        [class.tem-foto]="fotosDaCategoria(cat.id).length > 0"
+      >
+        <div class="intake-foto-slot-topo">
+          <span class="intake-foto-slot-ico">{{ cat.icone }}</span>
+          <div class="intake-foto-slot-info">
+            <strong>{{ cat.titulo }}</strong>
+            <span>{{ cat.dica }}</span>
+          </div>
+          <span class="intake-foto-slot-badge" *ngIf="fotosDaCategoria(cat.id).length">
+            {{ fotosDaCategoria(cat.id).length }}
+          </span>
+        </div>
+
+        <div class="intake-foto-slot-thumbs" *ngIf="fotosDaCategoria(cat.id).length">
+          <div class="intake-mobile-thumb-wrap" *ngFor="let f of fotosDaCategoria(cat.id)">
+            <button type="button" class="intake-mobile-thumb" (click)="abrirLightbox(f)">
+              <img [src]="urlFoto(f.url)" [alt]="cat.titulo" loading="lazy" />
+              <span class="intake-mobile-thumb-hora" *ngIf="f.criadoEm">
+                {{ f.criadoEm | date:'dd/MM/yy HH:mm':tz }}
+              </span>
+            </button>
+            <div class="intake-mobile-thumb-acoes">
+              <button type="button" (click)="abrirLightbox(f)">Ver</button>
+              <button
+                type="button"
+                [disabled]="enviandoFoto || excluindoId === f.id"
+                (click)="substituirFoto(f, cat.id, inputCam)"
+              >
+                {{ excluindoId === f.id ? '…' : 'Substituir' }}
+              </button>
+              <button
+                type="button"
+                class="danger"
+                [disabled]="enviandoFoto || excluindoId === f.id"
+                (click)="excluirFoto(f)"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="intake-foto-slot-btns"
+          [class.enviando]="enviandoCategoria === cat.id"
+        >
+          <label class="intake-foto-slot-btn intake-foto-slot-btn--cam" [class.tem-fotos]="fotosDaCategoria(cat.id).length > 0">
+            <input
+              #inputCam
+              type="file"
+              accept="image/*"
+              capture="environment"
+              (change)="onFotoCategoria($event, cat.id)"
+              [disabled]="enviandoFoto"
+            />
+            {{ enviandoCategoria === cat.id ? 'Enviando…' : 'Câmera' }}
+          </label>
+          <label class="intake-foto-slot-btn intake-foto-slot-btn--gal" [class.tem-fotos]="fotosDaCategoria(cat.id).length > 0">
+            <input
+              #inputGal
+              type="file"
+              accept="image/*"
+              (change)="onFotoCategoria($event, cat.id)"
+              [disabled]="enviandoFoto"
+            />
+            Galeria
+          </label>
+        </div>
+      </div>
+
+      <!-- Outras fotos -->
+      <div
+        class="intake-foto-slot intake-foto-slot--outra"
+        data-cat="outra"
+        [class.tem-foto]="fotosDaCategoria('outra').length > 0"
+      >
+        <div class="intake-foto-slot-topo">
+          <span class="intake-foto-slot-ico">{{ categoriaOutra.icone }}</span>
+          <div class="intake-foto-slot-info">
+            <strong>{{ categoriaOutra.titulo }}</strong>
+            <span>{{ categoriaOutra.dica }}</span>
+          </div>
+          <span class="intake-foto-slot-badge" *ngIf="fotosDaCategoria('outra').length">
+            {{ fotosDaCategoria('outra').length }}
+          </span>
+        </div>
+
+        <input
+          class="intake-foto-outra-desc"
+          type="text"
+          [(ngModel)]="descricaoOutraNova"
+          maxlength="120"
+          placeholder="Ex: rachadura na tela, entrada do carregador…"
+          [disabled]="enviandoFoto"
+        />
+
+        <div class="intake-foto-slot-thumbs" *ngIf="fotosDaCategoria('outra').length">
+          <div class="intake-mobile-thumb-wrap" *ngFor="let f of fotosDaCategoria('outra')">
+            <button type="button" class="intake-mobile-thumb intake-mobile-thumb--outra" (click)="abrirLightbox(f)">
+              <img [src]="urlFoto(f.url)" [alt]="rotuloFoto(f.categoria, f.descricaoFoco)" loading="lazy" />
+              <span class="intake-mobile-thumb-leg" *ngIf="f.descricaoFoco">{{ f.descricaoFoco }}</span>
+              <span class="intake-mobile-thumb-hora" *ngIf="f.criadoEm">
+                {{ f.criadoEm | date:'dd/MM/yy HH:mm':tz }}
+              </span>
+            </button>
+            <div class="intake-mobile-thumb-acoes">
+              <button type="button" (click)="abrirLightbox(f)">Ver</button>
+              <button
+                type="button"
+                [disabled]="enviandoFoto || excluindoId === f.id"
+                (click)="substituirFoto(f, 'outra', inputOutraCam)"
+              >
+                {{ excluindoId === f.id ? '…' : 'Substituir' }}
+              </button>
+              <button
+                type="button"
+                class="danger"
+                [disabled]="enviandoFoto || excluindoId === f.id"
+                (click)="excluirFoto(f)"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="intake-foto-slot-btns"
+          [class.enviando]="enviandoCategoria === 'outra'"
+        >
+          <label class="intake-foto-slot-btn intake-foto-slot-btn--cam intake-foto-slot-btn--outra" [class.tem-fotos]="fotosDaCategoria('outra').length > 0">
+            <input
+              #inputOutraCam
+              type="file"
+              accept="image/*"
+              capture="environment"
+              (change)="onFotoCategoria($event, 'outra')"
+              [disabled]="enviandoFoto"
+            />
+            {{ enviandoCategoria === 'outra' ? 'Enviando…' : 'Câmera' }}
+          </label>
+          <label class="intake-foto-slot-btn intake-foto-slot-btn--gal intake-foto-slot-btn--outra" [class.tem-fotos]="fotosDaCategoria('outra').length > 0">
+            <input
+              #inputOutraGal
+              type="file"
+              accept="image/*"
+              (change)="onFotoCategoria($event, 'outra')"
+              [disabled]="enviandoFoto"
+            />
+            Galeria
+          </label>
+        </div>
+      </div>
+
+      <p class="intake-mobile-contador">{{ sessao.totalFotos }} foto(s) enviada(s)</p>
+      <p class="intake-mobile-contador-sub" *ngIf="fotosPendentes > 0">
+        {{ fotosPendentes }} na fila de envio…
+      </p>
+
+      <button
+        type="button"
+        class="intake-mobile-btn-prim"
+        *ngIf="!sessao.senhaPreenchida && sessao.totalFotos > 0"
+        (click)="irParaSenha()"
+      >
+        Continuar para senha →
+      </button>
+
+      <button
+        type="button"
+        class="intake-mobile-btn-sec"
+        *ngIf="sessao.senhaPreenchida && sessao.totalFotos > 0"
+        (click)="irParaSenha()"
+      >
+        Editar senha do aparelho →
+      </button>
+
+      <button
+        type="button"
+        class="intake-mobile-btn-sec"
+        *ngIf="!sessao.senhaPreenchida && sessao.totalFotos === 0"
+        (click)="irParaSenha()"
+      >
+        Prefiro só a senha agora →
+      </button>
+
+      <button
+        type="button"
+        class="intake-mobile-btn-prim"
+        *ngIf="podeConcluir && sessao.totalFotos > 0"
+        (click)="concluirRecepcao()"
+      >
+        Concluir recepção ✓
+      </button>
+
+      <button
+        type="button"
+        class="intake-mobile-btn-prim"
+        *ngIf="podeConcluir && sessao.totalFotos === 0"
+        (click)="concluirRecepcao()"
+      >
+        Concluir (só senha) ✓
+      </button>
+    </section>
+
+    <!-- Etapa: Senha -->
+    <section class="intake-mobile-card" *ngIf="etapaAtiva === 'senha'">
+      <button type="button" class="intake-mobile-voltar" (click)="voltarParaFotos()">← Voltar às fotos</button>
+      <h2>{{ sessao.senhaPreenchida ? 'Editar senha do aparelho' : 'Senha do aparelho' }}</h2>
+      <p class="intake-mobile-hint" *ngIf="!sessao.senhaPreenchida">
+        Peça para o cliente desenhar o padrão de desbloqueio ou digitar a senha (números e/ou letras).
+      </p>
+      <p class="intake-mobile-hint" *ngIf="sessao.senhaPreenchida">
+        Já existe uma senha nesta OS. Peça para o cliente informar a nova (padrão ou números/letras) e salve.
+      </p>
+
+      <app-senha-dispositivo-field
+        class="intake-mobile-senha"
+        [ocultarSemSenha]="true"
+        [tipo]="senhaTipo"
+        [valor]="senhaValor"
+        (tipoChange)="onSenhaTipoChange($event)"
+        (valorChange)="senhaValor = $event"
+      />
+
+      <button
+        type="button"
+        class="intake-mobile-btn-prim"
+        (click)="salvarSenha()"
+        [disabled]="salvandoSenha || !senhaValor"
+      >
+        {{ salvandoSenha ? 'Salvando…' : (sessao.senhaPreenchida ? 'Atualizar senha' : 'Salvar senha') }}
+      </button>
+    </section>
+
+    <!-- Etapa: Concluído -->
+    <section class="intake-mobile-card intake-mobile-sucesso" *ngIf="etapaAtiva === 'concluido'">
+      <div class="intake-mobile-sucesso-ico">✓</div>
+      <h2>Recepção concluída!</h2>
+      <p class="intake-mobile-hint" *ngIf="sessao.totalFotos > 0">
+        Fotos e senha registradas com sucesso. Pode fechar esta página e devolver o celular.
+      </p>
+      <p class="intake-mobile-hint" *ngIf="sessao.totalFotos === 0">
+        Senha registrada com sucesso. Pode fechar esta página ou voltar para anexar fotos depois.
+      </p>
+
+      <div class="intake-mobile-resumo" *ngIf="sessao.fotos.length">
+        <div class="intake-mobile-resumo-grupo" *ngFor="let cat of categoriasGuiadas">
+          <ng-container *ngIf="fotosDaCategoria(cat.id).length">
+            <p class="intake-mobile-resumo-tit">{{ cat.titulo }} ({{ fotosDaCategoria(cat.id).length }})</p>
+            <div class="intake-mobile-galeria intake-mobile-galeria--resumo">
+              <button
+                type="button"
+                class="intake-mobile-resumo-thumb"
+                *ngFor="let f of fotosDaCategoria(cat.id)"
+                (click)="abrirLightbox(f)"
+              >
+                <img [src]="urlFoto(f.url)" [alt]="cat.titulo" loading="lazy" />
+              </button>
+            </div>
+          </ng-container>
+        </div>
+        <div class="intake-mobile-resumo-grupo" *ngIf="fotosDaCategoria('outra').length">
+          <p class="intake-mobile-resumo-tit">Outras fotos ({{ fotosDaCategoria('outra').length }})</p>
+          <div class="intake-mobile-galeria intake-mobile-galeria--resumo">
+            <button
+              type="button"
+              class="intake-mobile-resumo-thumb"
+              *ngFor="let f of fotosDaCategoria('outra')"
+              (click)="abrirLightbox(f)"
+            >
+              <img
+                [src]="urlFoto(f.url)"
+                [alt]="rotuloFoto(f.categoria, f.descricaoFoco)"
+                loading="lazy"
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="intake-mobile-btn-sec" (click)="voltarParaFotos()">
+        {{ sessao.totalFotos > 0 ? 'Voltar e editar fotos' : 'Anexar fotos também' }}
+      </button>
+      <button type="button" class="intake-mobile-btn-sec" (click)="irParaSenha()">
+        {{ sessao.senhaPreenchida ? 'Editar senha do aparelho' : 'Informar senha do aparelho' }}
+      </button>
+
+      <p class="intake-mobile-contador" *ngIf="sessao.totalFotos > 0">
+        {{ sessao.totalFotos }} foto(s) · Senha registrada
+      </p>
+      <p class="intake-mobile-contador" *ngIf="sessao.totalFotos === 0">
+        Só senha · sem fotos ainda
+      </p>
+    </section>
+
+    <p class="intake-mobile-expira" *ngIf="sessao.expiraEm">
+      Link válido até {{ sessao.expiraEm | date:'dd/MM/yyyy HH:mm' }}
+    </p>
+  </ng-container>
+
+  <footer class="intake-mobile-footer">
+    <span>Mundo Smart — Assistência Técnica</span>
+  </footer>
+</div>
+
+<div class="intake-mobile-lightbox" *ngIf="lightboxFoto" (click)="fecharLightbox()">
+  <button type="button" class="intake-mobile-lightbox-fechar" (click)="fecharLightbox()">✕</button>
+  <p class="intake-mobile-lightbox-leg">
+    {{ rotuloFoto(lightboxFoto.categoria, lightboxFoto.descricaoFoco) }}
+    <span *ngIf="lightboxFoto.criadoEm">
+      · {{ lightboxFoto.criadoEm | date:'dd/MM/yyyy HH:mm':'America/Sao_Paulo' }}
+    </span>
+  </p>
+  <img
+    [src]="urlFoto(lightboxFoto.url)"
+    [alt]="lightboxFoto.nomeArquivo"
+    (click)="$event.stopPropagation()"
+  />
+  <div class="intake-mobile-lightbox-acoes" (click)="$event.stopPropagation()">
+    <button type="button" class="danger" [disabled]="!!excluindoId" (click)="excluirFoto(lightboxFoto!)">
+      Excluir foto
+    </button>
+  </div>
+</div>

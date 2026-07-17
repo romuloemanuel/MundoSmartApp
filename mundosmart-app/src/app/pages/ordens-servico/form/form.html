@@ -1,0 +1,917 @@
+<div class="page os-form" [class.os-form--readonly]="somenteLeitura">
+  <nav class="breadcrumb" aria-label="Navegação">
+    <a routerLink="/ordens-servico">Ordens de Servi&ccedil;o</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <span class="breadcrumb-atual">{{ breadcrumbAtual }}</span>
+  </nav>
+
+  <h2>{{ tituloPagina }}</h2>
+
+  <div class="os-form-acoes-topo" *ngIf="osCarregada && os.id">
+    <button type="button" *ngIf="somenteLeitura" (click)="editarOs()">Editar</button>
+    <button type="button" class="btn-sec-topo" (click)="abrirHistorico()">Histórico de versões</button>
+    <button
+      type="button"
+      class="btn-sec-topo btn-excluir-topo"
+      *ngIf="somenteLeitura"
+      (click)="excluirOs()"
+      [disabled]="excluindoOs"
+    >
+      {{ excluindoOs ? 'Excluindo…' : 'Excluir OS' }}
+    </button>
+  </div>
+
+  <div class="os-aviso-orcamento" *ngIf="!editando && orcamentoOrigemId">
+    Dados copiados do pré-orçamento
+    <strong>#{{ orcamentoOrigemNumero || orcamentoOrigemId }}</strong>.
+    Complete senha, estado da tela, condições e demais campos obrigatórios — a OS só é gerada ao salvar.
+  </div>
+
+  <p *ngIf="erro" class="erro os-form-erro">{{ erro }}</p>
+  <p *ngIf="!somenteLeitura && tentouSalvar && erro" class="campo-erro os-form-erro-lista">
+    Verifique os campos marcados com <span class="campo-obrigatorio" aria-hidden="true">*</span> antes de salvar.
+  </p>
+
+  <!-- Modais -->
+  <ng-container *ngIf="!somenteLeitura">
+  <app-novo-cliente-modal
+    *ngIf="modalNovoClienteAberto"
+    (clienteCriado)="onClienteCriado($event)"
+    (fecharModal)="modalNovoClienteAberto = false"
+  />
+  <app-novo-cliente-modal
+    *ngIf="modalEditarClienteAberto"
+    [clienteEdicao]="clienteCompleto"
+    (clienteAtualizado)="onClienteAtualizado($event)"
+    (fecharModal)="modalEditarClienteAberto = false"
+  />
+  <app-pesquisa-os-modal
+    *ngIf="modalPesquisaOsAberto"
+    (osSelecionada)="onOsOriginalSelecionada($event)"
+    (fecharModal)="modalPesquisaOsAberto = false"
+  />
+  <app-cadastro-aparelho-modal
+    *ngIf="modalCadastroModeloAberto"
+    [tipoDispositivoInicial]="tipoDispositivoOs"
+    (modeloSalvo)="onModeloSalvoModal($event)"
+    (fechado)="modalCadastroModeloAberto = false"
+  />
+  <app-contato-alternativo-modal
+    *ngIf="modalContatoAlternativoAberto && clienteCompleto"
+    [cliente]="clienteCompleto"
+    [indiceEdicao]="indiceContatoAlternativoEdicao"
+    (contatoSalvo)="onContatoAlternativoSalvo($event)"
+    (fecharModal)="modalContatoAlternativoAberto = false"
+  />
+  <app-os-intake-modal
+    *ngIf="modalIntakeAberto && os.id"
+    [osId]="os.id"
+    [osNumero]="os.numero"
+    [botaoFecharLabel]="pendenteFluxoPosCriacao ? 'Prosseguir' : 'Continuar na OS'"
+    (fecharModal)="onFecharModalIntake()"
+    (intakeAtualizado)="recarregarFotos()"
+  />
+
+  <div
+    class="modal-impressao-pos-backdrop"
+    *ngIf="modalImpressaoPosCriacao"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="modal-impressao-pos-box" role="dialog" aria-modal="true" aria-labelledby="imp-pos-titulo">
+      <h3 id="imp-pos-titulo">Imprimir OS #{{ os.numero || os.id }}?</h3>
+      <p class="modal-impressao-pos-hint">Escolha o documento A4. Padr&atilde;o: Ordem de servi&ccedil;o com teste.</p>
+      <div class="modal-impressao-pos-opcoes">
+        <label class="modal-impressao-pos-opcao" *ngFor="let op of opcoesImpressaoPosCadastro">
+          <input
+            type="radio"
+            name="tipoImpressaoPosCriacao"
+            [value]="op.tipo"
+            [(ngModel)]="tipoImpressaoPosCriacao"
+          />
+          <span>{{ op.label }}</span>
+        </label>
+      </div>
+      <div class="modal-impressao-pos-acoes">
+        <button type="button" class="btn-modal-continuar" (click)="confirmarImpressaoPosCriacao()">
+          Continuar
+        </button>
+      </div>
+    </div>
+  </div>
+  </ng-container>
+
+  <p *ngIf="carregandoOs && !osCarregada">Carregando ordem de servi&ccedil;o...</p>
+  <p *ngIf="carregandoOs && osCarregada" class="campo-hint">Atualizando dados da OS...</p>
+
+  <!-- *ngFor na key força remontar inputs/autocompletes com os dados já em this.os -->
+  <ng-container *ngIf="osCarregada">
+  <form *ngFor="let k of [prefillFormKey]" (ngSubmit)="salvar($event)" novalidate>
+
+    <div *ngIf="!somenteLeitura && camposComErro.length" class="os-form-resumo-erros" role="alert">
+      <strong>Corrija os campos abaixo:</strong>
+      <ul>
+        <li *ngFor="let c of camposComErro">{{ c.label }} — {{ c.mensagem }}</li>
+      </ul>
+    </div>
+
+    <fieldset [disabled]="somenteLeitura" class="os-form-fieldset">
+
+    <!-- ═══ CLIENTE & SITUAÇÃO ════════════════════════════════════════════ -->
+    <div class="os-section">
+      <div class="os-section-title">Cliente &amp; Situa&ccedil;&atilde;o</div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2" data-campo="cliente" [class.campo-invalido]="temErroCampo('cliente')">
+          <label>Cliente <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <app-cliente-autocomplete
+            [(ngModel)]="os.contato"
+            [ngModelOptions]="{standalone: true}"
+            name="contato"
+            (clienteSelecionadoChange)="onClienteSelecionado($event)"
+            (novoClienteClick)="modalNovoClienteAberto = true"
+          />
+          <p class="campo-erro" *ngIf="temErroCampo('cliente')">{{ mensagemErroCampo('cliente') }}</p>
+        </div>
+        <div class="form-group">
+          <label>Situa&ccedil;&atilde;o</label>
+          <select
+            [ngModel]="os.situacao"
+            (ngModelChange)="onSituacaoChange($event)"
+            name="situacao"
+            [class.situacao-aguardando-cliente]="os.situacao === situacaoAguardandoCliente"
+            [class.situacao-aguardando-peca]="os.situacao === 'Aguardando Peça'"
+            required
+          >
+            <option *ngFor="let s of situacoesDisponiveis" [ngValue]="s">{{ s }}</option>
+          </select>
+          <span class="campo-hint" *ngIf="os.situacao === situacaoPadraoAtual">Padr&atilde;o</span>
+          <span class="campo-hint" *ngIf="os.situacao === situacaoAguardandoCliente">Servi&ccedil;o pronto — aguardando retirada</span>
+          <span class="campo-hint" *ngIf="os.situacao === 'Aberto' || os.situacao === 'Em transporte'">
+            Tempo de urg&ecirc;ncia inicia em &ldquo;Na assist&ecirc;ncia&rdquo;
+          </span>
+        </div>
+        <div class="form-group" *ngIf="os.situacao === 'Aguardando Peça'">
+          <label>Prazo da pe&ccedil;a <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <input
+            type="datetime-local"
+            [(ngModel)]="os.dataPrazoPeca"
+            name="dataPrazoPeca"
+            [readonly]="somenteLeitura"
+            required
+          />
+          <span class="campo-hint">Previs&atilde;o de chegada da pe&ccedil;a (padr&atilde;o {{ prazoPecaDiasPadrao }} dias)</span>
+        </div>
+        <div class="form-group">
+          <label>Loja de origem</label>
+          <select
+            [ngModel]="os.lojaOrigem"
+            (ngModelChange)="onLojaOrigemChange($event)"
+            name="lojaOrigem"
+            [disabled]="somenteLeitura || lojaCriacaoTravada"
+          >
+            <option *ngFor="let l of lojasOs" [ngValue]="l.codigo">{{ l.sigla }} — {{ l.nome }}</option>
+          </select>
+          <span class="campo-hint" *ngIf="lojaCriacaoTravada">
+            Seu usuário só cria OS nesta loja.
+          </span>
+          <span class="campo-hint" *ngIf="!lojaCriacaoTravada">
+            Assistência técnica só em Mococa — lojas da rede criam a OS e enviam o aparelho.
+          </span>
+        </div>
+      </div>
+      <div class="form-group full">
+        <label>Justificativas de atraso</label>
+        <ul class="justificativas-atraso-lista" *ngIf="os.justificativasAtraso?.length">
+          <li *ngFor="let j of os.justificativasAtraso; let i = index">
+            <div class="justificativa-atraso-item">
+              <span class="justificativa-atraso-texto">{{ j.texto }}</span>
+              <button
+                *ngIf="!somenteLeitura"
+                type="button"
+                class="btn-link"
+                (click)="removerJustificativaAtraso(i)"
+              >
+                Remover
+              </button>
+            </div>
+          </li>
+        </ul>
+        <div *ngIf="!somenteLeitura" class="justificativa-atraso-add">
+          <textarea
+            [(ngModel)]="novaJustificativaAtraso"
+            name="novaJustificativaAtraso"
+            rows="2"
+            placeholder="Ex.: peça atrasada no fornecedor — avisar o cliente"
+          ></textarea>
+          <button type="button" class="btn-add-contato" (click)="adicionarJustificativaAtraso()">
+            Adicionar
+          </button>
+        </div>
+        <span class="campo-hint">
+          Adicione uma ou mais justificativas para marcar a OS em
+          <strong style="color:#b91c1c">vermelho</strong> (avisar o cliente).
+          A lista limpa ao mudar a situa&ccedil;&atilde;o.
+        </span>
+      </div>
+
+      <div class="form-group full" *ngIf="os.situacao === 'Cancelado'">
+        <label>Motivo do cancelamento <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <textarea
+          [(ngModel)]="os.motivoCancelamento"
+          name="motivoCancelamento"
+          rows="2"
+          [readonly]="somenteLeitura"
+          placeholder="Descreva por que a OS foi cancelada"
+          required
+        ></textarea>
+        <p class="campo-erro" *ngIf="tentouSalvar && !os.motivoCancelamento?.trim()">
+          Informe o motivo do cancelamento.
+        </p>
+      </div>
+
+      <!-- Quem pode retirar (além do proprietário) -->
+      <div class="os-subsection comunicacao-contato" *ngIf="os.contato?.id != null">
+        <div class="comunicacao-contato-header">
+          <div class="comunicacao-contato-titulo">
+            <span class="os-subsection-title">Quem pode retirar</span>
+            <span class="label-hint">opcional</span>
+          </div>
+        </div>
+
+        <p class="comunicacao-resumo">
+          Al&eacute;m do propriet&aacute;rio (<strong>{{ clienteCompleto?.nome || os.contato?.nome }}</strong>),
+          indique uma pessoa autorizada a retirar o aparelho. O mesmo contato pode receber o aviso quando ficar pronto.
+        </p>
+
+        <div class="comunicacao-info-card comunicacao-info-cliente">
+          <span class="comunicacao-info-label">Proprietário (sempre autorizado)</span>
+          <strong>{{ clienteCompleto?.nome || os.contato?.nome }}</strong>
+          <span class="comunicacao-info-tel">{{ telefoneClienteCadastro }}</span>
+          <button type="button" class="btn-link-inline comunicacao-editar-cliente" *ngIf="!somenteLeitura" (click)="abrirEditarCliente()">
+            Cadastro completo
+          </button>
+        </div>
+
+        <p class="comunicacao-sem-contatos" *ngIf="!contatosAlternativosDisponiveis.length">
+          Nenhuma pessoa autorizada cadastrada.
+          <button type="button" class="btn-link-inline" *ngIf="!somenteLeitura" (click)="abrirIncluirContatoAlternativo()">Incluir agora</button>
+        </p>
+
+        <div class="contato-alt-lista" *ngIf="contatosAlternativosDisponiveis.length">
+          <div class="contato-alt-lista-header">
+            <label class="label-compact">Pessoas autorizadas cadastradas</label>
+            <button
+              type="button"
+              class="btn-link-inline"
+              *ngIf="!somenteLeitura && podeIncluirContatoAlternativo"
+              (click)="abrirIncluirContatoAlternativo()"
+            >+ Incluir novo</button>
+          </div>
+
+          <div
+            *ngFor="let c of contatosAlternativosDisponiveis"
+            class="contato-principal-opcao-wrap"
+          >
+            <label
+              class="contato-principal-opcao"
+              [class.contato-principal-opcao-ativa]="os.contatoPrincipalIndice === c.indice"
+            >
+              <input
+                type="radio"
+                name="contatoAlternativo"
+                [checked]="os.contatoPrincipalIndice === c.indice"
+                (change)="selecionarContatoAlternativo(c.indice)"
+              />
+              <span class="contato-principal-info">
+                <strong>{{ c.nome }}</strong>
+                <span class="contato-principal-parentesco">{{ c.parentesco || 'Autorizado a retirar' }}</span>
+                <span class="contato-principal-tel">{{ c.celular || c.telefone || 'Sem telefone' }}</span>
+              </span>
+            </label>
+            <button
+              type="button"
+              class="btn-contato-editar"
+              *ngIf="!somenteLeitura"
+              (click)="abrirEditarContatoAlternativo(c.indice)"
+            >Editar</button>
+          </div>
+        </div>
+
+        <div class="contato-preferencia-row" *ngIf="contatoAlternativoSelecionado">
+          <label class="toggle-label toggle-label-destaque">
+            <input
+              type="checkbox"
+              [ngModel]="os.contatoAviso?.autorizadoRetirada !== false"
+              (ngModelChange)="onAutorizadoRetiradaChange($event)"
+              name="autorizadoRetirada"
+            />
+            <span class="toggle-text">
+              Autorizar <strong>{{ contatoAlternativoSelecionado.nome }}</strong> a retirar o aparelho
+            </span>
+          </label>
+          <label class="toggle-label">
+            <input
+              type="checkbox"
+              [(ngModel)]="os.preferenciaContatoSelecionado"
+              name="preferenciaContatoSelecionado"
+              (change)="onPreferenciaContatoChange()"
+            />
+            <span class="toggle-text">Avisar somente por este contato quando ficar pronto</span>
+          </label>
+          <p class="contato-preferencia-hint">
+            Telefone: <strong>{{ telefoneContatoAlternativo }}</strong>.
+            Sem a 2&ordf; op&ccedil;&atilde;o, o aviso segue para o telefone do propriet&aacute;rio.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ DATAS ══════════════════════════════════════════════════════════ -->
+    <div class="os-section">
+      <div class="os-section-title">Datas</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Data de Entrada <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <input
+            type="datetime-local"
+            [(ngModel)]="os.dataEntrada"
+            name="dataEntrada"
+            [max]="dataEntradaMax"
+          />
+          <span class="campo-hint">N&atilde;o pode ser futura.</span>
+        </div>
+        <div class="form-group">
+          <label>Previs&atilde;o de T&eacute;rmino</label>
+          <input type="datetime-local" [(ngModel)]="os.dataPrevistaTermino" name="dataPrevistaTermino" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Data de Atualiza&ccedil;&atilde;o</label>
+          <input type="datetime-local" [(ngModel)]="os.dataAtualizacao" name="dataAtualizacao" readonly />
+          <span class="campo-hint" *ngIf="!somenteLeitura">Atualizada automaticamente ao salvar</span>
+        </div>
+        <div class="form-group">
+          <label>Data de Sa&iacute;da</label>
+          <input type="datetime-local" [(ngModel)]="os.dataSaida" name="dataSaida" />
+        </div>
+        <div class="form-group">
+          <label>Garantia acordada (dias)</label>
+          <input type="number" min="1" [(ngModel)]="os.garantiaDias" name="garantiaDias" placeholder="Ex: 90" />
+          <span class="campo-hint">Usado no cupom t&eacute;rmico de garantia. Vazio usa o padr&atilde;o da loja.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ EQUIPAMENTO ═══════════════════════════════════════════════════ -->
+    <div class="os-section">
+      <div class="os-section-title">Equipamento</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tipo de dispositivo</label>
+          <select [(ngModel)]="tipoDispositivoOs" name="tipoDispositivoOs">
+            <option *ngFor="let t of tiposDispositivo" [value]="t">{{ t }}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" style="flex:2" data-campo="modelo" [class.campo-invalido]="temErroCampo('modelo')">
+          <label>Modelo do aparelho <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <app-autocomplete-criavel
+            placeholder="Buscar modelo (marca + modelo)..."
+            [buscarFn]="buscarModelosFn"
+            [permitirCriar]="false"
+            [valorInicial]="valorInicialModelo"
+            [valorInicialId]="os.modeloId"
+            [valorInicialMarcaId]="os.marcaId"
+            [valorInicialMarcaNome]="os.marcaNome"
+            (itemSelecionadoChange)="onModeloSelecionado($event)"
+          />
+          <p class="campo-erro" *ngIf="temErroCampo('modelo')">{{ mensagemErroCampo('modelo') }}</p>
+          <div class="campo-acoes-inline" *ngIf="!somenteLeitura">
+            <button type="button" class="btn-link" (click)="modalCadastroModeloAberto = true">
+              + Cadastrar modelo
+            </button>
+            <a routerLink="/modelos" class="btn-link">Gerenciar modelos</a>
+          </div>
+          <p class="campo-hint" *ngIf="os.marcaNome && os.modeloNome">
+            Marca: <strong>{{ os.marcaNome }}</strong>
+          </p>
+        </div>
+      </div>
+
+      <!-- Painel de serviços do modelo — aparece ao selecionar marca + modelo -->
+      <div class="os-servicos-modelo">
+        <app-modelo-referencia-panel
+          *ngIf="os.modeloId"
+          [inline]="true"
+          [modeloId]="os.modeloId"
+          [marcaNome]="os.marcaNome"
+          [modeloNome]="os.modeloNome"
+          [excluirOsId]="os.id"
+          [defeitoAtual]="os.defeito"
+          [estadoTelaAtual]="os.estadoTela"
+        />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>IMEI</label>
+          <input [(ngModel)]="os.imei" name="imei" placeholder="000000000000000" />
+        </div>
+        <div class="form-group">
+          <label>N&uacute;mero de S&eacute;rie</label>
+          <input [(ngModel)]="os.numeroSerie" name="numeroSerie" />
+        </div>
+      </div>
+      <div class="form-group" data-campo="tipoServico" [class.campo-invalido]="temErroCampo('tipoServico')">
+        <label>Tipo de servi&ccedil;o <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <select
+          [ngModel]="os.tipoServico || ''"
+          (ngModelChange)="onTipoServicoChange($event)"
+          name="tipoServico"
+        >
+          <option [ngValue]="''">Selecione...</option>
+          <option *ngFor="let t of tiposServico" [ngValue]="t.id">{{ t.label }}</option>
+        </select>
+        <p class="campo-erro" *ngIf="temErroCampo('tipoServico')">{{ mensagemErroCampo('tipoServico') }}</p>
+        <p class="campo-hint" *ngIf="tipoServicoSelecionado?.hint">{{ tipoServicoSelecionado?.hint }}</p>
+      </div>
+
+      <div class="form-group" data-campo="senhaDispositivo" [class.campo-invalido]="temErroCampo('senhaDispositivo')">
+        <app-senha-dispositivo-field
+          [readonly]="somenteLeitura"
+          [obrigatorio]="true"
+          [invalido]="temErroCampo('senhaDispositivo')"
+          [mensagemErro]="temErroCampo('senhaDispositivo') ? mensagemErroCampo('senhaDispositivo') : ''"
+          [tipo]="os.senhaDispositivoTipo || ''"
+          [valor]="os.senhaDispositivo || ''"
+          (tipoChange)="onSenhaTipoChange($event)"
+          (valorChange)="onSenhaValorChange($event)"
+        />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" data-campo="estadoTela" [class.campo-invalido]="temErroCampo('estadoTela')">
+          <label>Estado da Tela <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <select [(ngModel)]="os.estadoTela" name="estadoTela">
+            <option [ngValue]="''">Selecione...</option>
+            <option *ngFor="let e of estadosTela" [ngValue]="e">{{ e }}</option>
+          </select>
+          <p class="campo-erro" *ngIf="temErroCampo('estadoTela')">{{ mensagemErroCampo('estadoTela') }}</p>
+        </div>
+        <div class="form-group" data-campo="condicoesAparelho" [class.campo-invalido]="temErroCampo('condicoesAparelho')">
+          <label>Condi&ccedil;&otilde;es Gerais do Aparelho <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <input
+            [(ngModel)]="os.condicoesAparelho"
+            name="condicoesAparelho"
+            placeholder="Ex: Amassado na lateral, sem capa..."
+          />
+          <p class="campo-erro" *ngIf="temErroCampo('condicoesAparelho')">{{ mensagemErroCampo('condicoesAparelho') }}</p>
+        </div>
+      </div>
+
+      <!-- Acessórios -->
+      <div class="form-group">
+        <label>Acess&oacute;rios Entregues</label>
+        <div class="acessorios-chips">
+          <span *ngFor="let a of os.acessorios; let i = index" class="chip">
+            {{ a }}<button type="button" *ngIf="!somenteLeitura" (click)="removerAcessorio(i)">✕</button>
+          </span>
+        </div>
+        <div class="acessorios-add" *ngIf="!somenteLeitura">
+          <input
+            [(ngModel)]="novoAcessorio"
+            name="novoAcessorio"
+            placeholder="Ex: Carregador, capa, fone..."
+            (keyup.enter)="adicionarAcessorio()"
+          />
+          <button type="button" (click)="adicionarAcessorio()">Adicionar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ DEFEITO & SERVIÇO ═════════════════════════════════════════════ -->
+    <div class="os-section">
+      <div class="os-section-title">Defeito &amp; Servi&ccedil;o</div>
+
+      <div class="form-group" data-campo="defeito" [class.campo-invalido]="temErroCampo('defeito')">
+        <label>Defeito Relatado pelo Cliente <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <textarea
+          [(ngModel)]="os.defeito"
+          name="defeito"
+          rows="2"
+          placeholder="Descreva o que o cliente relatou..."
+        ></textarea>
+        <p class="campo-erro" *ngIf="temErroCampo('defeito')">{{ mensagemErroCampo('defeito') }}</p>
+      </div>
+      <div class="form-group">
+        <label>Descri&ccedil;&atilde;o do Servi&ccedil;o Realizado</label>
+        <textarea [(ngModel)]="os.descricao" name="descricao" rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Observa&ccedil;&otilde;es (vis&iacute;vel ao cliente)</label>
+        <textarea [(ngModel)]="os.observacoes" name="observacoes" rows="2"></textarea>
+      </div>
+    </div>
+
+    <!-- ═══ TÉCNICO ═══════════════════════════════════════════════════════ -->
+    <div class="os-section">
+      <div class="os-section-title">T&eacute;cnico Respons&aacute;vel</div>
+      <div class="form-row">
+        <div class="form-group" [class.campo-invalido]="temErroCampo('tecnicoNome')">
+          <label>
+            Nome do T&eacute;cnico
+            <span class="campo-obrigatorio" *ngIf="tecnicoObrigatorio" aria-hidden="true">*</span>
+          </label>
+          <select
+            [(ngModel)]="os.tecnicoNome"
+            name="tecnicoNome"
+            [disabled]="somenteLeitura"
+          >
+            <option value="">Selecione...</option>
+            <option *ngFor="let t of opcoesTecnico" [value]="t.nome">{{ t.nome }}</option>
+          </select>
+          <p class="campo-hint" *ngIf="tecnicoObrigatorio && !somenteLeitura">
+            Obrigatório para Aguardando Cliente Retirar, Concluído e Cancelado.
+          </p>
+          <p class="campo-erro" *ngIf="temErroCampo('tecnicoNome')">{{ mensagemErroCampo('tecnicoNome') }}</p>
+        </div>
+        <div class="form-group" style="flex:2">
+          <label>Observa&ccedil;&otilde;es Internas do T&eacute;cnico</label>
+          <input [(ngModel)]="os.tecnicoObservacoes" name="tecnicoObservacoes"
+            placeholder="Notas internas (não visíveis ao cliente)" />
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ RETORNO ═══════════════════════════════════════════════════════ -->
+    <div class="os-section">
+      <div class="os-section-title">Retorno</div>
+      <div class="retorno-row">
+        <label class="toggle-label">
+          <input
+            type="checkbox"
+            [(ngModel)]="os.retorno"
+            name="retorno"
+            [disabled]="retornoOrigemFixo || somenteLeitura"
+            (change)="onRetornoChange()"
+          />
+          <span class="toggle-text">Esta OS &eacute; um retorno de um reparo anterior</span>
+        </label>
+        <p class="campo-hint" *ngIf="retornoOrigemFixo">
+          Retorno criado a partir da OS #{{ os.osOriginalNumero }}. Preencha o motivo do retorno antes de salvar.
+        </p>
+      </div>
+
+      <div *ngIf="os.retorno" class="retorno-info">
+        <div class="form-row">
+          <div class="form-group" style="flex:2" [class.campo-invalido]="temErroCampo('motivoRetorno')">
+            <label>Motivo do retorno <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+            <textarea
+              [(ngModel)]="os.motivoRetorno"
+              name="motivoRetorno"
+              rows="3"
+              placeholder="Descreva por que o cliente está retornando com o aparelho"
+              [readonly]="somenteLeitura"
+            ></textarea>
+            <span class="campo-erro" *ngIf="temErroCampo('motivoRetorno')">{{ mensagemErroCampo('motivoRetorno') }}</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>OS Original Relacionada</label>
+            <div class="retorno-os-display">
+              <span *ngIf="os.osOriginalNumero" class="retorno-os-numero">
+                OS #{{ os.osOriginalNumero }}
+              </span>
+              <span *ngIf="!os.osOriginalNumero" class="retorno-os-vazio">
+                Nenhuma OS selecionada
+              </span>
+              <button type="button" *ngIf="!somenteLeitura && !retornoOrigemFixo" (click)="modalPesquisaOsAberto = true">
+                {{ os.osOriginalNumero ? 'Alterar' : 'Pesquisar OS' }}
+              </button>
+            </div>
+            <span class="campo-erro" *ngIf="temErroCampo('osOriginal')">{{ mensagemErroCampo('osOriginal') }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PEÇAS / SERVIÇOS ══════════════════════════════════════════════ -->
+    <div class="os-section">
+      <div class="os-section-title">Pe&ccedil;as / Servi&ccedil;os</div>
+      <p class="os-itens-hint" *ngIf="!somenteLeitura">
+        <strong>Estoque local:</strong> pe&ccedil;a do cat&aacute;logo — ao salvar a OS o estoque &eacute; baixado automaticamente.
+        Em <strong>Conclu&iacute;do</strong> entra no relat&oacute;rio de reposi&ccedil;&atilde;o; em <strong>Cancelado</strong> (ou ao remover a pe&ccedil;a da OS) a pe&ccedil;a volta ao estoque.
+        <strong>Fornecedor externo:</strong> nome manual, sem cadastro e sem baixa no estoque.
+        Com o modelo selecionado, as pe&ccedil;as aparecem <strong>agrupadas por categoria</strong>
+        (Bateria, Tela Incell com Aro, Tela OLED…).
+      </p>
+
+      <div class="os-aviso-modelo-peca" *ngIf="!somenteLeitura && !podeAdicionarPeca" role="alert">
+        <strong>Modelo obrigat&oacute;rio para pe&ccedil;as.</strong>
+        Selecione o modelo do aparelho na se&ccedil;&atilde;o <a (click)="scrollParaModelo()">Equipamento</a>
+        antes de adicionar pe&ccedil;as — s&oacute; aparecem pe&ccedil;as compat&iacute;veis com aquele modelo.
+      </div>
+
+      <p class="campo-hint" *ngIf="carregandoPecas">Carregando pe&ccedil;as compat&iacute;veis...</p>
+      <p class="campo-hint" *ngIf="!carregandoPecas && os.modeloId && pecasDisponiveis.length === 0">
+        Nenhuma pe&ccedil;a cadastrada para este modelo.
+        <a routerLink="/pecas/novo">Cadastrar pe&ccedil;a</a>
+      </p>
+
+      <div class="os-itens-table-wrap" *ngIf="os.itens && os.itens.length > 0">
+      <table class="os-itens-table">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th class="col-origem">Origem</th>
+            <th class="col-descricao">Descri&ccedil;&atilde;o / Pe&ccedil;a</th>
+            <th class="col-cor">Cor</th>
+            <th class="col-qtd">Qtd</th>
+            <th class="col-ref">Ref. venda</th>
+            <th class="col-valor">Pre&ccedil;o total</th>
+            <th class="col-custo">Custo pe&ccedil;a</th>
+            <th class="col-diff">Diferen&ccedil;a</th>
+            <th class="col-parc">Parc.</th>
+            <th class="col-situacao">Situa&ccedil;&atilde;o</th>
+            <th class="col-acao"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let item of os.itens; let i = index">
+          <tr>
+            <td>{{ isItemPeca(item) ? 'Peça' : 'Serviço' }}</td>
+            <td class="col-origem">
+              <ng-container *ngIf="isItemPeca(item); else origemServico">
+                <select [(ngModel)]="item.origemPeca" (ngModelChange)="onOrigemPecaChange(item)"
+                  [name]="'origem_' + i" [disabled]="somenteLeitura || (item.quantidadeEstoqueBaixada ?? 0) > 0">
+                  <option *ngFor="let o of origensPecaOs" [value]="o.id">{{ o.label }}</option>
+                </select>
+              </ng-container>
+              <ng-template #origemServico><span>—</span></ng-template>
+            </td>
+            <td class="col-descricao">
+              <ng-container *ngIf="isItemPeca(item); else descricaoServico">
+                <ng-container *ngIf="itemUsaCatalogo(item); else pecaNomeLivre">
+                  <app-autocomplete-criavel
+                    *ngIf="!somenteLeitura && (item.quantidadeEstoqueBaixada ?? 0) === 0; else pecaSomenteLeitura"
+                    placeholder="Buscar pe&ccedil;a (ex: Bateria, Tampa)..."
+                    [buscarFn]="buscarPecasOsFn"
+                    [permitirCriar]="false"
+                    [valorInicial]="valorInicialPecaItem(item)"
+                    [maxExibir]="15"
+                    (itemSelecionadoChange)="onPecaAutocomplete(item, $event)"
+                  />
+                  <ng-template #pecaSomenteLeitura>
+                    <span>{{ item.descricao || labelPecaSelecionada(item) || '—' }}</span>
+                  </ng-template>
+                </ng-container>
+                <ng-template #pecaNomeLivre>
+                  <input [(ngModel)]="item.descricao" [name]="'peca_nome_' + i"
+                    class="os-peca-nome-livre" [readonly]="somenteLeitura"
+                    placeholder="Nome da pe&ccedil;a (sem cadastro)" />
+                </ng-template>
+              </ng-container>
+              <ng-template #descricaoServico>
+                <input [(ngModel)]="item.descricao" [name]="'desc_' + i" [readonly]="somenteLeitura"
+                  list="sugestoes-servico-os"
+                  placeholder="Buscar ou digitar servi&ccedil;o..." />
+              </ng-template>
+            </td>
+            <td class="col-cor">
+              <ng-container *ngIf="precisaCorItem(item); else semCor">
+                <ng-container *ngIf="coresDaPeca(item).length > 0; else semCoresCadastradas">
+                  <select
+                    [ngModel]="item.cor || ''"
+                    (ngModelChange)="onCorItemChange(item, $event)"
+                    [name]="'cor_' + i"
+                    [disabled]="somenteLeitura || (item.quantidadeEstoqueBaixada ?? 0) > 0"
+                  >
+                    <option value="">Cor dispon&iacute;vel...</option>
+                    <option
+                      *ngFor="let c of coresDaPeca(item)"
+                      [value]="c.cor"
+                      [disabled]="c.quantidade <= 0"
+                    >
+                      {{ c.cor }} — {{ c.quantidade }} disp.
+                    </option>
+                  </select>
+                  <span class="os-peca-cor-hint" *ngIf="!item.cor">Escolha a cor p/ baixa</span>
+                  <span class="os-peca-cor-hint" *ngIf="item.cor && !corItemDisponivel(item)">
+                    Sem estoque nesta cor
+                  </span>
+                </ng-container>
+                <ng-template #semCoresCadastradas>
+                  <span class="os-peca-cor-hint">Cadastre cores no estoque da pe&ccedil;a</span>
+                </ng-template>
+              </ng-container>
+              <ng-template #semCor><span class="campo-hint">—</span></ng-template>
+            </td>
+            <td class="col-qtd">
+              <input [(ngModel)]="item.quantidade" [name]="'qtd_' + i" type="number" min="1"
+                style="width:52px" [readonly]="somenteLeitura" />
+            </td>
+            <td class="col-ref campo-hint">
+              <ng-container *ngIf="isItemPeca(item) && (item.valorSugeridoMinimo != null || item.valorSugeridoTroca != null)">
+                {{ formatarMoeda(item.valorSugeridoMinimo) }} / {{ formatarMoeda(item.valorSugeridoTroca) }}
+              </ng-container>
+              <span *ngIf="!isItemPeca(item) || (item.valorSugeridoMinimo == null && item.valorSugeridoTroca == null)">—</span>
+            </td>
+            <td class="col-valor">
+              <input [(ngModel)]="item.valorAcontado" (ngModelChange)="onValorAcontadoChange(item)"
+                [name]="'acontado_' + i" type="number" min="0" step="0.01" style="width:88px"
+                [readonly]="somenteLeitura" />
+              <div class="os-item-parcela" *ngIf="valorParcelaItem(item) as parc">
+                {{ item.parcelamento }}x de {{ formatarMoeda(parc) }}
+              </div>
+            </td>
+            <td class="col-custo campo-hint">
+              <ng-container *ngIf="isItemPeca(item) && itemUsaCatalogo(item)">
+                {{ item.custoPeca != null ? formatarMoeda(item.custoPeca) : '—' }}
+                <div *ngIf="item.custoPeca != null && (item.quantidadeEstoqueBaixada ?? 0) === 0" class="campo-hint">
+                  ref. estoque
+                </div>
+              </ng-container>
+              <span *ngIf="!isItemPeca(item) || !itemUsaCatalogo(item)">—</span>
+            </td>
+            <td class="col-diff campo-hint">
+              <ng-container *ngIf="diferencaPecaServico(item) as diff">
+                {{ formatarMoeda(diff) }}
+              </ng-container>
+              <span *ngIf="diferencaPecaServico(item) == null">—</span>
+            </td>
+            <td class="col-parc">
+              <input [(ngModel)]="item.parcelamento" [name]="'parc_' + i" type="number" min="1"
+                style="width:48px" [readonly]="somenteLeitura" placeholder="1" />
+            </td>
+            <td class="col-situacao">
+              <span *ngIf="isItemPeca(item)" [class]="estoqueItemClasse(item)">
+                {{ labelEstoqueItem(item) }}
+              </span>
+              <span *ngIf="!isItemPeca(item)">—</span>
+            </td>
+            <td class="col-acao">
+              <button type="button" *ngIf="!somenteLeitura" (click)="removerItem(i)">Remover</button>
+            </td>
+          </tr>
+          <tr class="os-item-extra" *ngIf="temVariacoesItem(item)">
+            <td colspan="12">
+              <div class="os-item-extra-campos">
+                <label>
+                  Varia&ccedil;&atilde;o / servi&ccedil;o
+                  <select
+                    [ngModel]="item.variacaoRotulo || ''"
+                    (ngModelChange)="onVariacaoChange(item, $event)"
+                    [name]="'variacao_' + i"
+                    [disabled]="somenteLeitura || (item.quantidadeEstoqueBaixada ?? 0) > 0"
+                  >
+                    <option value="">Padr&atilde;o (pre&ccedil;o base)</option>
+                    <option *ngFor="let v of variacoesDaPeca(item)" [value]="v.rotulo">
+                      {{ v.rotulo }}{{ v.valorSugeridoTroca != null ? ' — ' + formatarMoeda(v.valorSugeridoTroca) : '' }}
+                    </option>
+                  </select>
+                </label>
+                <span class="campo-hint" *ngIf="detalheVariacaoSelecionada(item) as det">
+                  {{ det }}
+                </span>
+              </div>
+            </td>
+          </tr>
+          <tr class="os-item-extra" *ngIf="isItemFornecedorExterno(item)">
+            <td colspan="12">
+              <div class="os-item-extra-campos">
+                <label>
+                  Fornecedor
+                  <select [(ngModel)]="item.fornecedorExterno" (ngModelChange)="onFornecedorExternoChange(item)"
+                    [name]="'fornecedor_' + i" [disabled]="somenteLeitura">
+                    <option value="">Quem forneceu?</option>
+                    <option *ngFor="let f of fornecedoresExternosPeca" [value]="f.id">{{ f.label }}</option>
+                  </select>
+                </label>
+                <label *ngIf="itemMostraRastreio(item)">
+                  Rastreio
+                  <input [(ngModel)]="item.codigoRastreio" [name]="'rastreio_' + i"
+                    placeholder="C&oacute;digo" [readonly]="somenteLeitura" />
+                </label>
+              </div>
+            </td>
+          </tr>
+          </ng-container>
+        </tbody>
+      </table>
+      </div>
+
+      <datalist id="sugestoes-servico-os">
+        <option *ngFor="let s of sugestoesServicoOs" [value]="s"></option>
+      </datalist>
+
+      <p class="os-itens-total" *ngIf="os.itens?.length">
+        <strong>Total acontado: {{ formatarMoeda(totalOsItens) }}</strong>
+      </p>
+
+      <div class="os-itens-acoes" *ngIf="!somenteLeitura">
+        <button type="button" (click)="adicionarPecaItem()" [disabled]="!podeAdicionarPeca"
+          [title]="!podeAdicionarPeca ? 'Selecione o modelo do aparelho primeiro' : ''">
+          + Adicionar pe&ccedil;a
+        </button>
+        <button type="button" (click)="adicionarServicoItem()">+ Adicionar servi&ccedil;o</button>
+      </div>
+    </div>
+
+    <!-- ═══ PAGAMENTO ═══════════════════════════════════════════════════════ -->
+    <div class="os-section">
+      <div class="os-section-title">Pagamento acordado</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Soma dos itens</label>
+          <input [value]="formatarMoeda(totalOsItens)" readonly />
+          <button type="button" class="btn-link" *ngIf="!somenteLeitura" (click)="recalcularValorTotalAcordado()"
+            style="font-size:12px;margin-top:4px">
+            Usar soma dos itens
+          </button>
+        </div>
+        <div class="form-group">
+          <label>Valor acordado</label>
+          <input type="number" min="0" step="0.01" [(ngModel)]="os.valorTotalAcordado"
+            name="valorTotalAcordado" [readonly]="somenteLeitura" />
+        </div>
+        <div class="form-group">
+          <label>Juros (R$)</label>
+          <input type="number" min="0" step="0.01" [(ngModel)]="os.juros"
+            name="juros" [readonly]="somenteLeitura" placeholder="0,00" />
+          <span class="campo-hint">Descontado na comissão (total − juros − custo das peças).</span>
+        </div>
+      </div>
+
+      <div class="form-group pagamento-acordado-opcoes">
+        <label class="pagamento-acordado-label">Forma de pagamento</label>
+        <div class="pagamento-acordado-radios">
+          <label class="pagamento-acordado-opcao" *ngFor="let forma of formasPagamentoAcordado">
+            <input
+              type="radio"
+              name="formaPagamento"
+              [value]="forma"
+              [ngModel]="os.formaPagamento"
+              (ngModelChange)="onFormaPagamentoChange($event)"
+              [disabled]="somenteLeitura"
+            />
+            {{ forma === 'avista' ? 'À vista' : 'Parcelado' }}
+          </label>
+        </div>
+      </div>
+
+      <div class="form-row" *ngIf="exigeParcelasPagamento()">
+        <div class="form-group">
+          <label>Quantidade de parcelas</label>
+          <input
+            type="number"
+            min="2"
+            max="24"
+            [(ngModel)]="os.parcelasPagamento"
+            name="parcelasPagamento"
+            [readonly]="somenteLeitura"
+            placeholder="Ex: 3"
+          />
+        </div>
+      </div>
+
+      <p class="campo-hint" *ngIf="valorParcelaPagamento() as parc">
+        {{ os.parcelasPagamento }}x de {{ formatarMoeda(parc) }}
+        (total {{ formatarMoeda(os.valorTotalAcordado ?? totalOsItens) }})
+      </p>
+      <p class="campo-hint" *ngIf="os.formaPagamento === 'avista' && (os.valorTotalAcordado ?? totalOsItens) != null">
+        Pagamento à vista de {{ formatarMoeda(os.valorTotalAcordado ?? totalOsItens) }}
+      </p>
+    </div>
+
+    </fieldset>
+
+    <!-- Fora do fieldset: na visualização o fieldset fica disabled e bloqueava as fotos -->
+    <div class="os-section os-section-fotos" *ngIf="os.id || !somenteLeitura">
+      <div class="os-section-title">
+        Fotos do aparelho
+        <span class="os-fotos-badge" *ngIf="(os.fotosAparelho?.length || 0) > 0">
+          {{ os.fotosAparelho?.length }}
+        </span>
+      </div>
+      <app-os-fotos-panel
+        [osId]="os.id"
+        [fotos]="os.fotosAparelho || []"
+        [readonly]="somenteLeitura"
+        [mostrarQr]="!somenteLeitura"
+        [atualizando]="carregandoOs"
+        (atualizar)="recarregarFotos()"
+        (fotosAlteradas)="onFotosAlteradas($event)"
+      />
+    </div>
+
+    <div class="form-actions" *ngIf="!somenteLeitura">
+      <button type="submit" [disabled]="salvando">{{ salvando ? 'Salvando...' : 'Salvar OS' }}</button>
+      <button type="button" (click)="cancelar()">Cancelar</button>
+    </div>
+  </form>
+  </ng-container>
+</div>

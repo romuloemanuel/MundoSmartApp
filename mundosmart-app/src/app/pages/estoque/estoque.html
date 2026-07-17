@@ -1,0 +1,852 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Pe&ccedil;as &amp; Estoque</h2>
+  </div>
+
+  <nav class="breadcrumb" aria-label="Navegação">
+    <a routerLink="/ordens-servico">Ordens de Servi&ccedil;o</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <span class="breadcrumb-atual">Estoque</span>
+  </nav>
+
+  <div class="estoque-abas">
+    <button type="button" [class.ativa]="aba === 'estoque'" (click)="irPara('estoque')">Estoque atual</button>
+    <button type="button" [class.ativa]="aba === 'pedidos'" (click)="irPara('pedidos')">Pedidos de compra</button>
+    <button type="button" [class.ativa]="aba === 'novo-pedido'" (click)="irPara('novo-pedido')">+ Novo pedido</button>
+    <button type="button" [class.ativa]="aba === 'saidas'" (click)="irPara('saidas')">Sa&iacute;das</button>
+    <button type="button" [class.ativa]="aba === 'nova-saida'" (click)="irPara('nova-saida')">+ Registrar sa&iacute;da</button>
+    <button type="button" [class.ativa]="aba === 'reposicao'" (click)="irPara('reposicao')">Reposi&ccedil;&atilde;o</button>
+    <button type="button" [class.ativa]="aba === 'garantia'" (click)="irPara('garantia')">Retorno garantia</button>
+    <a class="estoque-aba-link" routerLink="/estoque/lotes-retorno">Lotes baixados</a>
+    <a class="estoque-aba-link" routerLink="/estoque/analise-retorno">An&aacute;lise retorno</a>
+  </div>
+
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="sucesso" class="campo-hint" style="color:#166534;font-weight:600">{{ sucesso }}</p>
+  <p *ngIf="carregando">Carregando...</p>
+
+  <!-- ESTOQUE ATUAL -->
+  <div class="estoque-painel" *ngIf="aba === 'estoque' && !carregando">
+    <div class="estoque-resumo">
+      <div>
+        <div class="campo-hint">{{ filtrosEstoqueAtivos ? 'Pe&ccedil;as no filtro' : 'Pe&ccedil;as cadastradas' }}</div>
+        <strong>{{ pecasFiltradas.length }}</strong>
+      </div>
+      <div>
+        <div class="campo-hint">Com saldo em estoque</div>
+        <strong>{{ filtrosEstoqueAtivos ? pecasComSaldoFiltrado : pecasComSaldo }}</strong>
+      </div>
+      <div>
+        <div class="campo-hint">Total de unidades</div>
+        <strong>{{ filtrosEstoqueAtivos ? totalUnidadesEstoqueFiltrado : totalUnidadesEstoque }}</strong>
+      </div>
+    </div>
+
+    <div class="estoque-resumo-alertas" *ngIf="pecas.length > 0">
+      <button
+        type="button"
+        class="estoque-resumo-alerta estoque-nivel-vermelho"
+        [class.ativo]="filtroNivelEstoque === 'vermelho'"
+        *ngIf="contagemNiveisEstoque.vermelho > 0"
+        (click)="filtrarPorNivelEstoque('vermelho')"
+      >
+        <span class="estoque-resumo-bolinha estoque-bolinha-vermelho" [attr.title]="contagemNiveisEstoque.vermelho + ' peça(s)'">
+          {{ contagemNiveisEstoque.vermelho }}
+        </span>
+        {{ labelNivel('vermelho') }}
+      </button>
+      <button
+        type="button"
+        class="estoque-resumo-alerta estoque-nivel-laranja"
+        [class.ativo]="filtroNivelEstoque === 'laranja'"
+        *ngIf="contagemNiveisEstoque.laranja > 0"
+        (click)="filtrarPorNivelEstoque('laranja')"
+      >
+        <span class="estoque-resumo-bolinha estoque-bolinha-laranja" [attr.title]="contagemNiveisEstoque.laranja + ' peça(s)'">
+          {{ contagemNiveisEstoque.laranja }}
+        </span>
+        {{ labelNivel('laranja') }}
+      </button>
+      <button
+        type="button"
+        class="estoque-resumo-alerta estoque-nivel-amarelo"
+        [class.ativo]="filtroNivelEstoque === 'amarelo'"
+        *ngIf="contagemNiveisEstoque.amarelo > 0"
+        (click)="filtrarPorNivelEstoque('amarelo')"
+      >
+        <span class="estoque-resumo-bolinha estoque-bolinha-amarelo" [attr.title]="contagemNiveisEstoque.amarelo + ' peça(s)'">
+          {{ contagemNiveisEstoque.amarelo }}
+        </span>
+        {{ labelNivel('amarelo') }}
+      </button>
+      <button
+        type="button"
+        class="estoque-resumo-alerta estoque-nivel-verde"
+        [class.ativo]="filtroNivelEstoque === 'verde'"
+        *ngIf="contagemNiveisEstoque.verde > 0"
+        (click)="filtrarPorNivelEstoque('verde')"
+      >
+        <span class="estoque-resumo-bolinha estoque-bolinha-verde" [attr.title]="contagemNiveisEstoque.verde + ' peça(s)'">
+          {{ contagemNiveisEstoque.verde }}
+        </span>
+        {{ labelNivel('verde') }}
+      </button>
+    </div>
+
+    <div class="filtros estoque-filtros">
+      <input
+        [(ngModel)]="filtroEstoque"
+        name="filtroEstoque"
+        class="filtro-busca-principal"
+        placeholder="Buscar pe&ccedil;a, marca ou modelo..."
+      />
+      <select [(ngModel)]="filtroMarca" name="filtroMarca" (ngModelChange)="onFiltroMarcaChange()">
+        <option value="">Todas as marcas</option>
+        <option *ngFor="let m of marcasDisponiveis" [value]="m">{{ m }}</option>
+      </select>
+      <div class="filtro-modelo-ac">
+        <app-autocomplete-criavel
+          placeholder="Modelo (ex.: G24)..."
+          [buscarFn]="buscarModelosFiltroFn"
+          [permitirCriar]="false"
+          [valorInicial]="filtroModeloLabel"
+          (itemSelecionadoChange)="onFiltroModeloSugestao($event)"
+        />
+      </div>
+      <select [(ngModel)]="filtroNivelEstoque" name="filtroNivelEstoque">
+        <option *ngFor="let o of opcoesFiltroNivelEstoque" [ngValue]="o.id">{{ o.label }}</option>
+      </select>
+      <button *ngIf="filtrosEstoqueAtivos" type="button" class="btn-limpar" (click)="limparFiltrosEstoque()">Limpar</button>
+    </div>
+    <p class="campo-hint" *ngIf="filtrosEstoqueAtivos">
+      {{ pecasFiltradas.length }} pe&ccedil;a(s) compat&iacute;vel(is) com o filtro.
+    </p>
+
+    <table *ngIf="pecasFiltradas.length > 0">
+      <thead>
+        <tr>
+          <th>Pe&ccedil;a</th>
+          <th>Fornecedor</th>
+          <th>Modelos</th>
+          <th>Em estoque</th>
+          <th>Valor sugerido</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody
+        *ngFor="let grupo of pecasAgrupadasPorMarca"
+        class="estoque-grupo-marca"
+      >
+        <tr class="estoque-marca-header">
+          <td colspan="6">{{ grupo.marca }}</td>
+        </tr>
+        <tr *ngFor="let p of grupo.pecas">
+          <td>
+            <strong>{{ p.nome }}</strong>
+            <div *ngIf="p.descricao" class="campo-hint">{{ p.descricao }}</div>
+          </td>
+          <td>{{ p.marcaPeca || '—' }}</td>
+          <td class="estoque-modelos-col" [title]="tooltipModelosCompativeis(p)">
+            <ng-container *ngIf="modelosDaPeca(p).length; else semModelo">
+              {{ modelosDaPeca(p).join(', ') }}
+            </ng-container>
+            <ng-template #semModelo>—</ng-template>
+          </td>
+          <td>
+            <span [ngClass]="classeNivelEstoque(p.quantidadeEstoque ?? 0)">
+              {{ p.quantidadeEstoque ?? 0 }}
+            </span>
+          </td>
+          <td>{{ formatarMoeda(p.valorSugeridoTroca) }}</td>
+          <td>
+            <button type="button" (click)="verLotesPeca(p.id!)">
+              {{ pecaLotesExpandida === p.id ? 'Ocultar lotes' : 'Ver lotes' }}
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p *ngIf="pecas.length === 0">Nenhuma pe&ccedil;a cadastrada no cat&aacute;logo.</p>
+    <p *ngIf="pecas.length > 0 && pecasFiltradas.length === 0">
+      Nenhuma pe&ccedil;a encontrada para os filtros selecionados.
+    </p>
+
+    <div class="detalhe-pedido" *ngIf="pecaLotesExpandida">
+      <h3>Lotes com saldo — {{ labelPeca(pecaLotesExpandida) }}</h3>
+      <p *ngIf="carregandoLotes">Carregando lotes...</p>
+      <table *ngIf="!carregandoLotes && lotesPeca.length > 0">
+        <thead>
+          <tr>
+            <th>Pedido</th>
+            <th>Fornecedor</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Cor</th>
+            <th>Saldo</th>
+            <th>Custo un.</th>
+            <th>Entrada</th>
+            <th>Garantia at&eacute;</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let l of lotesPeca">
+            <td>{{ l.numeroPedido }}</td>
+            <td>{{ l.fornecedor }}</td>
+            <td>{{ l.marcaPeca || '—' }}</td>
+            <td>{{ labelModeloMovimentacao(l.modeloNome, l.modeloId) }}</td>
+            <td>{{ l.cor || '—' }}</td>
+            <td>{{ l.quantidadeRestante }} / {{ l.quantidadeInicial }}</td>
+            <td>{{ formatarMoeda(l.custoUnitario) }}</td>
+            <td>{{ formatarData(l.dataEntrada) }}</td>
+            <td>{{ formatarData(l.dataVencimentoGarantia) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p *ngIf="!carregandoLotes && lotesPeca.length === 0" class="campo-hint">
+        Sem lotes com saldo para esta pe&ccedil;a. O estoque pode estar apenas no cadastro legado
+        ou ainda n&atilde;o houve pedido de compra registrado.
+      </p>
+    </div>
+  </div>
+
+  <!-- PEDIDOS -->
+  <div class="estoque-painel" *ngIf="aba === 'pedidos' && !carregando">
+    <table *ngIf="pedidos.length > 0">
+      <thead>
+        <tr>
+          <th>Pedido</th>
+          <th>Fornecedor</th>
+          <th>Data</th>
+          <th>Itens</th>
+          <th>Unidades</th>
+          <th>Valor</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let p of pedidos">
+          <td>{{ p.numeroPedido }}</td>
+          <td>{{ p.fornecedor }}</td>
+          <td>{{ formatarData(p.dataPedido) }}</td>
+          <td>{{ p.totalItens }}</td>
+          <td>{{ p.totalUnidades }}</td>
+          <td>{{ formatarMoeda(p.valorTotal) }}</td>
+          <td><button type="button" (click)="verPedido(p.id!)">Ver lotes</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <p *ngIf="pedidos.length === 0">Nenhum pedido registrado.</p>
+
+    <div class="detalhe-pedido" *ngIf="pedidoDetalhe">
+      <h3>Lotes do pedido {{ pedidoDetalhe.pedido.numeroPedido }}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Pe&ccedil;a</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Cor</th>
+            <th>Qtd inicial</th>
+            <th>Saldo</th>
+            <th>Custo un.</th>
+            <th>Garantia at&eacute;</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let l of pedidoDetalhe.lotes">
+            <td>{{ l.pecaNome }}</td>
+            <td>{{ l.marcaPeca || '—' }}</td>
+            <td>{{ labelModeloMovimentacao(l.modeloNome, l.modeloId) }}</td>
+            <td>{{ l.cor || '—' }}</td>
+            <td>{{ l.quantidadeInicial }}</td>
+            <td>{{ l.quantidadeRestante }}</td>
+            <td>{{ formatarMoeda(l.custoUnitario) }}</td>
+            <td>{{ formatarData(l.dataVencimentoGarantia) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- NOVO PEDIDO -->
+  <div class="estoque-painel" *ngIf="aba === 'novo-pedido'">
+    <h3 style="margin:0 0 12px">Registrar pedido de compra</h3>
+    <div class="estoque-form-grid">
+      <div class="form-group">
+        <label>N&uacute;mero do pedido</label>
+        <input
+          [(ngModel)]="pedidoNumero"
+          name="pedidoNumero"
+          placeholder="Automático se vazio (PC-2026-001)"
+        />
+      </div>
+      <div class="form-group">
+        <label>Fornecedor <span class="campo-obrigatorio">*</span></label>
+        <input [(ngModel)]="pedidoFornecedor" name="pedidoFornecedor" />
+      </div>
+      <div class="form-group">
+        <label>NF</label>
+        <input [(ngModel)]="pedidoNf" name="pedidoNf" />
+      </div>
+      <div class="form-group">
+        <label>Data do pedido</label>
+        <input type="date" [(ngModel)]="pedidoData" name="pedidoData" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Observa&ccedil;&otilde;es</label>
+      <input [(ngModel)]="pedidoObs" name="pedidoObs" />
+    </div>
+
+    <h4 style="margin:16px 0 8px">Itens do pedido</h4>
+    <p class="campo-hint" style="margin-bottom:8px">
+      Escolha a <strong>categoria</strong> e o <strong>modelo</strong> — o sistema localiza a pe&ccedil;a cadastrada.
+      Em <strong>Tampa traseira</strong> e <strong>Vidro Traseiro</strong>, informe tamb&eacute;m a <strong>cor</strong> (quantidade por cor e modelo).
+      Cada linha gera um lote com custo pr&oacute;prio.
+    </p>
+    <div *ngFor="let item of itensPedido; let i = index" class="item-pedido-wrapper">
+      <div class="item-pedido-linha">
+      <div class="form-group form-group-cat">
+        <label>Cat. <span class="campo-obrigatorio">*</span></label>
+        <div class="campo-com-acao">
+          <select
+            [(ngModel)]="item.categoria"
+            [name]="'cat_' + i"
+            (ngModelChange)="onCategoriaItemChange(item)"
+          >
+            <option value="">—</option>
+            <option *ngFor="let c of categoriasPecaPedido" [value]="c">{{ c }}</option>
+          </select>
+          <button
+            type="button"
+            class="btn-icon-mais"
+            (click)="abrirNovaPecaPedido(item)"
+            title="Cadastrar nova pe&ccedil;a"
+          >+</button>
+        </div>
+      </div>
+      <div class="form-group form-group-modelo">
+        <label>Modelo <span class="campo-obrigatorio">*</span></label>
+        <input
+          *ngIf="!item.categoria"
+          class="input-bloqueado"
+          disabled
+          placeholder="Cat. primeiro"
+        />
+        <ng-container *ngIf="item.categoria">
+          <ng-container *ngFor="let k of [item.modeloAutocompleteKey ?? 0]; trackBy: trackAutocompleteKey">
+            <app-autocomplete-criavel
+              placeholder="Marca ou modelo..."
+              [buscarFn]="item.buscarModelosFn || buscarModelosPedidoFn"
+              [permitirCriar]="false"
+              [valorInicial]="valorInicialModeloPedido(item)"
+              (itemSelecionadoChange)="onModeloPedidoAutocomplete(item, $event)"
+            />
+          </ng-container>
+        </ng-container>
+      </div>
+      <div class="form-group form-group-cor" *ngIf="itemUsaCor(item)">
+        <label>Cor <span class="campo-obrigatorio">*</span></label>
+        <input
+          [attr.list]="'cores-tampa-' + i"
+          [(ngModel)]="item.cor"
+          [name]="'cor_' + i"
+          placeholder="Ex: Preto"
+          (ngModelChange)="onCorItemChange(item)"
+        />
+        <datalist [attr.id]="'cores-tampa-' + i">
+          <option *ngFor="let c of coresSugeridasItem(item)" [value]="c"></option>
+        </datalist>
+      </div>
+      <div class="form-group form-group-qual" *ngIf="pecasCandidatasItem(item).length > 1">
+        <label>Qual.</label>
+        <select
+          [(ngModel)]="item.pecaId"
+          [name]="'qual_' + i"
+          (ngModelChange)="onPecaQualidadeItemChange(item)"
+        >
+          <option value="">—</option>
+          <option *ngFor="let p of pecasCandidatasItem(item)" [value]="p.id">
+            {{ labelPecaPedido(p) }}
+          </option>
+        </select>
+      </div>
+      <div class="form-group form-group-forn">
+        <label>Fornec.</label>
+        <input [(ngModel)]="item.fornecedor" [name]="'forn_' + i" placeholder="—" />
+      </div>
+      <div class="form-group form-group-marca">
+        <label>Marca</label>
+        <input [(ngModel)]="item.marcaPeca" [name]="'marca_' + i" placeholder="—" />
+      </div>
+      <div class="form-group form-group-qtd">
+        <label>Qtd</label>
+        <input type="number" min="1" [(ngModel)]="item.quantidade" [name]="'qtd_' + i" />
+      </div>
+      <div class="form-group form-group-custo">
+        <label>Custo</label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          [(ngModel)]="item.custoUnitario"
+          [name]="'custo_' + i"
+          placeholder="0,00"
+        />
+      </div>
+      <div class="form-group form-group-gar">
+        <label>Meses</label>
+        <input type="number" min="1" [(ngModel)]="item.garantiaMeses" [name]="'gar_' + i" />
+      </div>
+      <button type="button" class="item-pedido-remover" (click)="removerItemPedido(i)" title="Remover">✕</button>
+      </div>
+      <p
+        class="item-pedido-aviso"
+        [class.ok]="!!item.pecaId"
+        *ngIf="item.avisoResolucao"
+      >
+        {{ item.avisoResolucao }}
+      </p>
+    </div>
+    <button type="button" (click)="adicionarItemPedido()" style="margin:8px 0">+ Item</button>
+    <div style="margin-top:12px">
+      <button type="button" (click)="salvarPedido()" [disabled]="carregando">Salvar pedido e gerar lotes</button>
+    </div>
+
+    <app-nova-peca-pedido-modal
+      *ngIf="modalNovaPecaAberto"
+      [categoriaInicial]="itemPedidoNovaPeca?.categoria ?? ''"
+      [modeloLinha]="modeloContextoNovaPeca()"
+      (fechado)="fecharModalNovaPeca()"
+      (pecaSalva)="onPecaPedidoSalva($event)"
+    />
+  </div>
+
+  <!-- SAÍDAS -->
+  <div class="estoque-painel" *ngIf="aba === 'saidas' && !carregando">
+    <table *ngIf="movimentacoes.length > 0">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Pe&ccedil;a</th>
+          <th>Marca</th>
+          <th>Modelo</th>
+          <th>Qtd</th>
+          <th>Pedido / Lote</th>
+          <th>OS</th>
+          <th>Obs.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let m of movimentacoes">
+          <td>{{ formatarData(m.data) }}</td>
+          <td>{{ m.pecaNome }}</td>
+          <td>{{ m.marcaPeca || '—' }}</td>
+          <td>{{ labelModeloMovimentacao(m.modeloNome, m.modeloId) }}</td>
+          <td>{{ m.quantidade }}</td>
+          <td>{{ m.numeroPedido || '—' }}</td>
+          <td>{{ m.osNumero ? '#' + m.osNumero : '—' }}</td>
+          <td>{{ m.observacao || '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p *ngIf="movimentacoes.length === 0">Nenhuma sa&iacute;da registrada.</p>
+  </div>
+
+  <!-- NOVA SAÍDA -->
+  <div class="estoque-painel" *ngIf="aba === 'nova-saida'">
+    <h3 style="margin:0 0 12px">Registrar sa&iacute;da (FIFO — lote mais antigo)</h3>
+    <p class="campo-hint" style="margin:0 0 12px">
+      1) Busque o <strong>modelo</strong> do aparelho.
+      2) Escolha a <strong>pe&ccedil;a</strong> entre as compat&iacute;veis com esse modelo.
+    </p>
+    <div class="estoque-form-grid">
+      <div class="form-group">
+        <label>Modelo <span class="campo-obrigatorio">*</span></label>
+        <app-autocomplete-criavel
+          *ngFor="let k of [saidaFormKey]"
+          placeholder="Buscar modelo (ex.: G24, A54, Note 13)..."
+          [buscarFn]="buscarModelosSaidaFn"
+          [permitirCriar]="false"
+          [valorInicial]="saidaModeloLabel"
+          (itemSelecionadoChange)="onSaidaModeloSugestao($event)"
+        />
+      </div>
+      <div class="form-group">
+        <label>Pe&ccedil;a compat&iacute;vel <span class="campo-obrigatorio">*</span></label>
+        <app-autocomplete-criavel
+          *ngFor="let k of [saidaPecaAcKey]"
+          [hidden]="!saidaModeloId"
+          placeholder="Buscar pe&ccedil;a compat&iacute;vel..."
+          [buscarFn]="buscarPecasSaidaFn"
+          [permitirCriar]="false"
+          [valorInicial]="saidaPecaLabel"
+          (itemSelecionadoChange)="onSaidaPecaSugestao($event)"
+        />
+        <input *ngIf="!saidaModeloId" type="text" disabled placeholder="Selecione o modelo primeiro" />
+        <p class="campo-hint" *ngIf="saidaModeloId && pecasCompativeisModelo(saidaModeloId).length === 0">
+          Nenhuma pe&ccedil;a compat&iacute;vel cadastrada para este modelo.
+        </p>
+        <p class="campo-hint" *ngIf="saidaModeloId && pecasCompativeisModelo(saidaModeloId).length > 0">
+          {{ pecasCompativeisModelo(saidaModeloId).length }} pe&ccedil;a(s) compat&iacute;vel(is).
+        </p>
+      </div>
+      <div class="form-group">
+        <label>Quantidade</label>
+        <input type="number" min="1" [(ngModel)]="saidaQtd" name="saidaQtd" />
+      </div>
+      <div class="form-group">
+        <label>OS n&uacute;mero</label>
+        <input [(ngModel)]="saidaOsNumero" name="saidaOsNumero" placeholder="Ex: 42" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Observa&ccedil;&atilde;o</label>
+      <input [(ngModel)]="saidaObs" name="saidaObs" />
+    </div>
+    <button type="button" (click)="salvarSaida()" [disabled]="carregando">Registrar sa&iacute;da</button>
+  </div>
+
+  <!-- REPOSIÇÃO -->
+  <div class="estoque-painel" *ngIf="aba === 'reposicao'">
+    <h3 style="margin:0 0 12px">Controle de reposi&ccedil;&atilde;o</h3>
+    <p class="campo-hint" style="margin:0 0 12px">
+      Conta pe&ccedil;as de OS <strong>Conclu&iacute;da</strong> e sa&iacute;das manuais no per&iacute;odo.
+      OS em andamento n&atilde;o entra; OS <strong>Cancelada</strong> devolve a pe&ccedil;a ao estoque (fora da reposi&ccedil;&atilde;o).
+    </p>
+
+    <div class="reposicao-filtros">
+      <div class="form-group">
+        <label>Per&iacute;odo</label>
+        <div class="reposicao-periodos">
+          <button
+            type="button"
+            *ngFor="let p of periodosReposicao"
+            [class.ativo]="periodoReposicao === p.id"
+            (click)="selecionarPeriodoReposicao(p.id)"
+          >{{ p.label }}</button>
+        </div>
+      </div>
+
+      <div class="form-group" *ngIf="periodoReposicao === 'personalizado'">
+        <label>Data inicial</label>
+        <input type="date" [(ngModel)]="reposicaoInicio" name="reposicaoInicio" />
+      </div>
+
+      <div class="form-group">
+        <label>{{ periodoReposicao === 'personalizado' ? 'Data final' : 'At&eacute;' }}</label>
+        <input type="date" [(ngModel)]="reposicaoFim" name="reposicaoFim" />
+      </div>
+
+      <div class="form-group">
+        <label>Modelo</label>
+        <select [(ngModel)]="reposicaoModeloId" name="reposicaoModeloId">
+          <option value="">Todos os modelos</option>
+          <option *ngFor="let m of modelosReposicao" [value]="m.id">{{ labelModeloFiltro(m) }}</option>
+        </select>
+      </div>
+
+      <button type="button" (click)="pesquisarReposicao()" [disabled]="carregando">Pesquisar</button>
+      <button
+        type="button"
+        class="btn-gerar-relatorio"
+        (click)="gerarRelatorioReposicao()"
+        [disabled]="!relatorio?.itens?.length || carregando || salvandoRelatorio"
+        title="Salva este período como relatório de pedido de reposição e abre o PDF"
+      >{{ salvandoRelatorio ? 'Salvando…' : 'Gerar relatório' }}</button>
+    </div>
+
+    <p *ngIf="carregando" class="campo-hint">Pesquisando pe&ccedil;as utilizadas...</p>
+
+    <ng-container *ngIf="relatorio && !carregando">
+      <p class="campo-hint" style="margin-bottom:12px">
+        <strong>{{ labelPeriodoReposicaoAtual() }}</strong> —
+        {{ formatarData(relatorio.inicio) }} a {{ formatarData(relatorio.fim) }} —
+        {{ relatorio.totalSaidas }} unidade(s) utilizada(s)
+        <span *ngIf="relatorio.modeloNomeFiltro"> — modelo: <strong>{{ relatorio.modeloNomeFiltro }}</strong></span>
+      </p>
+      <p class="campo-hint" style="margin-bottom:12px">
+        Use <strong>Gerar relatório</strong> para registrar este período (ex.: 13 e 14/07) e evitar pedir pe&ccedil;as de novo.
+      </p>
+
+      <table *ngIf="relatorio.itens.length > 0">
+        <thead>
+          <tr>
+            <th>Pe&ccedil;a</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Cor</th>
+            <th>Qtd utilizada</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of relatorio.itens">
+            <td>{{ r.pecaNome }}</td>
+            <td>{{ r.marcaPeca || '—' }}</td>
+            <td>{{ labelModeloMovimentacao(r.modeloNome, r.modeloId) }}</td>
+            <td>{{ r.cor || '—' }}</td>
+            <td>{{ r.quantidadeSaida }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p *ngIf="relatorio.itens.length === 0" class="campo-hint">
+        Nenhuma pe&ccedil;a utilizada no per&iacute;odo{{ reposicaoModeloId ? ' para este modelo' : '' }}.
+      </p>
+    </ng-container>
+
+    <div class="historico-relatorios" *ngIf="!carregando">
+      <h4>Relat&oacute;rios de reposi&ccedil;&atilde;o gerados</h4>
+      <p class="campo-hint" style="margin:0 0 10px">
+        At&eacute; {{ historicoLimite }} relat&oacute;rios, com os n&atilde;o conclu&iacute;dos primeiro.
+        Marque o andamento do pedido na pr&oacute;pria lista.
+      </p>
+      <div class="historico-filtros">
+        <label>
+          Status
+          <select
+            [(ngModel)]="filtroStatusHistorico"
+            name="filtroStatusHistorico"
+            (ngModelChange)="onFiltroStatusHistoricoChange()"
+          >
+            <option value="">Todos</option>
+            <option *ngFor="let s of statusRelatorioOpcoes" [value]="s.id">{{ s.label }}</option>
+          </select>
+        </label>
+      </div>
+      <table *ngIf="historicoRelatorios.length > 0">
+        <thead>
+          <tr>
+            <th>Gerado em</th>
+            <th>Per&iacute;odo</th>
+            <th>Modelo</th>
+            <th>Itens</th>
+            <th>Unidades</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let h of historicoRelatorios">
+            <td>{{ formatarDataHora(h.geradoEm) }}</td>
+            <td>{{ formatarData(h.inicio) }} a {{ formatarData(h.fim) }}</td>
+            <td>{{ h.modeloNomeFiltro || 'Todos' }}</td>
+            <td>{{ h.totalItens }}</td>
+            <td>{{ h.totalSaidas }}</td>
+            <td>
+              <select
+                class="historico-status-select"
+                [ngClass]="'status-' + statusRelatorio(h)"
+                [ngModel]="statusRelatorio(h)"
+                [name]="'status_' + h.id"
+                [disabled]="atualizandoStatusId === h.id"
+                (ngModelChange)="onStatusRelatorioChange(h, $event)"
+              >
+                <option *ngFor="let s of statusRelatorioOpcoes" [value]="s.id">{{ s.label }}</option>
+              </select>
+            </td>
+            <td>
+              <button type="button" (click)="consultarRelatorioSalvo(h)">Consultar PDF</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p *ngIf="historicoRelatorios.length === 0" class="campo-hint">
+        Nenhum relat&oacute;rio gerado ainda{{ filtroStatusHistorico ? ' com este status' : '' }}.
+      </p>
+    </div>
+  </div>
+
+  <!-- RETORNO GARANTIA FORNECEDOR -->
+  <div class="estoque-painel" *ngIf="aba === 'garantia'">
+    <h3 style="margin:0 0 8px">Retorno de garantia ao fornecedor</h3>
+    <p class="campo-hint" style="margin:0 0 8px">
+      <a routerLink="/estoque/lotes-retorno">Lotes baixados</a>
+      ·
+      <a routerLink="/estoque/analise-retorno">An&aacute;lise (fornecedor / pe&ccedil;a)</a>
+    </p>
+    <p class="campo-hint" style="margin:0 0 14px">
+      S&oacute; entram fornecedores que alimentam o estoque via <strong>pedido de compra</strong>
+      (a lista cresce sozinha quando voc&ecirc; cadastrar novos — n&atilde;o &eacute; fixa).
+      <span *ngIf="fornecedoresEstoqueGarantia.length"> Atuais: <strong>{{ fornecedoresEstoqueGarantia.join(', ') }}</strong>.</span>
+      Em <strong>Gerar retorno</strong> a pe&ccedil;a vai para a caixa daquele fornecedor.
+      O lote de envio &eacute; <strong>um por fornecedor</strong> — prazo m&aacute;ximo: 7 dias antes da garantia mais pr&oacute;xima do grupo.
+    </p>
+    <div class="reposicao-filtros" style="margin-bottom:14px">
+      <div class="form-group">
+        <label>OS</label>
+        <app-autocomplete-criavel
+          *ngFor="let k of garantiaOsTrack; trackBy: trackByNum"
+          placeholder="Digite o n&uacute;mero da OS..."
+          [buscarFn]="buscarOsGarantiaFn"
+          [permitirCriar]="false"
+          [valorInicial]="garantiaOsLabel"
+          (itemSelecionadoChange)="onOsGarantiaSelecionada($event)"
+        />
+      </div>
+      <div class="form-group">
+        <label>Lote / pedido</label>
+        <app-autocomplete-criavel
+          *ngFor="let k of garantiaLoteTrack; trackBy: trackByNum"
+          placeholder="Pedido ou lote..."
+          [buscarFn]="buscarLoteGarantiaFn"
+          [permitirCriar]="false"
+          [valorInicial]="garantiaLoteLabel"
+          (itemSelecionadoChange)="onLoteGarantiaSelecionado($event)"
+        />
+      </div>
+      <div class="form-group">
+        <label>Fornecedor</label>
+        <app-autocomplete-criavel
+          *ngFor="let k of garantiaFornecedorTrack; trackBy: trackByNum"
+          placeholder="Fornecedor de estoque..."
+          [buscarFn]="buscarFornecedorGarantiaFn"
+          [permitirCriar]="false"
+          [valorInicial]="garantiaFornecedorLabel"
+          (itemSelecionadoChange)="onFornecedorGarantiaSelecionado($event)"
+        />
+      </div>
+      <button type="button" (click)="carregarLotesGarantia()" [disabled]="carregando">Pesquisar</button>
+      <button type="button" class="btn-limpar" (click)="limparFiltrosGarantia()">Limpar</button>
+    </div>
+
+    <h4 style="margin:0 0 8px;font-size:15px">Pe&ccedil;as para retorno (por fornecedor de estoque)</h4>
+    <ng-container *ngIf="!carregando && lotesGarantiaAgrupados.length > 0">
+      <div *ngFor="let grupo of lotesGarantiaAgrupados; trackBy: trackByFornecedorGrupo" style="margin-bottom:16px">
+        <strong style="display:block;margin-bottom:6px">{{ grupo.fornecedor }}</strong>
+        <table>
+          <thead>
+            <tr>
+              <th *ngIf="temContextoOsGarantia">OS</th>
+              <th>Pedido</th>
+              <th>Pe&ccedil;a</th>
+              <th>Modelo</th>
+              <th>Cor</th>
+              <th>Saldo</th>
+              <th *ngIf="temContextoOsGarantia">Usada na OS</th>
+              <th>Garantia at&eacute;</th>
+              <th>Qtd / Motivo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let l of grupo.itens">
+              <td *ngIf="temContextoOsGarantia">{{ l.osNumero || '—' }}</td>
+              <td>{{ l.numeroPedido }}</td>
+              <td>{{ l.pecaNome }}</td>
+              <td>{{ labelModeloMovimentacao(l.modeloNome, l.modeloId) }}</td>
+              <td>{{ l.cor || '—' }}</td>
+              <td>{{ l.quantidadeRestante }}</td>
+              <td *ngIf="temContextoOsGarantia">{{ l.quantidadeUsadaOs || 0 }}</td>
+              <td>{{ labelGarantiaRestante(l) }}</td>
+              <td>
+                <div class="garantia-acoes">
+                  <input
+                    type="number"
+                    min="1"
+                    [max]="maxRetornoGarantia(l)"
+                    [(ngModel)]="devolucaoQtd[l.id!]"
+                    [name]="'qtdGar_' + l.id"
+                  />
+                  <input
+                    type="text"
+                    [(ngModel)]="devolucaoMotivo[l.id!]"
+                    [name]="'motGar_' + l.id"
+                    placeholder="Motivo (defeito...)"
+                  />
+                </div>
+              </td>
+              <td>
+                <button
+                  type="button"
+                  class="btn-gerar-relatorio"
+                  (click)="gerarRetornoGarantia(l)"
+                  [disabled]="devolvendoLoteId === l.id || maxRetornoGarantia(l) <= 0"
+                >{{ devolvendoLoteId === l.id ? 'Enviando…' : 'Gerar retorno' }}</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </ng-container>
+    <p *ngIf="!carregando && lotesGarantia.length === 0" class="campo-hint">
+      Selecione uma OS ou lote/pedido para listar as pe&ccedil;as utilizadas com garantia vigente.
+    </p>
+
+    <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0" />
+    <h3 style="margin:0 0 8px">Caixa de retorno por fornecedor</h3>
+    <p class="campo-hint" style="margin:0 0 14px">
+      Uma caixa por fornecedor de estoque. Cada <strong>Gerar lote de envio</strong> fecha s&oacute; aquele fornecedor.
+      Prazo m&aacute;ximo: <strong>7 dias antes</strong> da garantia mais pr&oacute;xima do grupo.
+      Ap&oacute;s a baixa, o lote some daqui —
+      consulte em <a routerLink="/estoque/lotes-retorno">Lotes baixados</a>
+      ou <a routerLink="/estoque/analise-retorno">An&aacute;lise retorno</a>.
+    </p>
+    <div class="reposicao-filtros" style="margin-bottom:14px">
+      <button
+        type="button"
+        (click)="carregarCaixaRetorno()"
+        [disabled]="carregandoCaixaRetorno"
+      >{{ carregandoCaixaRetorno ? 'Carregando…' : 'Atualizar caixa' }}</button>
+    </div>
+
+    <div *ngIf="caixaRetorno as caixa">
+      <div *ngIf="caixa.fornecedores.length === 0" class="campo-hint">
+        Caixa vazia — use <strong>Gerar retorno</strong> nas pe&ccedil;as acima para incluir aqui.
+      </div>
+      <div *ngFor="let g of caixa.fornecedores" style="margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+          <div>
+            <strong>{{ g.fornecedor }}</strong>
+            <div class="campo-hint" style="margin:4px 0 0" [style.color]="g.prazoVencido || g.diasRestantesPrazo <= 1 ? '#b45309' : null">
+              {{ g.totalItens }} item(ns) · {{ g.totalUnidades }} un. ·
+              Garantia mais pr&oacute;xima {{ formatarData(g.dataVencimentoMaisProxima) }} ·
+              {{ labelPrazoEnvio(g.diasRestantesPrazo, g.prazoVencido) }}
+              (enviar at&eacute; {{ formatarData(g.dataPrazoMaximoEnvio) }})
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn-gerar-relatorio"
+            (click)="gerarLoteCaixaFornecedor(g.fornecedor)"
+            [disabled]="gerandoLoteFornecedor === g.fornecedor || g.totalUnidades <= 0"
+            >{{ gerandoLoteFornecedor === g.fornecedor ? 'Gerando…' : 'Gerar lote — ' + g.fornecedor }}</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>OS</th>
+              <th>Pedido</th>
+              <th>Pe&ccedil;a</th>
+              <th>Modelo</th>
+              <th>Cor</th>
+              <th>Qtd</th>
+              <th>Garantia at&eacute;</th>
+              <th>Motivo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let i of g.itens">
+              <td>{{ i.osNumero ? '#' + i.osNumero : '—' }}</td>
+              <td>{{ i.numeroPedido }}</td>
+              <td>{{ i.pecaNome }}</td>
+              <td>{{ labelModeloMovimentacao(i.modeloNome, i.modeloId) }}</td>
+              <td>{{ i.cor || '—' }}</td>
+              <td>{{ i.quantidade }}</td>
+              <td>{{ formatarData(i.dataVencimentoGarantia) }}</td>
+              <td>{{ i.motivo || '—' }}</td>
+              <td>
+                <button
+                  type="button"
+                  class="btn-limpar"
+                  (click)="removerDaCaixa(i.id)"
+                  [disabled]="removendoCaixaId === i.id"
+                >{{ removendoCaixaId === i.id ? '…' : 'Remover' }}</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,87 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Modelos de Aparelhos</h2>
+    <button (click)="novo()">+ Novo Modelo</button>
+  </div>
+
+  <div class="marcas-chips" *ngIf="marcas.length > 0">
+    <button
+      type="button"
+      class="marca-chip"
+      [class.ativo]="!marcaNome"
+      (click)="selecionarMarca('')">
+      Todas ({{ marcas.length }} marcas)
+    </button>
+    <button
+      type="button"
+      class="marca-chip"
+      *ngFor="let m of marcas"
+      [class.ativo]="marcaNome === m.nome"
+      (click)="selecionarMarca(m.nome)">
+      {{ m.nome }}
+    </button>
+  </div>
+
+  <div class="filtros">
+    <input
+      [(ngModel)]="busca"
+      class="filtro-busca-principal"
+      placeholder="Buscar por marca ou modelo (ex: Samsung, G24, A14, Note 13)..."
+      (ngModelChange)="onFiltroChange()"
+    />
+    <select [(ngModel)]="marcaNome" (ngModelChange)="onFiltroChange()">
+      <option value="">Todas as marcas</option>
+      <option *ngFor="let m of marcas" [value]="m.nome">{{ m.nome }}</option>
+    </select>
+    <select [(ngModel)]="tipoDispositivo" (ngModelChange)="onFiltroChange()">
+      <option value="">Todos os tipos</option>
+      <option *ngFor="let t of tiposDispositivo" [value]="t">{{ t }}</option>
+    </select>
+  </div>
+
+  <p *ngIf="carregando" class="campo-hint">Buscando modelos...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <p class="resultado-limitado-aviso" *ngIf="!carregando && resultadoLimitado">
+    Exibindo até <strong>{{ limiteLista }}</strong> modelos por consulta.
+    Refine a busca ou filtre por marca para ver o restante.
+  </p>
+
+  <app-grid-paginator
+    *ngIf="!carregando && modelos.length > 0"
+    [total]="modelos.length"
+    [page]="grid.page"
+    [pageSize]="grid.pageSize"
+    (pageChange)="grid.onPageChange($event)"
+    (pageSizeChange)="grid.onPageSizeChange($event)"
+  />
+
+  <table class="data-grid" *ngIf="!carregando && modelos.length > 0">
+    <thead>
+      <tr>
+        <th>Modelo</th>
+        <th>Marca</th>
+        <th>Tipo</th>
+        <th>Cadastro</th>
+        <th>Compatíveis</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let m of modelosPaginados">
+        <td>{{ m.nome }}</td>
+        <td>{{ m.marcaNome || '-' }}</td>
+        <td>{{ m.tipoDispositivo || 'Celular' }}</td>
+        <td>{{ formatarCadastro(m) }}</td>
+        <td>{{ qtdCompativeis(m) }}</td>
+        <td class="grid-acoes-cell">
+          <div class="grid-acoes">
+            <app-grid-acao tipo="editar" (acao)="editar(m.id!)" />
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p *ngIf="!carregando && modelos.length === 0 && !erro">Nenhum modelo encontrado.</p>
+</div>

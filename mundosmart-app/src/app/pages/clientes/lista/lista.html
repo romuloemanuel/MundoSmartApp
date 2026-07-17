@@ -1,0 +1,50 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Clientes</h2>
+    <button (click)="novo()">+ Novo Cliente</button>
+  </div>
+
+  <div class="filtros">
+    <input [(ngModel)]="busca" placeholder="Buscar por nome..." (keyup.enter)="carregar()" />
+    <button (click)="carregar()">Buscar</button>
+  </div>
+
+  <p *ngIf="carregando">Carregando...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <app-grid-paginator
+    *ngIf="!carregando && clientes.length > 0"
+    [total]="clientes.length"
+    [page]="grid.page"
+    [pageSize]="grid.pageSize"
+    (pageChange)="grid.onPageChange($event)"
+    (pageSizeChange)="grid.onPageSizeChange($event)"
+  />
+
+  <table class="data-grid" *ngIf="!carregando && clientes.length > 0">
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>CPF/CNPJ</th>
+        <th>Telefone</th>
+        <th>E-mail</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let c of clientesPaginados">
+        <td>{{ c.nome }}</td>
+        <td>{{ c.cpfCnpj || '-' }}</td>
+        <td>{{ c.celular || c.telefone || '-' }}</td>
+        <td>{{ c.email || '-' }}</td>
+        <td class="grid-acoes-cell">
+          <div class="grid-acoes">
+            <app-grid-acao tipo="editar" (acao)="editar(c.id!)" />
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p *ngIf="!carregando && clientes.length === 0 && !erro">Nenhum cliente encontrado.</p>
+</div>

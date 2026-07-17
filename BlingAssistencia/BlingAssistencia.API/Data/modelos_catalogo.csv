@@ -1,0 +1,609 @@
+# Marca,NomeModelo,PrefixoMarca,Linha,Ano
+# NomeModelo = so o modelo (ex.: G24, A54, Note 13, 15 Pro). PrefixoMarca = digitacao de mercado.
+# Linhas Xiaomi: RED/PC/MI. Samsung: A/M/S. iPhone: (vazia). Motorola: E/G/Edge.
+# Realme: somente lancados/vendidos no Brasil (oficial Realme BR / imprensa); Linha = N/GT/C/Note.
+Marca,NomeModelo,PrefixoMarca,Linha,Ano
+Motorola,E3,Moto,E,2016
+Motorola,E3 Power,Moto,E,2016
+Motorola,E4,Moto,E,2017
+Motorola,E4 Plus,Moto,E,2017
+Motorola,E5,Moto,E,2018
+Motorola,E5 Play,Moto,E,2018
+Motorola,E5 Plus,Moto,E,2018
+Motorola,E6,Moto,E,2019
+Motorola,E6 Play,Moto,E,2019
+Motorola,E6 Plus,Moto,E,2019
+Motorola,E6s,Moto,E,2020
+Motorola,E6i,Moto,E,2020
+Motorola,E7,Moto,E,2020
+Motorola,E7 Plus,Moto,E,2020
+Motorola,E7 Power,Moto,E,2021
+Motorola,E7i Power,Moto,E,2021
+Motorola,E20,Moto,E,2021
+Motorola,E30,Moto,E,2021
+Motorola,E40,Moto,E,2021
+Motorola,E22,Moto,E,2022
+Motorola,E22i,Moto,E,2022
+Motorola,E32,Moto,E,2022
+Motorola,E32s,Moto,E,2022
+Motorola,E13,Moto,E,2023
+Motorola,E14,Moto,E,2024
+Motorola,E15,Moto,E,2025
+Motorola,G4,Moto,G,2016
+Motorola,G4 Plus,Moto,G,2016
+Motorola,G4 Play,Moto,G,2016
+Motorola,G5,Moto,G,2017
+Motorola,G5 Plus,Moto,G,2017
+Motorola,G5S,Moto,G,2017
+Motorola,G5S Plus,Moto,G,2017
+Motorola,G6,Moto,G,2018
+Motorola,G6 Play,Moto,G,2018
+Motorola,G6 Plus,Moto,G,2018
+Motorola,G7,Moto,G,2019
+Motorola,G7 Play,Moto,G,2019
+Motorola,G7 Power,Moto,G,2019
+Motorola,G7 Plus,Moto,G,2019
+Motorola,G8,Moto,G,2019
+Motorola,G8 Play,Moto,G,2019
+Motorola,G8 Plus,Moto,G,2019
+Motorola,G8 Power,Moto,G,2020
+Motorola,G8 Power Lite,Moto,G,2020
+Motorola,G9 Play,Moto,G,2020
+Motorola,G9 Power,Moto,G,2020
+Motorola,G9 Plus,Moto,G,2020
+Motorola,G 5G,Moto,G,2020
+Motorola,G 5G Plus,Moto,G,2020
+Motorola,G10,Moto,G,2021
+Motorola,G10 Power,Moto,G,2021
+Motorola,G20,Moto,G,2021
+Motorola,G30,Moto,G,2021
+Motorola,G31,Moto,G,2021
+Motorola,G41,Moto,G,2021
+Motorola,G50,Moto,G,2021
+Motorola,G50 5G,Moto,G,2021
+Motorola,G51,Moto,G,2021
+Motorola,G60,Moto,G,2021
+Motorola,G60S,Moto,G,2021
+Motorola,G71,Moto,G,2021
+Motorola,G100,Moto,G,2021
+Motorola,G200,Moto,G,2021
+Motorola,G22,Moto,G,2022
+Motorola,G32,Moto,G,2022
+Motorola,G42,Moto,G,2022
+Motorola,G52,Moto,G,2022
+Motorola,G53,Moto,G,2022
+Motorola,G62,Moto,G,2022
+Motorola,G72,Moto,G,2022
+Motorola,G82,Moto,G,2022
+Motorola,G13,Moto,G,2023
+Motorola,G14,Moto,G,2023
+Motorola,G23,Moto,G,2023
+Motorola,G54,Moto,G,2023
+Motorola,G73,Moto,G,2023
+Motorola,G84,Moto,G,2023
+Motorola,G04,Moto,G,2024
+Motorola,G04s,Moto,G,2024
+Motorola,G24,Moto,G,2024
+Motorola,G24 Power,Moto,G,2024
+Motorola,G34,Moto,G,2024
+Motorola,G05,Moto,G,2024
+Motorola,G15,Moto,G,2024
+Motorola,G35,Moto,G,2024
+Motorola,G55,Moto,G,2024
+Motorola,G75,Moto,G,2024
+Motorola,G85,Moto,G,2024
+Motorola,G56,Moto,G,2025
+Motorola,G86,Moto,G,2025
+Motorola,G86 Power,Moto,G,2025
+Motorola,G06,Moto,G,2025
+Motorola,G47,Moto,G,2025
+Motorola,G57 Power,Moto,G,2025
+Motorola,G67,Moto,G,2025
+Motorola,G67 Power,Moto,G,2025
+Motorola,G96,Moto,G,2025
+Motorola,Edge,Moto,Edge,2020
+Motorola,Edge+,Moto,Edge,2020
+Motorola,Edge Lite,Moto,Edge,2020
+Motorola,Edge S,Moto,Edge,2021
+Motorola,Edge 20,Moto,Edge,2021
+Motorola,Edge 20 Lite,Moto,Edge,2021
+Motorola,Edge 20 Fusion,Moto,Edge,2021
+Motorola,Edge 20 Pro,Moto,Edge,2021
+Motorola,Edge 30,Moto,Edge,2022
+Motorola,Edge 30 Pro,Moto,Edge,2022
+Motorola,Edge 30 Fusion,Moto,Edge,2022
+Motorola,Edge 30 Neo,Moto,Edge,2022
+Motorola,Edge 30 Ultra,Moto,Edge,2022
+Motorola,Edge 40,Moto,Edge,2023
+Motorola,Edge 40 Pro,Moto,Edge,2023
+Motorola,Edge 40 Neo,Moto,Edge,2023
+Motorola,Edge 50,Moto,Edge,2024
+Motorola,Edge 50 Fusion,Moto,Edge,2024
+Motorola,Edge 50 Pro,Moto,Edge,2024
+Motorola,Edge 50 Neo,Moto,Edge,2024
+Motorola,Edge 50 Ultra,Moto,Edge,2024
+Motorola,Edge 60,Moto,Edge,2025
+Motorola,Edge 60 Fusion,Moto,Edge,2025
+Motorola,Edge 60 Pro,Moto,Edge,2025
+Motorola,Edge 60 Neo,Moto,Edge,2025
+Motorola,Edge 70,Moto,Edge,2025
+Motorola,Edge 70 Fusion,Moto,Edge,2025
+Motorola,Edge 70 Pro,Moto,Edge,2026
+Xiaomi,9,MI,RED,2020
+Xiaomi,9A,MI,RED,2020
+Xiaomi,9C,MI,RED,2020
+Xiaomi,9i,MI,RED,2020
+Xiaomi,9 Prime,MI,RED,2020
+Xiaomi,9 Power,MI,RED,2020
+Xiaomi,9T,MI,RED,2021
+Xiaomi,8A Dual,MI,RED,2020
+Xiaomi,8A Pro,MI,RED,2020
+Xiaomi,10X,MI,RED,2020
+Xiaomi,10X 4G,MI,RED,2020
+Xiaomi,10X Pro,MI,RED,2020
+Xiaomi,Note 9,MI,RED,2020
+Xiaomi,Note 9S,MI,RED,2020
+Xiaomi,Note 9 Pro,MI,RED,2020
+Xiaomi,Note 9 Pro Max,MI,RED,2020
+Xiaomi,Note 9 4G,MI,RED,2020
+Xiaomi,Note 9 5G,MI,RED,2020
+Xiaomi,Note 9 Pro 5G,MI,RED,2020
+Xiaomi,Note 9T,MI,RED,2021
+Xiaomi,K30,MI,RED,2020
+Xiaomi,K30 5G,MI,RED,2020
+Xiaomi,K30i 5G,MI,RED,2020
+Xiaomi,K30 Pro,MI,RED,2020
+Xiaomi,K30 Pro Zoom,MI,RED,2020
+Xiaomi,K30 Ultra,MI,RED,2020
+Xiaomi,K30S,MI,RED,2020
+Xiaomi,9A Sport,MI,RED,2021
+Xiaomi,9i Sport,MI,RED,2021
+Xiaomi,9 Activ,MI,RED,2021
+Xiaomi,Redmi 10,MI,RED,2021
+Xiaomi,10 Prime,MI,RED,2021
+Xiaomi,10 2022,MI,RED,2022
+Xiaomi,Note 8 2021,MI,RED,2021
+Xiaomi,Note 10,MI,RED,2021
+Xiaomi,Note 10S,MI,RED,2021
+Xiaomi,Note 10 Pro,MI,RED,2021
+Xiaomi,Note 10 5G,MI,RED,2021
+Xiaomi,Note 10T,MI,RED,2021
+Xiaomi,Note 10 Lite,MI,RED,2021
+Xiaomi,Note 10 JE,MI,RED,2021
+Xiaomi,Note 11,MI,RED,2021
+Xiaomi,Note 11S,MI,RED,2022
+Xiaomi,Note 11 Pro,MI,RED,2021
+Xiaomi,Note 11 Pro+,MI,RED,2021
+Xiaomi,Note 11 4G,MI,RED,2021
+Xiaomi,Note 11T,MI,RED,2021
+Xiaomi,Note 11E,MI,RED,2022
+Xiaomi,Note 11R,MI,RED,2022
+Xiaomi,K40,MI,RED,2021
+Xiaomi,K40 Pro,MI,RED,2021
+Xiaomi,K40 Pro+,MI,RED,2021
+Xiaomi,K40 Gaming,MI,RED,2021
+Xiaomi,K40S,MI,RED,2022
+Xiaomi,10A,MI,RED,2022
+Xiaomi,10A Sport,MI,RED,2022
+Xiaomi,10C,MI,RED,2022
+Xiaomi,10 Power,MI,RED,2022
+Xiaomi,10 5G,MI,RED,2022
+Xiaomi,A1,MI,RED,2022
+Xiaomi,A1+,MI,RED,2022
+Xiaomi,Note 11 Pro 5G,MI,RED,2022
+Xiaomi,Note 11S 5G,MI,RED,2022
+Xiaomi,Note 12,MI,RED,2022
+Xiaomi,Note 12S,MI,RED,2023
+Xiaomi,Note 12 Pro,MI,RED,2022
+Xiaomi,Note 12 Pro+,MI,RED,2022
+Xiaomi,Note 12 5G,MI,RED,2023
+Xiaomi,Note 12 Pro 5G,MI,RED,2023
+Xiaomi,Note 12 Turbo,MI,RED,2023
+Xiaomi,K50,MI,RED,2022
+Xiaomi,K50 Pro,MI,RED,2022
+Xiaomi,K50 Gaming,MI,RED,2022
+Xiaomi,K50i,MI,RED,2022
+Xiaomi,K50 Ultra,MI,RED,2022
+Xiaomi,A2,MI,RED,2023
+Xiaomi,A2+,MI,RED,2023
+Xiaomi,Redmi 12,MI,RED,2023
+Xiaomi,12C,MI,RED,2023
+Xiaomi,12 5G,MI,RED,2023
+Xiaomi,12R,MI,RED,2023
+Xiaomi,13C,MI,RED,2023
+Xiaomi,13C 5G,MI,RED,2023
+Xiaomi,Note 12R,MI,RED,2023
+Xiaomi,Note 12T Pro,MI,RED,2023
+Xiaomi,Note 13,MI,RED,2023
+Xiaomi,Note 13 Pro,MI,RED,2023
+Xiaomi,Note 13 Pro+,MI,RED,2023
+Xiaomi,Note 13 5G,MI,RED,2024
+Xiaomi,Note 13 Pro 5G,MI,RED,2024
+Xiaomi,K60,MI,RED,2023
+Xiaomi,K60 Pro,MI,RED,2023
+Xiaomi,K60E,MI,RED,2023
+Xiaomi,K60 Ultra,MI,RED,2023
+Xiaomi,A3,MI,RED,2024
+Xiaomi,A3x,MI,RED,2024
+Xiaomi,Redmi 13,MI,RED,2024
+Xiaomi,13R,MI,RED,2024
+Xiaomi,13x,MI,RED,2025
+Xiaomi,14C,MI,RED,2024
+Xiaomi,14R,MI,RED,2024
+Xiaomi,Note 13R,MI,RED,2024
+Xiaomi,Note 14,MI,RED,2024
+Xiaomi,Note 14 Pro,MI,RED,2024
+Xiaomi,Note 14 Pro+,MI,RED,2024
+Xiaomi,Note 14 5G,MI,RED,2024
+Xiaomi,Note 14 Pro 5G,MI,RED,2024
+Xiaomi,Note 14S,MI,RED,2025
+Xiaomi,K70,MI,RED,2023
+Xiaomi,K70 Pro,MI,RED,2023
+Xiaomi,K70E,MI,RED,2023
+Xiaomi,K70 Ultra,MI,RED,2024
+Xiaomi,K80,MI,RED,2024
+Xiaomi,K80 Pro,MI,RED,2024
+Xiaomi,Redmi 15,MI,RED,2025
+Xiaomi,15C,MI,RED,2025
+Xiaomi,15C 5G,MI,RED,2025
+Xiaomi,Note 15,MI,RED,2025
+Xiaomi,Note 15 Pro,MI,RED,2025
+Xiaomi,Note 15 Pro+,MI,RED,2025
+Xiaomi,X2,MI,PC,2020
+Xiaomi,F2 Pro,MI,PC,2020
+Xiaomi,M2,MI,PC,2020
+Xiaomi,M2 Pro,MI,PC,2020
+Xiaomi,M2 Reloaded,MI,PC,2021
+Xiaomi,C3,MI,PC,2020
+Xiaomi,X3,MI,PC,2020
+Xiaomi,X3 NFC,MI,PC,2020
+Xiaomi,X3 Pro,MI,PC,2021
+Xiaomi,X3 GT,MI,PC,2021
+Xiaomi,F3,MI,PC,2021
+Xiaomi,F3 GT,MI,PC,2021
+Xiaomi,M3,MI,PC,2020
+Xiaomi,M3 Pro,MI,PC,2021
+Xiaomi,C31,MI,PC,2021
+Xiaomi,M4 Pro 5G,MI,PC,2021
+Xiaomi,M4 Pro,MI,PC,2022
+Xiaomi,M4 5G,MI,PC,2022
+Xiaomi,X4 Pro,MI,PC,2022
+Xiaomi,X4 GT,MI,PC,2022
+Xiaomi,F4,MI,PC,2022
+Xiaomi,F4 GT,MI,PC,2022
+Xiaomi,C40,MI,PC,2022
+Xiaomi,M5,MI,PC,2022
+Xiaomi,M5s,MI,PC,2022
+Xiaomi,X5,MI,PC,2023
+Xiaomi,X5 Pro,MI,PC,2023
+Xiaomi,F5,MI,PC,2023
+Xiaomi,F5 Pro,MI,PC,2023
+Xiaomi,C50,MI,PC,2023
+Xiaomi,C51,MI,PC,2023
+Xiaomi,C55,MI,PC,2023
+Xiaomi,C65,MI,PC,2023
+Xiaomi,M6,MI,PC,2023
+Xiaomi,M6 Pro,MI,PC,2023
+Xiaomi,M6 5G,MI,PC,2024
+Xiaomi,M6 Pro 5G,MI,PC,2024
+Xiaomi,M6 Plus 5G,MI,PC,2024
+Xiaomi,X6,MI,PC,2024
+Xiaomi,X6 Pro,MI,PC,2024
+Xiaomi,X6 Neo,MI,PC,2023
+Xiaomi,F6,MI,PC,2024
+Xiaomi,F6 Pro,MI,PC,2024
+Xiaomi,C61,MI,PC,2024
+Xiaomi,C75,MI,PC,2024
+Xiaomi,C75 5G,MI,PC,2024
+Xiaomi,X7,MI,PC,2024
+Xiaomi,X7 Pro,MI,PC,2025
+Xiaomi,F7,MI,PC,2025
+Xiaomi,F7 Pro,MI,PC,2025
+Xiaomi,F7 Ultra,MI,PC,2025
+Xiaomi,M7,MI,PC,2025
+Xiaomi,M7 Pro,MI,PC,2025
+Xiaomi,C85,MI,PC,2025
+Xiaomi,10,MI,MI,2020
+Xiaomi,10 Pro,MI,MI,2020
+Xiaomi,10 Lite,MI,MI,2020
+Xiaomi,10T,MI,MI,2020
+Xiaomi,10T Pro,MI,MI,2020
+Xiaomi,10T Lite,MI,MI,2020
+Xiaomi,10 Ultra,MI,MI,2020
+Xiaomi,11,MI,MI,2021
+Xiaomi,11 Lite,MI,MI,2021
+Xiaomi,11 Lite 5G NE,MI,MI,2021
+Xiaomi,11T,MI,MI,2021
+Xiaomi,11T Pro,MI,MI,2021
+Xiaomi,11i,MI,MI,2021
+Xiaomi,11i HyperCharge,MI,MI,2021
+Xiaomi,11 Ultra,MI,MI,2021
+Xiaomi,12,MI,MI,2021
+Xiaomi,12X,MI,MI,2021
+Xiaomi,12 Pro,MI,MI,2021
+Xiaomi,12 Lite,MI,MI,2022
+Xiaomi,12T,MI,MI,2022
+Xiaomi,12T Pro,MI,MI,2022
+Xiaomi,12S,MI,MI,2022
+Xiaomi,12S Pro,MI,MI,2022
+Xiaomi,12S Ultra,MI,MI,2022
+Xiaomi,13,MI,MI,2022
+Xiaomi,13 Pro,MI,MI,2022
+Xiaomi,13 Lite,MI,MI,2023
+Xiaomi,13T,MI,MI,2023
+Xiaomi,13T Pro,MI,MI,2023
+Xiaomi,13 Ultra,MI,MI,2023
+Xiaomi,14,MI,MI,2023
+Xiaomi,14 Pro,MI,MI,2023
+Xiaomi,14 Ultra,MI,MI,2024
+Xiaomi,14T,MI,MI,2024
+Xiaomi,14T Pro,MI,MI,2024
+Xiaomi,14 Civi,MI,MI,2024
+Xiaomi,15,MI,MI,2024
+Xiaomi,15 Pro,MI,MI,2024
+Xiaomi,15 Ultra,MI,MI,2025
+Xiaomi,15T,MI,MI,2025
+Xiaomi,15T Pro,MI,MI,2025
+Xiaomi,Mix Fold 2,MI,MI,2022
+Xiaomi,Mix Fold 3,MI,MI,2023
+Xiaomi,Mix Fold 4,MI,MI,2024
+Xiaomi,Mix Flip,MI,MI,2024
+Samsung,A3 2017,SM,A,2017
+Samsung,A5 2017,SM,A,2017
+Samsung,A7 2017,SM,A,2017
+Samsung,A6,SM,A,2018
+Samsung,A6+,SM,A,2018
+Samsung,A6s,SM,A,2018
+Samsung,A7 2018,SM,A,2018
+Samsung,A8 2018,SM,A,2018
+Samsung,A8+,SM,A,2018
+Samsung,A8 Star,SM,A,2018
+Samsung,A8s,SM,A,2018
+Samsung,A9 2018,SM,A,2018
+Samsung,A2 Core,SM,A,2019
+Samsung,A10,SM,A,2019
+Samsung,A10s,SM,A,2019
+Samsung,A10e,SM,A,2019
+Samsung,A20,SM,A,2019
+Samsung,A20s,SM,A,2019
+Samsung,A20e,SM,A,2019
+Samsung,A30,SM,A,2019
+Samsung,A30s,SM,A,2019
+Samsung,A40,SM,A,2019
+Samsung,A50,SM,A,2019
+Samsung,A50s,SM,A,2019
+Samsung,A60,SM,A,2019
+Samsung,A70,SM,A,2019
+Samsung,A70s,SM,A,2019
+Samsung,A80,SM,A,2019
+Samsung,A90 5G,SM,A,2019
+Samsung,A01,SM,A,2020
+Samsung,A01 Core,SM,A,2020
+Samsung,A11,SM,A,2020
+Samsung,A21,SM,A,2020
+Samsung,A21s,SM,A,2020
+Samsung,A31,SM,A,2020
+Samsung,A41,SM,A,2020
+Samsung,A51,SM,A,2020
+Samsung,A51 5G,SM,A,2020
+Samsung,A71,SM,A,2020
+Samsung,A71 5G,SM,A,2020
+Samsung,A02,SM,A,2021
+Samsung,A02s,SM,A,2021
+Samsung,A03,SM,A,2021
+Samsung,A03s,SM,A,2021
+Samsung,A03 Core,SM,A,2021
+Samsung,A12,SM,A,2021
+Samsung,A22,SM,A,2021
+Samsung,A22 5G,SM,A,2021
+Samsung,A32,SM,A,2021
+Samsung,A32 5G,SM,A,2021
+Samsung,A42 5G,SM,A,2021
+Samsung,A52,SM,A,2021
+Samsung,A52 5G,SM,A,2021
+Samsung,A52s 5G,SM,A,2021
+Samsung,A72,SM,A,2021
+Samsung,A04,SM,A,2022
+Samsung,A04e,SM,A,2022
+Samsung,A04s,SM,A,2022
+Samsung,A13,SM,A,2022
+Samsung,A13 5G,SM,A,2022
+Samsung,A23,SM,A,2022
+Samsung,A23 5G,SM,A,2022
+Samsung,A33 5G,SM,A,2022
+Samsung,A53 5G,SM,A,2022
+Samsung,A73 5G,SM,A,2022
+Samsung,A05,SM,A,2023
+Samsung,A05s,SM,A,2023
+Samsung,A14,SM,A,2023
+Samsung,A14 5G,SM,A,2023
+Samsung,A24,SM,A,2023
+Samsung,A25 5G,SM,A,2023
+Samsung,A34 5G,SM,A,2023
+Samsung,A54 5G,SM,A,2023
+Samsung,A06,SM,A,2024
+Samsung,A15,SM,A,2024
+Samsung,A15 5G,SM,A,2024
+Samsung,A25,SM,A,2024
+Samsung,A35 5G,SM,A,2024
+Samsung,A55 5G,SM,A,2024
+Samsung,A06 5G,SM,A,2025
+Samsung,A16,SM,A,2024
+Samsung,A16 5G,SM,A,2024
+Samsung,A26 5G,SM,A,2025
+Samsung,A36 5G,SM,A,2025
+Samsung,A56 5G,SM,A,2025
+Samsung,M10,SM,M,2019
+Samsung,M10s,SM,M,2019
+Samsung,M20,SM,M,2019
+Samsung,M30,SM,M,2019
+Samsung,M30s,SM,M,2019
+Samsung,M40,SM,M,2019
+Samsung,M01,SM,M,2020
+Samsung,M01s,SM,M,2020
+Samsung,M01 Core,SM,M,2020
+Samsung,M11,SM,M,2020
+Samsung,M21,SM,M,2020
+Samsung,M31,SM,M,2020
+Samsung,M31s,SM,M,2020
+Samsung,M51,SM,M,2020
+Samsung,M02,SM,M,2021
+Samsung,M02s,SM,M,2021
+Samsung,M12,SM,M,2021
+Samsung,M22,SM,M,2021
+Samsung,M32,SM,M,2021
+Samsung,M32 5G,SM,M,2021
+Samsung,M42 5G,SM,M,2021
+Samsung,M52 5G,SM,M,2021
+Samsung,M62,SM,M,2021
+Samsung,M13,SM,M,2022
+Samsung,M13 5G,SM,M,2022
+Samsung,M23 5G,SM,M,2022
+Samsung,M33 5G,SM,M,2022
+Samsung,M53 5G,SM,M,2022
+Samsung,M04,SM,M,2023
+Samsung,M14,SM,M,2023
+Samsung,M14 5G,SM,M,2023
+Samsung,M34 5G,SM,M,2023
+Samsung,M54 5G,SM,M,2023
+Samsung,M15 5G,SM,M,2024
+Samsung,M35 5G,SM,M,2024
+Samsung,M55 5G,SM,M,2024
+Samsung,M55s 5G,SM,M,2024
+Samsung,M16 5G,SM,M,2025
+Samsung,M36 5G,SM,M,2025
+Samsung,M56 5G,SM,M,2025
+Samsung,S8,SM,S,2017
+Samsung,S8+,SM,S,2017
+Samsung,S8 Active,SM,S,2017
+Samsung,S9,SM,S,2018
+Samsung,S9+,SM,S,2018
+Samsung,S10e,SM,S,2019
+Samsung,S10,SM,S,2019
+Samsung,S10+,SM,S,2019
+Samsung,S10 5G,SM,S,2019
+Samsung,S10 Lite,SM,S,2020
+Samsung,S20,SM,S,2020
+Samsung,S20+,SM,S,2020
+Samsung,S20 Ultra,SM,S,2020
+Samsung,S20 FE,SM,S,2020
+Samsung,S20 FE 5G,SM,S,2020
+Samsung,S21,SM,S,2021
+Samsung,S21+,SM,S,2021
+Samsung,S21 Ultra,SM,S,2021
+Samsung,S21 FE,SM,S,2022
+Samsung,S22,SM,S,2022
+Samsung,S22+,SM,S,2022
+Samsung,S22 Ultra,SM,S,2022
+Samsung,S23,SM,S,2023
+Samsung,S23+,SM,S,2023
+Samsung,S23 Ultra,SM,S,2023
+Samsung,S23 FE,SM,S,2023
+Samsung,S24,SM,S,2024
+Samsung,S24+,SM,S,2024
+Samsung,S24 Ultra,SM,S,2024
+Samsung,S24 FE,SM,S,2024
+Samsung,S25,SM,S,2025
+Samsung,S25+,SM,S,2025
+Samsung,S25 Ultra,SM,S,2025
+Samsung,S25 Edge,SM,S,2025
+Samsung,S25 FE,SM,S,2025
+iPhone,8,IP,,2017
+iPhone,8 Plus,IP,,2017
+iPhone,X,IP,,2017
+iPhone,XR,IP,,2018
+iPhone,XS,IP,,2018
+iPhone,XS Max,IP,,2018
+iPhone,11,IP,,2019
+iPhone,11 Pro,IP,,2019
+iPhone,11 Pro Max,IP,,2019
+iPhone,SE 2020,IP,,2020
+iPhone,12,IP,,2020
+iPhone,12 mini,IP,,2020
+iPhone,12 Pro,IP,,2020
+iPhone,12 Pro Max,IP,,2020
+iPhone,13,IP,,2021
+iPhone,13 mini,IP,,2021
+iPhone,13 Pro,IP,,2021
+iPhone,13 Pro Max,IP,,2021
+iPhone,SE 2022,IP,,2022
+iPhone,14,IP,,2022
+iPhone,14 Plus,IP,,2022
+iPhone,14 Pro,IP,,2022
+iPhone,14 Pro Max,IP,,2022
+iPhone,15,IP,,2023
+iPhone,15 Plus,IP,,2023
+iPhone,15 Pro,IP,,2023
+iPhone,15 Pro Max,IP,,2023
+iPhone,16,IP,,2024
+iPhone,16 Plus,IP,,2024
+iPhone,16 Pro,IP,,2024
+iPhone,16 Pro Max,IP,,2024
+iPhone,16e,IP,,2025
+iPhone,17,IP,,2025
+iPhone,17 Air,IP,,2025
+iPhone,17 Pro,IP,,2025
+iPhone,17 Pro Max,IP,,2025
+Realme,7,,N,2020
+Realme,7 Pro,,N,2020
+Realme,7i,,N,2021
+Realme,7 5G,,N,2021
+Realme,8,,N,2021
+Realme,8 Pro,,N,2021
+Realme,8 5G,,N,2021
+Realme,8i,,N,2021
+Realme,9,,N,2022
+Realme,9i,,N,2022
+Realme,9 Pro,,N,2022
+Realme,9 Pro+,,N,2022
+Realme,10,,N,2023
+Realme,10 5G,,N,2023
+Realme,10 Pro,,N,2023
+Realme,10 Pro+,,N,2023
+Realme,11,,N,2023
+Realme,11 5G,,N,2023
+Realme,11x,,N,2023
+Realme,11 Pro,,N,2023
+Realme,11 Pro+,,N,2023
+Realme,12,,N,2024
+Realme,12 5G,,N,2024
+Realme,12x,,N,2024
+Realme,12+,,N,2024
+Realme,12 Pro,,N,2024
+Realme,12 Pro+,,N,2024
+Realme,13,,N,2024
+Realme,13+,,N,2024
+Realme,13 Pro,,N,2025
+Realme,13 Pro+,,N,2025
+Realme,14,,N,2025
+Realme,14 Pro,,N,2025
+Realme,14 Pro+,,N,2025
+Realme,15,,N,2025
+Realme,15 Pro,,N,2025
+Realme,GT Master Edition,,GT,2021
+Realme,GT 2 Pro,,GT,2022
+Realme,GT 6,,GT,2024
+Realme,GT 6T,,GT,2024
+Realme,GT 7,,GT,2025
+Realme,GT 7 Pro,,GT,2025
+Realme,C11,,C,2020
+Realme,C21Y,,C,2021
+Realme,C25,,C,2021
+Realme,C30,,C,2022
+Realme,C30s,,C,2022
+Realme,C31,,C,2022
+Realme,C33,,C,2022
+Realme,C35,,C,2022
+Realme,C53,,C,2023
+Realme,C55,,C,2023
+Realme,C61,,C,2024
+Realme,C63,,C,2024
+Realme,C65,,C,2024
+Realme,C65s,,C,2025
+Realme,C67,,C,2024
+Realme,C67 5G,,C,2024
+Realme,C71,,C,2025
+Realme,C75,,C,2024
+Realme,C75 5G,,C,2025
+Realme,Note 50,,Note,2024
+Realme,Note 60,,Note,2024

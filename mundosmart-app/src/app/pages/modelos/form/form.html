@@ -1,0 +1,99 @@
+<div class="page">
+  <h2>{{ editando ? 'Editar Modelo' : 'Novo Modelo' }}</h2>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <form (ngSubmit)="salvar()">
+    <h3>Dados do modelo</h3>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Nome do modelo <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <input [(ngModel)]="modelo.nome" name="nome" required placeholder="Ex: Galaxy A54, iPhone 13..." />
+      </div>
+      <div class="form-group">
+        <label>Marca <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <input [(ngModel)]="modelo.marcaNome" name="marcaNome" required
+          placeholder="Ex: Samsung, iPhone, Motorola..." />
+      </div>
+      <div class="form-group">
+        <label>Tipo de dispositivo <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <select [(ngModel)]="modelo.tipoDispositivo" name="tipoDispositivo" required>
+          <option *ngFor="let t of tiposDispositivo" [value]="t">{{ t }}</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Observações</label>
+      <textarea [(ngModel)]="modelo.observacoes" name="observacoes" rows="3"
+        placeholder="Ex: usa tela compartilhada com A53/A52, bateria EB-BA536ABY..."></textarea>
+    </div>
+
+    <p *ngIf="editando && modelo.criadoEm" class="compat-hint">
+      Cadastrado em <strong>{{ formatarCadastro(modelo) }}</strong>
+    </p>
+
+    <h3>Aparelhos compatíveis</h3>
+    <p class="compat-hint">
+      Use <strong>Compartilhado</strong> para telas e baterias usadas em vários modelos
+      (ex: Galaxy A52, A53 e A54 com a mesma tela).
+    </p>
+
+    <div class="compat-add">
+      <div class="form-group" style="flex:2">
+        <label>Buscar modelo</label>
+        <input [(ngModel)]="buscaCompativel" name="buscaCompativel"
+          placeholder="Buscar por modelo ou marca..."
+          (ngModelChange)="onBuscaCompativelChange()" />
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>Modelo compatível</label>
+        <select [(ngModel)]="compatSelecionadoId" name="compatSelecionadoId">
+          <option value="">Selecione...</option>
+          <option *ngFor="let m of modelosBusca" [value]="m.id">
+            {{ m.marcaNome }} {{ m.nome }} ({{ m.tipoDispositivo }}) — {{ formatarCadastro(m) }}
+          </option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo de compatibilidade</label>
+        <select [(ngModel)]="novoCompatTipo" name="novoCompatTipo">
+          <option *ngFor="let t of tiposCompatibilidade" [value]="t.valor">{{ t.label }}</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>Observação</label>
+        <input [(ngModel)]="novoCompatObs" name="novoCompatObs" placeholder="Ex: mesma tela OLED" />
+      </div>
+      <button type="button" (click)="adicionarCompativel()">Adicionar</button>
+    </div>
+
+    <table class="compat-table" *ngIf="modelo.aparelhosCompativeis?.length">
+      <thead>
+        <tr>
+          <th>Modelo</th>
+          <th>Marca</th>
+          <th>Tipo</th>
+          <th>Compatibilidade</th>
+          <th>Observação</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let c of modelo.aparelhosCompativeis; let i = index">
+          <td>{{ c.modeloNome }}</td>
+          <td>{{ c.marcaNome }}</td>
+          <td>{{ c.tipoDispositivo }}</td>
+          <td>{{ labelCompatibilidade(c.tipoCompatibilidade) }}</td>
+          <td>{{ c.observacao || '-' }}</td>
+          <td><button type="button" (click)="removerCompativel(i)">Remover</button></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="form-actions">
+      <button type="submit" [disabled]="salvando">{{ salvando ? 'Salvando...' : 'Salvar' }}</button>
+      <button type="button" (click)="cancelar()">Cancelar</button>
+      <button type="button" class="btn-danger" *ngIf="editando" (click)="excluir()">Excluir</button>
+    </div>
+  </form>
+</div>

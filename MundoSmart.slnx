@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/BlingAssistencia/">
+    <Project Path="BlingAssistencia/BlingAssistencia.API/BlingAssistencia.API.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,134 @@
+<div class="page">
+  <p *ngIf="carregando">Carregando...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <ng-container *ngIf="os">
+    <div class="page-header">
+      <h2>OS #{{ os.numero }}</h2>
+      <div>
+        <button (click)="editar()">Editar</button>
+        <button (click)="voltar()">Voltar</button>
+      </div>
+    </div>
+
+    <div class="detalhe-grid">
+      <div><strong>Cliente:</strong> {{ os.contato?.nome }}</div>
+      <div><strong>Autorizado a retirar:</strong>
+        <ng-container *ngIf="os.contatoAviso?.nome && os.contatoAviso?.autorizadoRetirada !== false; else semAutorizado">
+          {{ os.contatoAviso?.nome }}
+          <span *ngIf="os.contatoAviso?.parentesco"> ({{ os.contatoAviso?.parentesco }})</span>
+        </ng-container>
+        <ng-template #semAutorizado>—</ng-template>
+      </div>
+      <div *ngIf="os.contatoAviso?.celular || os.contatoAviso?.telefone">
+        <strong>Telefone do autorizado:</strong> {{ os.contatoAviso?.celular || os.contatoAviso?.telefone }}
+      </div>
+      <div><strong>Avisar somente por este contato:</strong>
+        <span class="badge badge-pref-contato" *ngIf="os.preferenciaContatoSelecionado">Sim</span>
+        <span *ngIf="!os.preferenciaContatoSelecionado">N&atilde;o</span>
+      </div>
+      <div><strong>Situação:</strong> <span class="badge">{{ os.situacao }}</span></div>
+      <div class="full" *ngIf="os.motivoCancelamento">
+        <strong>Motivo do cancelamento:</strong> {{ os.motivoCancelamento }}
+      </div>
+      <div *ngIf="os.tipoServico"><strong>Tipo de serviço:</strong> {{ labelTipoServico(os.tipoServico) }}</div>
+      <div><strong>Equipamento:</strong> {{ os.equipamento }}</div>
+      <div><strong>Número de Série:</strong> {{ os.numeroSerie || '—' }}</div>
+      <div><strong>IMEI:</strong> {{ os.imei || '—' }}</div>
+      <div class="full">
+        <app-senha-dispositivo-field
+          [readonly]="true"
+          [tipo]="os.senhaDispositivoTipo || ''"
+          [valor]="os.senhaDispositivo || ''"
+        />
+      </div>
+      <div class="full detalhe-fotos">
+        <h3>
+          Fotos do aparelho
+          <span *ngIf="(os.fotosAparelho?.length || 0) > 0">({{ os.fotosAparelho?.length }})</span>
+        </h3>
+        <app-os-fotos-panel
+          *ngIf="os.id"
+          [osId]="os.id"
+          [fotos]="os.fotosAparelho || []"
+          [readonly]="true"
+          [mostrarQr]="false"
+          (atualizar)="recarregarFotos()"
+        />
+      </div>
+      <div><strong>Data:</strong> {{ os.data | date:'dd/MM/yyyy' }}</div>
+      <div><strong>Prev. Entrega:</strong> {{ os.dataPrevista | date:'dd/MM/yyyy' }}</div>
+      <div *ngIf="os.situacao === 'Aguardando Peça' && os.dataPrazoPeca">
+        <strong>Prazo pe&ccedil;a:</strong> {{ os.dataPrazoPeca | date:'dd/MM/yyyy HH:mm' }}
+      </div>
+      <div class="full"><strong>Defeito:</strong> {{ os.defeito }}</div>
+      <div class="full"><strong>Descrição:</strong> {{ os.descricao }}</div>
+      <div class="full"><strong>Observações:</strong> {{ os.observacoes }}</div>
+    </div>
+
+    <h3>Peças / Serviços</h3>
+    <table *ngIf="os.itens && os.itens.length > 0">
+      <thead>
+        <tr>
+          <th>Descrição</th>
+          <th>Qtd</th>
+          <th>Ref. venda</th>
+          <th>Pre&ccedil;o total</th>
+          <th>Custo pe&ccedil;a</th>
+          <th>Diferen&ccedil;a</th>
+          <th>Parc.</th>
+          <th>Origem pe&ccedil;a</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of os.itens">
+          <td>{{ item.descricao }}</td>
+          <td>{{ item.quantidade }}</td>
+          <td>
+            <span *ngIf="item.valorSugeridoMinimo != null || item.valorSugeridoTroca != null">
+              {{ item.valorSugeridoMinimo | currency:'BRL' }} / {{ item.valorSugeridoTroca | currency:'BRL' }}
+            </span>
+            <span *ngIf="item.valorSugeridoMinimo == null && item.valorSugeridoTroca == null">—</span>
+          </td>
+          <td>
+            {{ (item.valorAcontado ?? item.valorUnitario) | currency:'BRL' }}
+            <div class="campo-hint" *ngIf="item.parcelamento && item.parcelamento > 1">
+              {{ item.parcelamento }}x de {{ ((item.valorAcontado ?? item.valorUnitario) / item.parcelamento) | currency:'BRL' }}
+            </div>
+          </td>
+          <td>{{ item.custoPeca != null ? (item.custoPeca | currency:'BRL') : '—' }}</td>
+          <td>
+            <ng-container *ngIf="diferencaPecaServico(item) as diff">{{ diff | currency:'BRL' }}</ng-container>
+            <span *ngIf="diferencaPecaServico(item) == null">—</span>
+          </td>
+          <td>{{ item.parcelamento || '—' }}</td>
+          <td>
+            <span *ngIf="isItemPeca(item)">{{ labelOrigemPeca(item) }}</span>
+            <span *ngIf="!isItemPeca(item)">—</span>
+          </td>
+          <td>{{ item.quantidade * (item.valorAcontado ?? item.valorUnitario) | currency:'BRL' }}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Total acordado: {{ (os.valorTotalAcordado ?? os.valorTotal) | currency:'BRL' }}</strong></p>
+    <p *ngIf="os.juros != null && os.juros > 0">
+      <strong>Juros:</strong> {{ os.juros | currency:'BRL' }}
+    </p>
+    <p *ngIf="os.formaPagamento">
+      <strong>Pagamento acordado:</strong> {{ labelPagamentoAcordado(os) }}
+    </p>
+
+    <h3 *ngIf="!osConcluida()">Alterar Situação</h3>
+    <div class="situacao-botoes" *ngIf="!osConcluida()">
+      <button
+        *ngFor="let s of situacoes"
+        (click)="alterarSituacao(s)"
+        [disabled]="alterandoSituacao || os.situacao === s"
+        [class.ativo]="os.situacao === s">
+        {{ s }}
+      </button>
+    </div>
+    <p *ngIf="osConcluida()" class="campo-hint">OS finalizada — use <strong>Editar</strong> para alterar a situação.</p>
+  </ng-container>
+</div>

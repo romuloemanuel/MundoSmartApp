@@ -1,0 +1,382 @@
+<div class="page orc-page">
+  <h2>{{ editando ? 'Editar Pré-orçamento' : 'Novo Pré-orçamento' }}</h2>
+  <p class="orc-hint">
+    Cliente, aparelho e serviços (do modelo ou livres) com valor combinado.
+    Validade padrão: <strong>{{ validadeDiasUteis }} dias úteis</strong>.
+    Após salvar, você poderá imprimir o pré-orçamento.
+    Para gerar a OS, use <strong>Transformar em OS</strong> na lista de orçamentos.
+  </p>
+
+  <app-orcamento-salvo-modal
+    *ngIf="modalSalvoAberto && orcamentoSalvo"
+    [orcamento]="orcamentoSalvo"
+    [imprimindo]="imprimindo"
+    (imprimir)="imprimirAposSalvar()"
+    (novo)="novoOrcamentoAposSalvar()"
+    (lista)="irParaListaAposSalvar()"
+  />
+
+  <div class="orc-convertido" *ngIf="jaConvertido">
+    Orçamento convertido na OS #{{ orcamento.osGeradaNumero || orcamento.osGeradaBlingId }}.
+    <button type="button" class="btn-link" (click)="abrirOsGerada()">Abrir OS</button>
+  </div>
+
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <app-novo-cliente-modal
+    *ngIf="modalNovoClienteAberto"
+    (clienteCriado)="onClienteCriado($event)"
+    (fecharModal)="modalNovoClienteAberto = false"
+  />
+
+  <form class="orc-form" (ngSubmit)="salvar()">
+    <div class="orc-form-corpo" [class.orc-form-readonly]="jaConvertido">
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>Cliente <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <app-cliente-autocomplete
+            [ngModel]="orcamento.contato"
+            name="contato"
+            (clienteSelecionadoChange)="onClienteSelecionado($event)"
+            (novoClienteClick)="modalNovoClienteAberto = true"
+          />
+        </div>
+        <div class="form-group">
+          <label>Loja de origem</label>
+          <select
+            [(ngModel)]="orcamento.lojaOrigem"
+            name="lojaOrigem"
+            [disabled]="jaConvertido || lojaCriacaoTravada"
+            (ngModelChange)="onLojaOrigemChange($event)"
+          >
+            <option *ngFor="let l of lojasOs" [ngValue]="l.codigo">{{ l.sigla }} — {{ l.nome }}</option>
+          </select>
+          <span class="campo-hint" *ngIf="lojaCriacaoTravada">
+            Seu usuário só cadastra nesta loja.
+          </span>
+          <span class="campo-hint" *ngIf="!lojaCriacaoTravada">
+            Assistência técnica só em Mococa — lojas da rede orçam e enviam o aparelho.
+          </span>
+        </div>
+        <div class="form-group">
+          <label>Validade ({{ validadeDiasUteis }} dias úteis)</label>
+          <input [(ngModel)]="orcamento.validade" name="validade" type="date" [readonly]="jaConvertido" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tipo de contato <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <select
+            [(ngModel)]="orcamento.tipoContato"
+            name="tipoContato"
+            [disabled]="jaConvertido"
+          >
+            <option *ngFor="let t of tiposContato" [ngValue]="t.id">{{ t.label }}</option>
+          </select>
+          <span class="campo-hint">Como o cliente chegou / fez este orçamento.</span>
+        </div>
+      </div>
+
+      <div class="form-row orc-aguardo-row">
+        <div class="form-group" style="flex:2">
+          <label>Justificativa (não traz agora)</label>
+          <textarea
+            [(ngModel)]="orcamento.justificativaAguardo"
+            name="justificativaAguardo"
+            rows="2"
+            [disabled]="jaConvertido"
+            (ngModelChange)="onJustificativaAguardoChange($event)"
+            placeholder="Ex.: vai aguardar o cartão virar / sem o aparelho consigo no momento…"
+          ></textarea>
+          <span class="campo-hint">
+            Preencha se o cliente orçou e ainda não vai trazer o aparelho.
+          </span>
+        </div>
+        <div class="form-group" *ngIf="temJustificativaAguardo">
+          <label>Data para retomar contato</label>
+          <input
+            type="date"
+            [(ngModel)]="orcamento.dataRetornoMensagem"
+            name="dataRetornoMensagem"
+            [disabled]="jaConvertido"
+          />
+          <span class="campo-hint">
+            Ex.: dia em que o cartão vira — para mandar mensagem depois. Aparece na lista.
+          </span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tipo de dispositivo</label>
+          <select [(ngModel)]="tipoDispositivo" name="tipoDispositivo" [disabled]="jaConvertido">
+            <option *ngFor="let t of tiposDispositivo" [value]="t">{{ t }}</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:2">
+          <label>Modelo do aparelho</label>
+          <app-autocomplete-criavel
+            placeholder="Buscar modelo (marca + modelo)..."
+            [buscarFn]="buscarModelosFn"
+            [permitirCriar]="false"
+            [valorInicial]="valorInicialModelo"
+            (itemSelecionadoChange)="onModeloSelecionado($event)"
+          />
+          <p class="campo-hint" *ngIf="orcamento.marcaNome && orcamento.modeloNome">
+            {{ orcamento.marcaNome }} {{ orcamento.modeloNome }}
+          </p>
+        </div>
+      </div>
+
+      <div class="orc-servicos-ref" *ngIf="orcamento.modeloId && !jaConvertido">
+        <div class="orc-servicos-cabeca">
+          <h4>Serviços do modelo</h4>
+          <span class="campo-hint">Clique para incluir — sem reservar estoque</span>
+        </div>
+        <p class="campo-hint" *ngIf="carregandoPecas">Carregando serviços...</p>
+        <p class="campo-hint" *ngIf="!carregandoPecas && !pecasDisponiveis.length">
+          Nenhum serviço cadastrado para este modelo. Use Serviço livre.
+        </p>
+
+        <div class="orc-servicos-lista" *ngIf="!carregandoPecas && gruposServicos.length">
+          <div class="orc-cat-grupo" *ngFor="let g of gruposServicos">
+            <p class="orc-cat-titulo">{{ g.categoria }}</p>
+            <div class="orc-servico-card" *ngFor="let p of g.pecas">
+              <div class="orc-servico-topo">
+                <div>
+                  <strong>{{ p.nome || p.categoria || 'Serviço' }}</strong>
+                  <div class="orc-servico-meta" *ngIf="p.marcaPeca || p.garantia">
+                    <span *ngIf="p.marcaPeca">{{ p.marcaPeca }}</span>
+                    <span *ngIf="p.marcaPeca && p.garantia"> · </span>
+                    <span *ngIf="p.garantia">{{ p.garantia }}</span>
+                  </div>
+                  <span class="orc-estoque-badge" [ngClass]="classeEstoque(p)">{{ rotuloEstoque(p) }}</span>
+                  <div class="orc-cores-ref" *ngIf="p.cores?.length">
+                    <span class="orc-cor-chip" *ngFor="let c of p.cores">
+                      {{ c.cor }} · {{ c.quantidade }}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="orc-servico-btn"
+                  *ngIf="!temVariacoes(p)"
+                  (click)="adicionarServicoCatalogo(p)"
+                >
+                  Incluir
+                  <span>
+                    Min {{ formatarMoeda(p.valorSugeridoMinimo) }}
+                    · Sug. {{ formatarMoeda(p.valorSugeridoTroca) }}
+                  </span>
+                </button>
+              </div>
+
+              <div class="orc-servico-vars" *ngIf="temVariacoes(p)">
+                <button
+                  type="button"
+                  class="orc-servico-btn"
+                  *ngFor="let v of variacoesOrdenadas(p)"
+                  (click)="adicionarServicoCatalogo(p, v)"
+                >
+                  <strong>{{ v.rotulo }}</strong>
+                  <span>
+                    Min {{ formatarMoeda(v.valorSugeridoMinimo ?? p.valorSugeridoMinimo) }}
+                    · Sug. {{ formatarMoeda(v.valorSugeridoTroca ?? p.valorSugeridoTroca) }}
+                    · Est. {{ p.quantidadeEstoque ?? 0 }}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Observações / defeito relatado</label>
+        <textarea
+          [(ngModel)]="orcamento.observacoes"
+          name="observacoes"
+          rows="2"
+          [disabled]="jaConvertido"
+          placeholder="Opcional — vai para a OS na conversão"
+        ></textarea>
+      </div>
+
+      <h3>Serviços e valores</h3>
+      <p class="campo-hint">
+        Combine serviços do modelo e serviços livres. Valores podem ser ajustados.
+      </p>
+
+      <div class="orc-itens-wrap" *ngIf="orcamento.itens?.length">
+        <table class="data-grid orc-itens-grid">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Descrição</th>
+              <th>Qtd</th>
+              <th>Estoque</th>
+              <th>Ref. sistema</th>
+              <th>Valor desejado</th>
+              <th>Subtotal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of orcamento.itens; let i = index; trackBy: trackItem">
+              <td>
+                <span class="badge-catalogo" *ngIf="itemDoCatalogo(item)">Do modelo</span>
+                <span class="badge-livre" *ngIf="!itemDoCatalogo(item)">Livre</span>
+              </td>
+              <td>
+                <input
+                  [(ngModel)]="item.descricao"
+                  [name]="'desc_' + i"
+                  placeholder="Serviço"
+                  [disabled]="jaConvertido"
+                />
+              </td>
+              <td>
+                <input
+                  [(ngModel)]="item.quantidade"
+                  [name]="'qtd_' + i"
+                  type="number"
+                  min="1"
+                  [disabled]="jaConvertido"
+                  (ngModelChange)="sincronizarValorAcordado()"
+                  style="width:64px"
+                />
+              </td>
+              <td class="orc-estoque-cel">
+                <span
+                  *ngIf="estoqueDoItem(item) as est"
+                  class="orc-estoque-badge"
+                  [ngClass]="classeEstoque(est)"
+                >{{ rotuloEstoque(est) }}</span>
+                <span *ngIf="!item.pecaId">—</span>
+              </td>
+              <td>
+                <span *ngIf="item.valorSugeridoMinimo != null || item.valorSugeridoTroca != null">
+                  {{ formatarMoeda(item.valorSugeridoMinimo) }} / {{ formatarMoeda(item.valorSugeridoTroca) }}
+                </span>
+                <span *ngIf="item.valorSugeridoMinimo == null && item.valorSugeridoTroca == null">—</span>
+              </td>
+              <td>
+                <input
+                  [(ngModel)]="item.valorAcontado"
+                  [name]="'val_' + i"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  [disabled]="jaConvertido"
+                  (ngModelChange)="onValorLinhaChange(item)"
+                  style="width:110px"
+                />
+              </td>
+              <td>
+                {{ ((item.quantidade || 1) * (item.valorAcontado ?? item.valorUnitario ?? 0)) | currency:'BRL' }}
+              </td>
+              <td>
+                <button type="button" (click)="removerItem(i)" [disabled]="jaConvertido">Remover</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="orc-itens-acoes" *ngIf="!jaConvertido">
+        <button type="button" (click)="adicionarItem()">+ Serviço livre</button>
+        <button
+          type="button"
+          *ngIf="orcamento.modeloId && pecasDisponiveis.length"
+          (click)="mostrarBuscaCatalogo = !mostrarBuscaCatalogo"
+        >
+          + Buscar serviço do modelo
+        </button>
+      </div>
+      <div class="orc-add-catalogo" *ngIf="mostrarBuscaCatalogo && !jaConvertido">
+        <app-autocomplete-criavel
+          placeholder="Buscar serviço do modelo..."
+          [buscarFn]="buscarServicosCatalogoFn"
+          [permitirCriar]="false"
+          (itemSelecionadoChange)="onCatalogoAutocomplete($event)"
+        />
+      </div>
+
+      <div class="orc-pagamento">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Valor combinado</label>
+            <input
+              type="text"
+              [value]="valorAcordadoExibido | currency:'BRL'"
+              readonly
+              tabindex="-1"
+            />
+            <p class="campo-hint">Soma dos valores desejados de todos os itens inclusos.</p>
+          </div>
+          <div class="form-group">
+            <label>Valor à vista</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              [(ngModel)]="orcamento.valorAVista"
+              name="valorAVista"
+              [disabled]="jaConvertido"
+              (ngModelChange)="onOpcaoPagamentoChange()"
+            />
+            <p class="campo-hint">Opção de pagamento imediato para o cliente.</p>
+          </div>
+          <div class="form-group">
+            <label>Valor a prazo</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              [(ngModel)]="orcamento.valorAPrazo"
+              name="valorAPrazo"
+              [disabled]="jaConvertido"
+              (ngModelChange)="onOpcaoPagamentoChange()"
+            />
+            <p class="campo-hint">Opção parcelada para o cliente escolher.</p>
+          </div>
+          <div class="form-group">
+            <label>Parcelas</label>
+            <input
+              type="number"
+              min="2"
+              max="24"
+              [(ngModel)]="orcamento.parcelasPagamento"
+              name="parcelasPagamento"
+              [disabled]="jaConvertido"
+            />
+            <p class="campo-hint" *ngIf="valorParcela as parc">
+              {{ orcamento.parcelasPagamento }}x de {{ parc | currency:'BRL' }}
+            </p>
+          </div>
+        </div>
+        <div class="total-orcamento">
+          <strong>Combinado: {{ valorAcordadoExibido | currency:'BRL' }}</strong>
+          <span class="campo-hint" style="margin-left:12px">
+            À vista {{ (orcamento.valorAVista ?? valorAcordadoExibido) | currency:'BRL' }}
+            · A prazo {{ (orcamento.valorAPrazo ?? valorAcordadoExibido) | currency:'BRL' }}
+            <ng-container *ngIf="orcamento.parcelasPagamento && orcamento.parcelasPagamento >= 2">
+              ({{ orcamento.parcelasPagamento }}x)
+            </ng-container>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="orc-form-actions">
+      <button type="submit" class="btn-salvar" [disabled]="salvando || jaConvertido">
+        {{ salvando ? 'Salvando...' : 'Salvar orçamento' }}
+      </button>
+      <button type="button" (click)="cancelar()">Voltar</button>
+      <a *ngIf="jaConvertido && orcamento.osGeradaBlingId" routerLink="/ordens-servico/{{ orcamento.osGeradaBlingId }}/editar">
+        Abrir OS
+      </a>
+    </div>
+  </form>
+</div>

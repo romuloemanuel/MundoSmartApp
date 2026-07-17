@@ -1,0 +1,202 @@
+<div class="page">
+  <h2>{{ editando ? 'Editar Cliente' : 'Novo Cliente' }}</h2>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <form (ngSubmit)="salvar()">
+
+    <h3>Dados Pessoais</h3>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Nome <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <input [(ngModel)]="contato.nome" name="nome" required placeholder="Nome completo" />
+      </div>
+      <div class="form-group">
+        <label>Tipo</label>
+        <select [(ngModel)]="contato.tipo" name="tipo">
+          <option value="">Selecione</option>
+          <option value="F">Pessoa Física</option>
+          <option value="J">Pessoa Jurídica</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>CPF / CNPJ</label>
+        <input
+          [ngModel]="contato.cpfCnpj"
+          (ngModelChange)="onCpfCnpjChange($event)"
+          name="cpfCnpj"
+          placeholder="000.000.000-00"
+          inputmode="numeric"
+        />
+        <span class="campo-erro" *ngIf="erros.cpfCnpj">{{ erros.cpfCnpj }}</span>
+        <span class="campo-erro" *ngIf="msgDupCpf">{{ msgDupCpf }}</span>
+        <span class="campo-verificando" *ngIf="verificandoCpf">Verificando CPF/CNPJ...</span>
+      </div>
+      <div class="form-group">
+        <label>E-mail</label>
+        <input [(ngModel)]="contato.email" name="email" type="email" placeholder="email@exemplo.com" />
+      </div>
+    </div>
+
+    <h3>Telefones</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Celular <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <input
+          [ngModel]="contato.celular"
+          (ngModelChange)="onCelularChange($event)"
+          name="celular"
+          placeholder="(00) 90000-0000"
+          inputmode="tel"
+        />
+        <span class="campo-erro" *ngIf="msgDupCelular">{{ msgDupCelular }}</span>
+        <span class="campo-verificando" *ngIf="verificandoCelular">Verificando celular...</span>
+      </div>
+      <div class="form-group">
+        <label>Telefone <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <input
+          [ngModel]="contato.telefone"
+          (ngModelChange)="onTelefoneChange($event)"
+          name="telefone"
+          placeholder="(00) 0000-0000"
+          inputmode="tel"
+        />
+        <span class="campo-erro" *ngIf="msgDupTelefone">{{ msgDupTelefone }}</span>
+        <span class="campo-verificando" *ngIf="verificandoTelefone">Verificando telefone...</span>
+      </div>
+    </div>
+    <span class="campo-erro" *ngIf="erros.contato">{{ erros.contato }}</span>
+    <p class="secao-hint">Informe ao menos um: celular (9 ap&oacute;s o DDD) ou telefone fixo.</p>
+
+    <div class="form-group">
+      <label>Telefone 2 <span class="label-hint">(segundo n&uacute;mero opcional)</span></label>
+      <input
+        [ngModel]="contato.telefone2"
+        (ngModelChange)="onTelefone2Change($event)"
+        name="telefone2"
+        placeholder="(00) 00000-0000"
+        inputmode="tel"
+      />
+      <span class="campo-erro" *ngIf="erros.telefone2">{{ erros.telefone2 }}</span>
+      <span class="campo-erro" *ngIf="msgDupTelefone2">{{ msgDupTelefone2 }}</span>
+    </div>
+
+    <div class="secao-header" style="margin-top:8px">
+      <h3 style="margin:0">Contatos Alternativos</h3>
+      <button
+        type="button"
+        class="btn-add-contato"
+        *ngIf="(contato.contatos?.length ?? 0) < 2"
+        (click)="adicionarContato()"
+      >+ Adicionar Contato</button>
+    </div>
+    <p class="secao-hint">
+      Pessoas autorizadas a retirar o aparelho e/ou receber aviso na OS.
+      O telefone pode coincidir com outro cliente ou alternativo — o nome é sugerido automaticamente e o cadastro não é bloqueado.
+    </p>
+
+    <div *ngFor="let c of contato.contatos; let i = index" class="contato-card">
+      <div class="contato-card-header">
+        <span>Contato {{ i + 1 }}</span>
+        <button type="button" class="btn-remove-contato" (click)="removerContato(i)">&#x2715; Remover</button>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Celular</label>
+          <input
+            [ngModel]="c.celular"
+            (ngModelChange)="onCelularAltChange(i, $event)"
+            [name]="'cCel' + i"
+            placeholder="(00) 90000-0000"
+            inputmode="tel"
+          />
+        </div>
+        <div class="form-group">
+          <label>Telefone</label>
+          <input
+            [ngModel]="c.telefone"
+            (ngModelChange)="onTelefoneAltChange(i, $event)"
+            [name]="'cTel' + i"
+            placeholder="(00) 0000-0000"
+            inputmode="tel"
+          />
+        </div>
+      </div>
+      <span class="campo-verificando" *ngIf="buscandoAlt[i]">Buscando contato na base...</span>
+      <p class="campo-hint" *ngIf="hintAlt[i]" style="color:#166534;font-weight:600;margin:4px 0 8px">{{ hintAlt[i] }}</p>
+      <div class="form-group">
+        <label>Nome <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <input
+          [ngModel]="c.nome"
+          (ngModelChange)="onNomeAltChange(i, $event)"
+          [name]="'cNome' + i"
+          placeholder="Nome do contato"
+        />
+        <span class="campo-erro" *ngIf="erros.contatosAlt?.[i]?.nome">{{ erros.contatosAlt![i].nome }}</span>
+      </div>
+      <div class="form-group">
+        <label>Parentesco <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <app-parentesco-chips
+          [valor]="c.parentesco || ''"
+          (valorChange)="c.parentesco = $event"
+        ></app-parentesco-chips>
+        <span class="campo-erro" *ngIf="erros.contatosAlt?.[i]?.parentesco">{{ erros.contatosAlt![i].parentesco }}</span>
+      </div>
+      <span class="campo-erro" *ngIf="erros.contatosAlt?.[i]?.contato">{{ erros.contatosAlt![i].contato }}</span>
+    </div>
+
+    <h3 class="cliente-end-titulo">Endere&ccedil;o</h3>
+    <div class="form-row cliente-end-cep-row">
+      <div class="form-group cliente-end-cep">
+        <label>CEP</label>
+        <input
+          [ngModel]="contato.endereco!.cep"
+          (ngModelChange)="onCepChange($event)"
+          name="cep"
+          placeholder="00000-000"
+          inputmode="numeric"
+          maxlength="9"
+        />
+        <span class="campo-verificando" *ngIf="buscandoCep">Consultando CEP...</span>
+        <span class="campo-erro" *ngIf="erroCep">{{ erroCep }}</span>
+      </div>
+      <div class="form-group cliente-end-logradouro">
+        <label>Logradouro</label>
+        <input [(ngModel)]="contato.endereco!.logradouro" name="logradouro" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>N&uacute;mero</label>
+        <input [(ngModel)]="contato.endereco!.numero" name="numero" />
+      </div>
+      <div class="form-group">
+        <label>Complemento</label>
+        <input [(ngModel)]="contato.endereco!.complemento" name="complemento" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Bairro</label>
+        <input [(ngModel)]="contato.endereco!.bairro" name="bairro" />
+      </div>
+      <div class="form-group">
+        <label>Munic&iacute;pio</label>
+        <input [(ngModel)]="contato.endereco!.municipio" name="municipio" />
+      </div>
+      <div class="form-group" style="max-width:80px;flex:0 0 80px">
+        <label>UF</label>
+        <input [(ngModel)]="contato.endereco!.uf" name="uf" maxlength="2" />
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" [disabled]="salvando || temDuplicidade">
+        {{ salvando ? 'Salvando...' : 'Salvar' }}
+      </button>
+      <button type="button" (click)="cancelar()">Cancelar</button>
+    </div>
+  </form>
+</div>

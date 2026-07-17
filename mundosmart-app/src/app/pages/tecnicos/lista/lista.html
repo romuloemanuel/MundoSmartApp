@@ -1,0 +1,64 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Técnicos</h2>
+  </div>
+
+  <p class="campo-hint" style="margin-bottom: 16px">
+    Técnicos cadastrados podem ser selecionados como responsável na OS.
+    Situações <strong>Na assistência</strong>, <strong>Aguardando Cliente Retirar</strong>,
+    <strong>Concluído</strong> e <strong>Cancelado</strong> exigem um técnico ativo.
+  </p>
+
+  <div class="filtros" style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px">
+    <input
+      [(ngModel)]="novoNome"
+      class="filtro-busca-principal"
+      placeholder="Nome do novo técnico"
+      (keyup.enter)="adicionar()"
+      style="flex: 1"
+    />
+    <button type="button" (click)="adicionar()" [disabled]="salvando">+ Cadastrar</button>
+  </div>
+
+  <p *ngIf="carregando" class="campo-hint">Carregando...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <table class="data-grid" *ngIf="!carregando && tecnicos.length > 0">
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let t of tecnicos">
+        <td *ngIf="editandoId !== t.id">{{ t.nome }}</td>
+        <td *ngIf="editandoId === t.id">
+          <input [(ngModel)]="editNome" name="editNome" />
+        </td>
+        <td *ngIf="editandoId !== t.id">
+          <span [style.color]="t.ativo ? '#15803d' : '#64748b'">{{ t.ativo ? 'Ativo' : 'Inativo' }}</span>
+        </td>
+        <td *ngIf="editandoId === t.id">
+          <label style="display: inline-flex; align-items: center; gap: 6px">
+            <input type="checkbox" [(ngModel)]="editAtivo" name="editAtivo" />
+            Ativo
+          </label>
+        </td>
+        <td class="grid-acoes-cell">
+          <div class="grid-acoes" *ngIf="editandoId !== t.id">
+            <app-grid-acao tipo="editar" (acao)="iniciarEdicao(t)" />
+            <button type="button" class="btn-link" (click)="excluir(t)">Excluir</button>
+          </div>
+          <div class="grid-acoes" *ngIf="editandoId === t.id">
+            <button type="button" (click)="salvarEdicao()" [disabled]="salvando">Salvar</button>
+            <button type="button" class="btn-link" (click)="cancelarEdicao()">Cancelar</button>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p *ngIf="!carregando && tecnicos.length === 0 && !erro">Nenhum técnico cadastrado.</p>
+</div>

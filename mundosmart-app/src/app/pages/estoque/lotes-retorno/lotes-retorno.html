@@ -1,0 +1,118 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Lotes de retorno baixados</h2>
+  </div>
+
+  <nav class="breadcrumb" aria-label="Navegação">
+    <a routerLink="/ordens-servico">Ordens de Servi&ccedil;o</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <a routerLink="/estoque">Estoque</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <span class="breadcrumb-atual">Lotes baixados</span>
+  </nav>
+
+  <div class="links-secundarios">
+    <a routerLink="/estoque" [queryParams]="{ aba: 'garantia' }">← Caixa de retorno</a>
+    <a routerLink="/estoque/analise-retorno">An&aacute;lise por fornecedor / pe&ccedil;a</a>
+  </div>
+
+  <p class="campo-hint" style="margin:0 0 14px">
+    Hist&oacute;rico dos lotes j&aacute; gerados (baixa). N&atilde;o muda a caixa pendente.
+  </p>
+
+  <div class="filtros">
+    <div class="form-group">
+      <label>Fornecedor</label>
+      <input type="text" [(ngModel)]="filtroFornecedor" name="forn" placeholder="Ex: Baba" />
+    </div>
+    <div class="form-group">
+      <label>De</label>
+      <input type="date" [(ngModel)]="filtroDe" name="de" />
+    </div>
+    <div class="form-group">
+      <label>At&eacute;</label>
+      <input type="date" [(ngModel)]="filtroAte" name="ate" />
+    </div>
+    <button type="button" (click)="carregar()" [disabled]="carregando">Pesquisar</button>
+    <button type="button" class="btn-limpar" (click)="limpar()">Limpar</button>
+  </div>
+
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="carregando">Carregando...</p>
+
+  <ng-container *ngIf="!carregando">
+    <div class="resumo" *ngIf="lotes.length">
+      <span><strong>{{ lotes.length }}</strong> lote(s)</span>
+      <span><strong>{{ totalUnidades }}</strong> unidade(s)</span>
+    </div>
+
+    <table *ngIf="lotes.length">
+      <thead>
+        <tr>
+          <th>Baixado em</th>
+          <th>Fornecedor</th>
+          <th>Unidades</th>
+          <th>Itens</th>
+          <th>Prazo m&aacute;x. envio</th>
+          <th>Motivo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <ng-container *ngFor="let l of lotes">
+          <tr>
+            <td>{{ formatarData(l.geradoEm) }}</td>
+            <td>{{ l.fornecedor }}</td>
+            <td>{{ l.totalUnidades }}</td>
+            <td>{{ l.totalItens }}</td>
+            <td>{{ formatarDia(l.dataPrazoMaximoEnvio) }}</td>
+            <td>{{ l.motivo || '—' }}</td>
+            <td>
+              <div class="acoes">
+                <button type="button" (click)="toggleDetalhe(l.id)">
+                  {{ expandidoId === l.id ? 'Ocultar' : 'Detalhes' }}
+                </button>
+                <button type="button" (click)="reimprimir(l)">Reimprimir</button>
+              </div>
+            </td>
+          </tr>
+          <tr *ngIf="expandidoId === l.id">
+            <td colspan="7">
+              <div class="lote-detalhe">
+                <div class="campo-hint">
+                  Garantia mais pr&oacute;xima: {{ formatarDia(l.dataVencimentoMaisProxima) }}
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>OS</th>
+                      <th>Pedido</th>
+                      <th>Pe&ccedil;a</th>
+                      <th>Modelo</th>
+                      <th>Cor</th>
+                      <th>Qtd</th>
+                      <th>Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let i of l.itens">
+                      <td>{{ i.osNumero || '—' }}</td>
+                      <td>{{ i.numeroPedido }}</td>
+                      <td>{{ i.pecaNome }}</td>
+                      <td>{{ i.modeloNome || '—' }}</td>
+                      <td>{{ i.cor || '—' }}</td>
+                      <td>{{ i.quantidade }}</td>
+                      <td>{{ i.motivo || '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
+
+    <p class="vazio" *ngIf="!lotes.length">Nenhum lote baixado no per&iacute;odo.</p>
+  </ng-container>
+</div>

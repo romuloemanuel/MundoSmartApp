@@ -1,0 +1,137 @@
+<div class="page hist-page">
+  <nav class="breadcrumb" aria-label="Navegação">
+    <a routerLink="/ordens-servico">Início</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-atual">Histórico de alterações</span>
+  </nav>
+
+  <header class="hist-topo">
+    <div>
+      <h2>Histórico de alterações</h2>
+      <p class="hist-sub">
+        Consulte criações, edições, mudanças de situação e exclusões das ordens de serviço.
+        <span *ngIf="lojaFiltroTravada"> Escopo: loja <strong>{{ rotuloLojaRestrita }}</strong>.</span>
+      </p>
+    </div>
+  </header>
+
+  <form class="hist-filtros" (ngSubmit)="buscar()">
+    <label>
+      OS (nº)
+      <input type="text" [(ngModel)]="filtroOs" name="os" placeholder="Ex: 15" />
+    </label>
+    <label>
+      Ação
+      <select [(ngModel)]="filtroAcao" name="acao">
+        <option *ngFor="let a of acoes" [value]="a.id">{{ a.label }}</option>
+      </select>
+    </label>
+    <label>
+      Usuário
+      <input type="text" [(ngModel)]="filtroUsuario" name="usuario" placeholder="Nome ou id" />
+    </label>
+    <label>
+      Loja
+      <select [(ngModel)]="filtroLoja" name="loja" [disabled]="lojaFiltroTravada">
+        <option *ngFor="let l of lojasFiltro" [value]="l.value">{{ l.label }}</option>
+      </select>
+    </label>
+    <label>
+      De
+      <input type="date" [(ngModel)]="filtroDataInicio" name="de" />
+    </label>
+    <label>
+      Até
+      <input type="date" [(ngModel)]="filtroDataFim" name="ate" />
+    </label>
+    <div class="hist-filtros-acoes">
+      <button type="submit" class="btn-prim">Buscar</button>
+      <button type="button" class="btn-sec" (click)="limparFiltros()">Limpar</button>
+    </div>
+  </form>
+
+  <p class="erro" *ngIf="erro">{{ erro }}</p>
+  <p *ngIf="carregando">Carregando…</p>
+
+  <div class="hist-layout" *ngIf="!carregando && consulta">
+    <section class="hist-lista-wrap">
+      <div class="hist-lista-meta">
+        <strong>{{ consulta.total }}</strong> registro(s)
+        <span>· página {{ consulta.pagina }} de {{ totalPaginas }}</span>
+      </div>
+
+      <p class="vazio" *ngIf="!consulta.itens.length">Nenhum histórico encontrado com esses filtros.</p>
+
+      <table class="hist-tabela" *ngIf="consulta.itens.length">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>OS</th>
+            <th>Ação</th>
+            <th>Resumo</th>
+            <th>Usuário</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let i of consulta.itens"
+            [class.ativo]="selecionada?.osBlingId === i.osBlingId && selecionada?.versao === i.versao"
+            (click)="abrirDetalhe(i)"
+          >
+            <td>{{ i.criadoEm | date:'dd/MM/yyyy HH:mm':tz }}</td>
+            <td>
+              <strong>#{{ i.osNumero || i.osBlingId }}</strong>
+              <span class="muted"> v{{ i.versao }}</span>
+            </td>
+            <td><span class="badge" [ngClass]="classeAcao(i.acao)">{{ rotuloAcao(i.acao) }}</span></td>
+            <td class="resumo">{{ i.resumo || '—' }}</td>
+            <td>{{ i.usuarioNome || '—' }}</td>
+            <td class="acoes" (click)="$event.stopPropagation()">
+              <button type="button" class="link" (click)="abrirDetalhe(i)">Ver</button>
+              <button type="button" class="link" (click)="verTodasDaOs(i)">Todas</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="hist-paginacao" *ngIf="consulta.total > consulta.tamanhoPagina">
+        <button type="button" class="btn-sec" (click)="paginaAnterior()" [disabled]="pagina <= 1">Anterior</button>
+        <span>Página {{ pagina }} / {{ totalPaginas }}</span>
+        <button type="button" class="btn-sec" (click)="proximaPagina()" [disabled]="pagina >= totalPaginas">Próxima</button>
+      </div>
+    </section>
+
+    <aside class="hist-detalhe" *ngIf="selecionada">
+      <header>
+        <h3>OS #{{ selecionada.osNumero || selecionada.osBlingId }} · v{{ selecionada.versao }}</h3>
+        <p>
+          <span class="badge" [ngClass]="classeAcao(selecionada.acao)">{{ rotuloAcao(selecionada.acao) }}</span>
+          {{ selecionada.criadoEm | date:'dd/MM/yyyy HH:mm:ss':tz }}
+          <span *ngIf="selecionada.usuarioNome"> · {{ selecionada.usuarioNome }}</span>
+        </p>
+        <p class="resumo-det">{{ selecionada.resumo }}</p>
+        <div class="detalhe-links">
+          <button type="button" class="btn-sec" (click)="irParaOs(selecionada)">Abrir OS</button>
+          <button type="button" class="btn-sec" (click)="verTodasDaOs(selecionada)">Histórico da OS</button>
+        </div>
+      </header>
+
+      <p *ngIf="carregandoDetalhe">Carregando detalhes…</p>
+
+      <div class="snapshot-grid" *ngIf="!carregandoDetalhe && snapshot as s">
+        <div><label>Situação</label><span>{{ s.situacao || '—' }}</span></div>
+        <div><label>Cliente</label><span>{{ s.contato?.nome || '—' }}</span></div>
+        <div><label>Aparelho</label><span>{{ s.marcaNome }} {{ s.modeloNome }}</span></div>
+        <div><label>Técnico</label><span>{{ s.tecnicoNome || '—' }}</span></div>
+        <div><label>Loja</label><span>{{ s.lojaOrigem || '—' }}</span></div>
+        <div><label>Valor</label><span>{{ s.valorTotalAcordado ?? s.valorTotal ?? 0 | number:'1.2-2' }}</span></div>
+        <div class="full"><label>Defeito</label><span>{{ s.defeito || '—' }}</span></div>
+        <div><label>Fotos</label><span>{{ s.fotosAparelho?.length || 0 }}</span></div>
+        <div><label>Itens</label><span>{{ s.itens?.length || 0 }}</span></div>
+      </div>
+
+      <p class="vazio" *ngIf="!carregandoDetalhe && !snapshot">Snapshot indisponível nesta versão.</p>
+    </aside>
+  </div>
+</div>

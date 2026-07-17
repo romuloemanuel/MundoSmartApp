@@ -1,0 +1,228 @@
+.hist-page { max-width: 1200px; }
+
+.hist-topo h2 {
+  margin: 0 0 4px;
+  font-size: 1.4rem;
+}
+
+.hist-sub {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.hist-filtros {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 960px) {
+  .hist-filtros { grid-template-columns: 1fr 1fr; }
+}
+
+.hist-filtros label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+
+.hist-filtros input,
+.hist-filtros select {
+  padding: 7px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  color: #0f172a;
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.hist-filtros-acoes {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-prim, .btn-sec {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-prim { background: #2563eb; color: #fff; }
+.btn-sec {
+  background: #fff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+.btn-sec:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.erro { color: #b91c1c; }
+
+.hist-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .hist-layout { grid-template-columns: 1fr; }
+}
+
+.hist-lista-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.hist-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hist-tabela th,
+.hist-tabela td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+  vertical-align: top;
+}
+
+.hist-tabela th {
+  background: #f8fafc;
+  font-size: 11px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+
+.hist-tabela tbody tr {
+  cursor: pointer;
+}
+
+.hist-tabela tbody tr:hover { background: #f8fafc; }
+.hist-tabela tbody tr.ativo { background: #eff6ff; }
+
+.resumo { max-width: 220px; color: #334155; }
+.muted { color: #94a3b8; font-weight: 500; }
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.acao-criar { background: #dcfce7; color: #166534; }
+.acao-atualizar { background: #dbeafe; color: #1e40af; }
+.acao-situacao { background: #fef3c7; color: #92400e; }
+.acao-excluir { background: #fee2e2; color: #991b1b; }
+.acao-outro { background: #f1f5f9; color: #475569; }
+
+.acoes { white-space: nowrap; }
+.link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 6px 0 0;
+}
+
+.hist-paginacao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.hist-detalhe {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fff;
+  position: sticky;
+  top: 12px;
+}
+
+.hist-detalhe h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.hist-detalhe header > p {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.resumo-det {
+  margin-top: 6px !important;
+  font-weight: 600;
+  color: #0f172a !important;
+}
+
+.detalhe-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.snapshot-grid .full { grid-column: 1 / -1; }
+
+.snapshot-grid label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+
+.snapshot-grid span {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.vazio {
+  font-size: 13px;
+  color: #94a3b8;
+  font-style: italic;
+}

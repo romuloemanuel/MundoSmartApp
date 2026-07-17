@@ -1,0 +1,12 @@
+Usando as configurações de inicialização de C:\Users\RomuloEmanuelLongoPe\Desktop\DEV\Local\MundoSmart\BlingAssistencia\BlingAssistencia.API\Properties\launchSettings.json...
+[MundoSmart API] v1.0.2-local-bypass — MODO LOCAL (sem Bling/produção)
+[MundoSmart API] Motorola E/G/Edge: 126 novos, 0 já existiam.
+[MundoSmart API] MongoDB pronto.
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5276
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: C:\Users\RomuloEmanuelLongoPe\Desktop\DEV\Local\MundoSmart\BlingAssistencia\BlingAssistencia.API

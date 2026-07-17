@@ -1,0 +1,143 @@
+<div class="page">
+  <div class="page-header">
+    <h2>An&aacute;lise de retorno de garantia</h2>
+  </div>
+
+  <nav class="breadcrumb" aria-label="Navegação">
+    <a routerLink="/ordens-servico">Ordens de Servi&ccedil;o</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <a routerLink="/estoque">Estoque</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <span class="breadcrumb-atual">An&aacute;lise retorno</span>
+  </nav>
+
+  <div class="links-secundarios">
+    <a routerLink="/estoque" [queryParams]="{ aba: 'garantia' }">← Caixa de retorno</a>
+    <a routerLink="/estoque/lotes-retorno">Lotes baixados</a>
+  </div>
+
+  <p class="campo-hint" style="margin:0 0 14px">
+    Ranking dos fornecedores e pe&ccedil;as com mais retorno — baseado nos lotes j&aacute; baixados.
+  </p>
+
+  <div class="filtros">
+    <div class="form-group">
+      <label>De</label>
+      <input type="date" [(ngModel)]="filtroDe" name="de" />
+    </div>
+    <div class="form-group">
+      <label>At&eacute;</label>
+      <input type="date" [(ngModel)]="filtroAte" name="ate" />
+    </div>
+    <div class="form-group">
+      <label>Fornecedor (opcional)</label>
+      <input type="text" [(ngModel)]="filtroFornecedor" name="forn" placeholder="Ex: Skytech" />
+    </div>
+    <button type="button" (click)="carregar()" [disabled]="carregando">Atualizar</button>
+    <button type="button" class="btn-limpar" (click)="limpar()">Limpar</button>
+  </div>
+
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="carregando">Carregando...</p>
+
+  <ng-container *ngIf="!carregando && analise">
+    <div class="resumo">
+      <div class="resumo-card">
+        <div class="label">Lotes baixados</div>
+        <div class="valor">{{ analise.totalLotes }}</div>
+      </div>
+      <div class="resumo-card">
+        <div class="label">Unidades devolvidas</div>
+        <div class="valor">{{ analise.totalUnidades }}</div>
+      </div>
+      <div class="resumo-card">
+        <div class="label">Fornecedores</div>
+        <div class="valor">{{ analise.fornecedores.length }}</div>
+      </div>
+      <div class="resumo-card">
+        <div class="label">Pe&ccedil;as distintas</div>
+        <div class="valor">{{ analise.pecas.length }}</div>
+      </div>
+    </div>
+
+    <div class="colunas" *ngIf="analise.totalUnidades > 0; else vazio">
+      <section>
+        <h3>Fornecedores com mais retorno</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Fornecedor</th>
+              <th>Unidades</th>
+              <th>Lotes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <ng-container *ngFor="let f of analise.fornecedores; let i = index">
+              <tr>
+                <td>{{ i + 1 }}</td>
+                <td>
+                  <strong>{{ f.fornecedor }}</strong>
+                  <div class="barra"><span [style.width.%]="pctFornecedor(f)"></span></div>
+                </td>
+                <td>{{ f.totalUnidades }} ({{ pctFornecedor(f) }}%)</td>
+                <td>{{ f.totalLotes }}</td>
+                <td>
+                  <button type="button" (click)="toggleFornecedor(f.fornecedor)">
+                    {{ expandidoFornecedor === f.fornecedor ? 'Ocultar pe&ccedil;as' : 'Ver pe&ccedil;as' }}
+                  </button>
+                </td>
+              </tr>
+              <tr *ngIf="expandidoFornecedor === f.fornecedor">
+                <td colspan="5">
+                  <div class="detalhe-forn">
+                    Pe&ccedil;as deste fornecedor:
+                    <ul>
+                      <li *ngFor="let p of f.pecas">
+                        {{ p.pecaNome }}
+                        <span *ngIf="p.marcaPeca"> ({{ p.marcaPeca }})</span>
+                        — <strong>{{ p.quantidade }}</strong> un.
+                      </li>
+                    </ul>
+                    <p class="vazio" *ngIf="!f.pecas.length">Sem detalhe de pe&ccedil;as.</p>
+                  </div>
+                </td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h3>Pe&ccedil;as com mais retorno</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Pe&ccedil;a</th>
+              <th>Qtd</th>
+              <th>Fornecedor mais frequente</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let p of analise.pecas; let i = index">
+              <td>{{ i + 1 }}</td>
+              <td>
+                <strong>{{ p.pecaNome }}</strong>
+                <span *ngIf="p.marcaPeca" class="campo-hint"> · {{ p.marcaPeca }}</span>
+                <div class="barra peca"><span [style.width.%]="pctPeca(p.quantidade)"></span></div>
+              </td>
+              <td>{{ p.quantidade }} ({{ pctPeca(p.quantidade) }}%)</td>
+              <td>{{ p.fornecedorMaisFrequente || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <ng-template #vazio>
+      <p class="vazio">Nenhum retorno baixado no per&iacute;odo selecionado.</p>
+    </ng-template>
+  </ng-container>
+</div>

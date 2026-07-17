@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MundoSmart.BlingAssistencia.API</RootNamespace>
+    <AssemblyName>MundoSmart.BlingAssistencia.API</AssemblyName>
+    <Version>1.0.2</Version>
+    <InformationalVersion>1.0.2-local-bypass</InformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="MongoDB.Driver" Version="3.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Data\modelos_catalogo.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

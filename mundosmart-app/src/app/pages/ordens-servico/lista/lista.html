@@ -1,0 +1,309 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Ordens de Servi&ccedil;o</h2>
+    <button (click)="nova()">+ Nova OS</button>
+  </div>
+
+  <div class="filtros-bar">
+    <input [(ngModel)]="filtros.nome" placeholder="Nome do cliente / contato de aviso..." (keyup.enter)="buscarComFiltros()" class="filtro-wide" />
+    <input [(ngModel)]="filtros.telefone" placeholder="Telefone / Celular..." (keyup.enter)="buscarComFiltros()" />
+    <select [(ngModel)]="filtros.situacao" (change)="buscarComFiltros()">
+      <option *ngFor="let s of situacoesFiltro" [value]="s.value">{{ s.label }}</option>
+    </select>
+    <select
+      class="filtro-urgencia"
+      [(ngModel)]="filtroUrgencia"
+      (ngModelChange)="onUrgenciaFiltroChange()"
+      title="Urgência pelo tempo na assistência"
+    >
+      <option value="">Urgência (todas)</option>
+      <option *ngFor="let f of faixasUrgencia" [value]="f.id">{{ f.label }} · {{ f.descricao }}</option>
+    </select>
+    <select
+      class="filtro-loja"
+      [(ngModel)]="filtros.lojaOrigem"
+      (change)="buscarComFiltros()"
+      title="Loja de origem"
+      [disabled]="lojaFiltroTravada"
+    >
+      <option *ngFor="let l of lojasFiltro" [value]="l.value">{{ l.label }}</option>
+    </select>
+    <select
+      class="filtro-tecnico"
+      [(ngModel)]="filtros.tecnicoNome"
+      (change)="buscarComFiltros()"
+      title="Filtrar por técnico responsável (comissão)"
+    >
+      <option value="">Técnico (todos)</option>
+      <option *ngFor="let t of tecnicosFiltro" [value]="t.nome">{{ t.nome }}</option>
+    </select>
+    <button (click)="buscarComFiltros()" class="btn-buscar">Buscar</button>
+    <button (click)="filtrosAbertos = !filtrosAbertos" class="btn-filtros-avancados">
+      Filtros avan&ccedil;ados <span *ngIf="filtrosAtivos > 0" class="badge-count">{{ filtrosAtivos }}</span>
+    </button>
+    <button *ngIf="filtrosAtivos > 0" (click)="limparFiltros()" class="btn-limpar">Limpar</button>
+  </div>
+
+  <div class="filtros-avancados" *ngIf="filtrosAbertos">
+    <div class="filtros-grid">
+      <div class="filtro-campo">
+        <label>IMEI</label>
+        <input [(ngModel)]="filtros.imei" placeholder="IMEI do equipamento..." (keyup.enter)="buscarComFiltros()" />
+      </div>
+      <div class="filtro-campo">
+        <label>CPF / CNPJ</label>
+        <input [(ngModel)]="filtros.cpfCnpj" placeholder="CPF ou CNPJ..." (keyup.enter)="buscarComFiltros()" />
+      </div>
+      <div class="filtro-campo">
+        <label>Retorno</label>
+        <select [(ngModel)]="filtros.retorno" (change)="buscarComFiltros()">
+          <option *ngFor="let r of retornoOpcoes" [ngValue]="r.value">{{ r.label }}</option>
+        </select>
+      </div>
+
+      <div class="filtro-campo filtro-data-range">
+        <label>Cadastro</label>
+        <div class="data-range">
+          <input type="date" [(ngModel)]="filtros.dataCadastroInicio" (change)="buscarComFiltros()" />
+          <span>até</span>
+          <input type="date" [(ngModel)]="filtros.dataCadastroFim" (change)="buscarComFiltros()" />
+        </div>
+      </div>
+
+      <div class="filtro-campo filtro-data-range">
+        <label>Última Atualiza&ccedil;ão</label>
+        <div class="data-range">
+          <input type="date" [(ngModel)]="filtros.dataAtualizacaoInicio" (change)="buscarComFiltros()" />
+          <span>até</span>
+          <input type="date" [(ngModel)]="filtros.dataAtualizacaoFim" (change)="buscarComFiltros()" />
+        </div>
+      </div>
+
+      <div class="filtro-campo filtro-data-range">
+        <label>Conclusão</label>
+        <div class="data-range">
+          <input type="date" [(ngModel)]="filtros.dataConclusaoInicio" (change)="buscarComFiltros()" />
+          <span>até</span>
+          <input type="date" [(ngModel)]="filtros.dataConclusaoFim" (change)="buscarComFiltros()" />
+        </div>
+      </div>
+      <div class="filtro-campo">
+        <label>Técnico</label>
+        <select [(ngModel)]="filtros.tecnicoNome" (change)="buscarComFiltros()">
+          <option value="">Todos</option>
+          <option *ngFor="let t of tecnicosFiltro" [value]="t.nome">{{ t.nome }}</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="comissao-resumo" *ngIf="filtros.tecnicoNome && !carregando">
+    <strong>{{ filtros.tecnicoNome }}</strong>
+    — {{ totalRegistros }} OS
+    <span *ngIf="filtros.situacao"> · {{ filtros.situacao }}</span>
+    <span *ngIf="periodoConclusaoLabel"> · {{ periodoConclusaoLabel }}</span>
+    <span class="comissao-total"> · Total página: {{ valorCompacto(totalValorPagina) }}</span>
+    <a *ngIf="ehAdmin" routerLink="/comissoes" class="btn-link" style="margin-left:8px">Relatório de comissão (líquido)</a>
+    <span class="campo-hint" *ngIf="ehAdmin && (!filtros.situacao || filtros.situacao !== 'Concluído')">
+      Dica: selecione situação <strong>Concluído</strong> e o período de conclusão, ou abra o relatório de comissões.
+    </span>
+  </div>
+
+  <p *ngIf="carregando && ordens.length === 0">Carregando...</p>
+  <p *ngIf="!carregando && !erro && totalRegistros === 0">Nenhuma ordem de servi&ccedil;o encontrada.</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <app-grid-paginator
+    *ngIf="totalRegistros > 0"
+    [total]="totalRegistros"
+    [page]="grid.page"
+    [pageSize]="grid.pageSize"
+    (pageChange)="onPaginaChange($event)"
+    (pageSizeChange)="onTamanhoPaginaChange($event)"
+  />
+
+  <div class="os-grid-scroll" *ngIf="ordens.length > 0">
+  <table class="data-grid os-grid">
+    <thead>
+      <tr>
+        <th class="col-urgencia" title="Urgência (tempo na assistência)">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('urgencia')" (click)="ordenar('urgencia')">
+            <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('urgencia') }}</span>
+          </button>
+        </th>
+        <th class="col-num">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('numero')" (click)="ordenar('numero')">
+            N&ordm; <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('numero') }}</span>
+          </button>
+        </th>
+        <th class="col-cliente">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('cliente')" (click)="ordenar('cliente')">
+            Cliente <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('cliente') }}</span>
+          </button>
+        </th>
+        <th class="col-aviso" title="Pessoa autorizada a retirar o aparelho">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('contatoAviso')" (click)="ordenar('contatoAviso')">
+            Retirar <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('contatoAviso') }}</span>
+          </button>
+        </th>
+        <th class="col-equip">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('equipamento')" (click)="ordenar('equipamento')">
+            Modelo <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('equipamento') }}</span>
+          </button>
+        </th>
+        <th class="col-imei">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('imei')" (click)="ordenar('imei')">
+            IMEI <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('imei') }}</span>
+          </button>
+        </th>
+        <th class="col-sit">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('situacao')" (click)="ordenar('situacao')">
+            Situação <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('situacao') }}</span>
+          </button>
+        </th>
+        <th class="col-tecnico">Técnico</th>
+        <th class="col-ret">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('retorno')" (click)="ordenar('retorno')">
+            Ret. <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('retorno') }}</span>
+          </button>
+        </th>
+        <th class="col-loja" title="Loja de origem">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('loja')" (click)="ordenar('loja')">
+            Loja <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('loja') }}</span>
+          </button>
+        </th>
+        <th class="col-data">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('data')" (click)="ordenar('data')" title="Data de entrada">
+            Entrada <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('data') }}</span>
+          </button>
+        </th>
+        <th class="col-valor">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('valor')" (click)="ordenar('valor')">
+            Valor <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('valor') }}</span>
+          </button>
+        </th>
+        <th class="col-acoes"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let os of ordens">
+        <td class="col-urgencia">
+          <button
+            type="button"
+            class="urgencia-dot-btn"
+            [disabled]="!podeEditarOs(os)"
+            [title]="tituloUrgencia(os) + (podeEditarOs(os) ? ' — clique para justificar atraso' : '')"
+            [attr.aria-label]="tituloUrgencia(os)"
+            (click)="justificarAtraso(os, $event)"
+          >
+            <span
+              class="urgencia-dot"
+              [ngClass]="[
+                'urgencia-dot--' + nivelUrgencia(os),
+                temJustificativaAtraso(os) ? 'urgencia-dot--avisar' : ''
+              ]"
+            ></span>
+          </button>
+        </td>
+        <td class="col-num">{{ os.numero }}</td>
+        <td class="col-cliente" [title]="os.contato?.nome || ''">
+          <span class="col-cliente-nome">{{ os.contato?.nome || '—' }}</span>
+        </td>
+        <td class="col-aviso">
+          <div class="grid-aviso-wrap" *ngIf="temContatoAviso(os); else semAviso">
+            <button
+              type="button"
+              class="grid-aviso-btn"
+              [class.ativo]="avisoAbertoId === os.id"
+              [title]="tooltipContatoAviso(os)"
+              [attr.aria-label]="'Ver autorizado a retirar: ' + (os.contatoAviso?.nome || '')"
+              (click)="toggleContatoAviso(os, $event)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </button>
+          </div>
+          <ng-template #semAviso><span class="grid-aviso-vazio">—</span></ng-template>
+        </td>
+        <td class="col-equip" [title]="equipamentoLabel(os)">{{ equipamentoLabel(os) }}</td>
+        <td class="col-imei" [title]="os.imei || ''">{{ os.imei || '—' }}</td>
+        <td class="col-sit">
+          <span
+            *ngIf="osSituacaoFinalizada(os)"
+            class="grid-situacao-badge"
+            [ngClass]="classeBadgeSituacao(os)"
+          >{{ os.situacao }}</span>
+          <select
+            *ngIf="!osSituacaoFinalizada(os)"
+            class="grid-situacao-select"
+            [ngClass]="classeSelectSituacao(os)"
+            [ngModel]="situacaoExibida(os)"
+            (ngModelChange)="onSituacaoChange(os, $event)"
+            [disabled]="alterandoSituacaoId === os.id || !podeEditarOs(os)"
+            [title]="podeEditarOs(os) ? '' : 'Só visualização — OS de outra loja'"
+          >
+            <option *ngFor="let s of situacoesParaOs(os)" [value]="s">{{ s }}</option>
+          </select>
+          <span
+            *ngIf="prazoPecaLabel(os)"
+            class="grid-prazo-peca"
+            [class.grid-prazo-peca--vencido]="prazoPecaVencido(os)"
+            [title]="tituloUrgencia(os)"
+            >até {{ prazoPecaLabel(os) }}</span>
+        </td>
+        <td class="col-tecnico" [title]="os.tecnicoNome || ''">{{ os.tecnicoNome || '—' }}</td>
+        <td class="col-ret">
+          <span class="badge grid-retorno-badge" [class.badge-retorno]="os.retorno">{{ os.retorno ? 'S' : 'N' }}</span>
+        </td>
+        <td class="col-loja" [title]="tituloLoja(os)">
+          <span class="grid-loja-sigla">{{ siglaLoja(os) }}</span>
+        </td>
+        <td class="col-data" [title]="dataEntradaLabel(os) | date:'dd/MM/yyyy HH:mm'">
+          <span>{{ dataEntradaLabel(os) | date:'dd/MM/yy' }}</span>
+          <span class="col-data-hora" *ngIf="dataEntradaLabel(os)">{{ dataEntradaLabel(os) | date:'HH:mm' }}</span>
+        </td>
+        <td class="col-valor">{{ valorCompacto(os.valorTotalAcordado ?? os.valorTotal) }}</td>
+        <td class="col-acoes">
+          <app-grid-acoes-os
+            [os]="os"
+            [editarDesabilitado]="!podeEditarOs(os)"
+            [tituloEditar]="tituloEditarOs(os)"
+            (ver)="ver(os.id!)"
+            (editar)="editar(os)"
+          />
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- Fora da table (overflow:hidden) — evita corte nos últimos registros -->
+<div
+  class="grid-aviso-pop"
+  [class.abre-cima]="avisoPopAbreCima"
+  *ngIf="avisoAbertoOs as ao"
+  [ngStyle]="avisoPopStyle"
+  (click)="$event.stopPropagation()"
+>
+  <strong>{{ ao.contatoAviso?.nome || 'Autorizado a retirar' }}</strong>
+  <span *ngIf="ao.contatoAviso?.celular || ao.contatoAviso?.telefone">
+    {{ ao.contatoAviso?.celular || ao.contatoAviso?.telefone }}
+  </span>
+  <span *ngIf="ao.contatoAviso?.parentesco">{{ ao.contatoAviso?.parentesco }}</span>
+  <span *ngIf="ao.contatoAviso?.autorizadoRetirada !== false">Autorizado a retirar</span>
+  <span class="grid-aviso-pref" *ngIf="ao.preferenciaContatoSelecionado">
+    Aviso s&oacute; por este n&uacute;mero
+  </span>
+</div>
+
+<app-justificativa-atraso-modal
+  *ngIf="osJustificativaAtraso"
+  [os]="osJustificativaAtraso"
+  [salvando]="salvandoJustificativaAtraso"
+  [erroApi]="erroJustificativaAtraso"
+  (confirmar)="confirmarJustificativaAtraso($event)"
+  (cancelar)="fecharJustificativaAtraso()"
+/>
