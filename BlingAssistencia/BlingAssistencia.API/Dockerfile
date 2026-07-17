@@ -18,6 +18,10 @@ WORKDIR /app
 
 # Ambiente de produção por padrão (evita subir em modo Development no deploy).
 ENV ASPNETCORE_ENVIRONMENT=Production
+ENV DOTNET_ENVIRONMENT=Production
+# O banco pode manter este nome; a credencial completa deve ser informada
+# externamente no Easypanel pela variável MongoDB__ConnectionString.
+ENV MongoDB__DatabaseName=MundoSmart
 # Porta interna do Kestrel dentro do container (aponte o proxy do Easypanel aqui).
 ENV ASPNETCORE_URLS=http://+:5276
 EXPOSE 5276

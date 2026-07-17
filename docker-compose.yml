@@ -27,6 +27,7 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      DOTNET_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:5276
       # Conecta no serviço "mongo" da rede do compose (não em localhost)
       MongoDB__ConnectionString: "mongodb://root:MongoDB2019%21@mongo:27017/MundoSmart?authSource=admin&retryWrites=true"
@@ -47,6 +48,9 @@ services:
     restart: unless-stopped
     depends_on:
       - api
+    environment:
+      APP_ENV: prd
+      API_URL: http://api:5276
     ports:
       - "8080:80"
 
