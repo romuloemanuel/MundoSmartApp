@@ -51,7 +51,7 @@ export class OsImpressaoService {
 
   private imprimirTermico(tipo: OsImpressaoTipoTermico, osResumo: BlingOrdemServico): void {
     this.carregarDadosImpressao(osResumo).subscribe({
-      next: ({ os }) => {
+      next: async ({ os }) => {
         const cfg = this.impressoraTermica.configAtual();
         const ctx = {
           empresa: this.impressaoConfigService.empresaAtual(),
@@ -59,7 +59,7 @@ export class OsImpressaoService {
         };
 
         if (this.impressoraTermica.conectada()) {
-          const dados = montarEscPosImpressaoOs(tipo, os, ctx);
+          const dados = await montarEscPosImpressaoOs(tipo, os, ctx);
           this.impressoraTermica.imprimir(dados).catch(() => {
             window.alert('Falha ao enviar para a impressora USB. Tente reconectar ou use impressão pelo navegador.');
           });

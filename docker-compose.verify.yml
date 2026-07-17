@@ -1,0 +1,10 @@
+services:
+  mongo:
+    ports: !override
+      - "28017:27017"
+  api:
+    ports: !override
+      - "5299:5276"
+  web:
+    ports: !override
+      - "8090:80"

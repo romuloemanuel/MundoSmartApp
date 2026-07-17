@@ -3,6 +3,7 @@ import { ImpressaoEmpresaConfig } from '../config/os-impressao-textos.config';
 import { OsImpressaoTipoTermico } from '../config/os-impressao.config';
 import { labelTipoServicoOs } from '../config/os-servico.config';
 import { equipamentoGridLabel } from './os-grid-display.util';
+import { LOGO_MUNDO_SMART_DATA_URI } from './logo-mundo-smart.data';
 import {
   EscPosEncoder,
   centralizarTexto,
@@ -15,6 +16,54 @@ import {
 export interface OsImpressaoTermicaContexto {
   empresa: ImpressaoEmpresaConfig;
   larguraLinha?: number;
+}
+
+const LOGO_TERMICA_LARGURA = 256;
+const LOGO_TERMICA_ALTURA = 72;
+
+async function carregarLogoTermicaEscPos(): Promise<{
+  largura: number;
+  altura: number;
+  dados: Uint8Array;
+} | null> {
+  if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
+
+  return new Promise(resolve => {
+    const imagem = new Image();
+    imagem.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = LOGO_TERMICA_LARGURA;
+      canvas.height = LOGO_TERMICA_ALTURA;
+      const contexto = canvas.getContext('2d', { willReadFrequently: true });
+      if (!contexto) {
+        resolve(null);
+        return;
+      }
+
+      contexto.fillStyle = '#fff';
+      contexto.fillRect(0, 0, canvas.width, canvas.height);
+      contexto.drawImage(imagem, 0, 0, canvas.width, canvas.height);
+
+      const pixels = contexto.getImageData(0, 0, canvas.width, canvas.height).data;
+      const bytesPorLinha = Math.ceil(canvas.width / 8);
+      const dados = new Uint8Array(bytesPorLinha * canvas.height);
+
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const indice = (y * canvas.width + x) * 4;
+          const luminosidade =
+            pixels[indice] * 0.299 + pixels[indice + 1] * 0.587 + pixels[indice + 2] * 0.114;
+          if (luminosidade < 170) {
+            dados[y * bytesPorLinha + Math.floor(x / 8)] |= 0x80 >> (x % 8);
+          }
+        }
+      }
+
+      resolve({ largura: canvas.width, altura: canvas.height, dados });
+    };
+    imagem.onerror = () => resolve(null);
+    imagem.src = LOGO_MUNDO_SMART_DATA_URI;
+  });
 }
 
 function fmtData(valor?: string | null): string {
@@ -104,6 +153,14 @@ function estilosCupomTermicoHtml(): string {
     .cupom { width: 100%; }
     .empresa-nome { font-size: 18px; font-weight: 700; text-align: center; margin: 0 0 2px; }
     .empresa-info { font-size: 14px; text-align: center; margin: 0 0 1px; }
+    .logo-termica {
+      display: block;
+      width: 54mm;
+      height: 15mm;
+      object-fit: fill;
+      margin: 0 auto 3mm;
+      filter: grayscale(1) contrast(1.35);
+    }
     .separador { border: none; border-top: 1px dashed #333; margin: 6px 0; }
     .titulo-doc {
       font-size: 18px;
@@ -130,6 +187,7 @@ function estilosCupomTermicoHtml(): string {
 
 function blocoEmpresaHtml(empresa: ImpressaoEmpresaConfig): string {
   const partes = [
+    `<img class="logo-termica" src="${LOGO_MUNDO_SMART_DATA_URI}" alt="Mundo Smart" />`,
     `<p class="empresa-nome">${escHtml(empresa.nomeEmpresa || 'Assistência Técnica')}</p>`,
   ];
   for (const linha of quebrarLinhas(empresa.enderecoEmpresa, 40)) {
@@ -152,7 +210,19 @@ function larguraFonteDupla(largura: number): number {
   return Math.max(16, Math.floor(largura / 2));
 }
 
-function cabecalhoEmpresaEscPos(encoder: EscPosEncoder, empresa: ImpressaoEmpresaConfig, largura: number): void {
+async function cabecalhoEmpresaEscPos(
+  encoder: EscPosEncoder,
+  empresa: ImpressaoEmpresaConfig,
+  largura: number,
+): Promise<void> {
+  const logo = await carregarLogoTermicaEscPos();
+  if (logo) {
+    encoder
+      .alinhar('center')
+      .imagemRaster(logo.largura, logo.altura, logo.dados)
+      .avanco(1);
+  }
+
   encoder
     .alinhar('center')
     .negrito(true)
@@ -210,12 +280,15 @@ function blocoAparelhoServicoEscPos(encoder: EscPosEncoder, os: BlingOrdemServic
   encoder.tamanhoFonte(1, 1).linha(linhaSeparadora(largura));
 }
 
-function montarComprovanteDeixadoNaLoja(os: BlingOrdemServico, ctx: OsImpressaoTermicaContexto): Uint8Array {
+async function montarComprovanteDeixadoNaLoja(
+  os: BlingOrdemServico,
+  ctx: OsImpressaoTermicaContexto,
+): Promise<Uint8Array> {
   const largura = ctx.larguraLinha ?? 48;
   const dataDeixado = fmtData(os.dataEntrada || os.data);
   const encoder = new EscPosEncoder().init();
 
-  cabecalhoEmpresaEscPos(encoder, ctx.empresa, largura);
+  await cabecalhoEmpresaEscPos(encoder, ctx.empresa, largura);
   encoder
     .alinhar('center')
     .negrito(true)
@@ -246,14 +319,17 @@ function montarComprovanteDeixadoNaLoja(os: BlingOrdemServico, ctx: OsImpressaoT
   return encoder.build();
 }
 
-function montarGarantiaTermica(os: BlingOrdemServico, ctx: OsImpressaoTermicaContexto): Uint8Array {
+async function montarGarantiaTermica(
+  os: BlingOrdemServico,
+  ctx: OsImpressaoTermicaContexto,
+): Promise<Uint8Array> {
   const largura = ctx.larguraLinha ?? 48;
   const dataRetirada = fmtData(os.dataSaida || os.dataConclusao);
   const dias = diasGarantiaOs(os, ctx.empresa);
   const validade = dataValidadeGarantia(os, ctx.empresa);
   const encoder = new EscPosEncoder().init();
 
-  cabecalhoEmpresaEscPos(encoder, ctx.empresa, largura);
+  await cabecalhoEmpresaEscPos(encoder, ctx.empresa, largura);
   encoder
     .alinhar('center')
     .negrito(true)
@@ -299,11 +375,11 @@ function montarGarantiaTermica(os: BlingOrdemServico, ctx: OsImpressaoTermicaCon
   return encoder.build();
 }
 
-export function montarEscPosImpressaoOs(
+export async function montarEscPosImpressaoOs(
   tipo: OsImpressaoTipoTermico,
   os: BlingOrdemServico,
   ctx: OsImpressaoTermicaContexto,
-): Uint8Array {
+): Promise<Uint8Array> {
   switch (tipo) {
     case 'comprovante-loja-termico':
       return montarComprovanteDeixadoNaLoja(os, ctx);
@@ -313,9 +389,12 @@ export function montarEscPosImpressaoOs(
 }
 
 /** Texto de teste para validar conexao USB direta com a impressora. */
-export function montarTesteImpressoraTermica(empresa: ImpressaoEmpresaConfig, largura = 48): Uint8Array {
+export async function montarTesteImpressoraTermica(
+  empresa: ImpressaoEmpresaConfig,
+  largura = 48,
+): Promise<Uint8Array> {
   const encoder = new EscPosEncoder().init();
-  cabecalhoEmpresaEscPos(encoder, empresa, largura);
+  await cabecalhoEmpresaEscPos(encoder, empresa, largura);
   encoder
     .alinhar('center')
     .negrito(true)

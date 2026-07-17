@@ -125,7 +125,7 @@ export class ConfigImpressaoOsPage implements OnInit {
 
     try {
       if (this.impressoraTermica.conectada()) {
-        const dados = montarTesteImpressoraTermica(
+        const dados = await montarTesteImpressoraTermica(
           this.configService.empresaAtual(),
           this.impressora.larguraLinha,
         );

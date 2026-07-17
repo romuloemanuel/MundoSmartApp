@@ -1,0 +1,55 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: mundosmart-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: MongoDB2019!
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./BlingAssistencia/BlingAssistencia.API
+      dockerfile: Dockerfile
+    container_name: mundosmart-api
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5276
+      # Conecta no serviço "mongo" da rede do compose (não em localhost)
+      MongoDB__ConnectionString: "mongodb://root:MongoDB2019%21@mongo:27017/MundoSmart?authSource=admin&retryWrites=true"
+      MongoDB__DatabaseName: MundoSmart
+      # CORS: a origem é o próprio nginx (mesma origem via proxy), libere localhost tbm
+      Auth__AllowedOrigins__0: "http://localhost"
+      Auth__AllowedOrigins__1: "http://localhost:8080"
+    ports:
+      - "5276:5276"
+    volumes:
+      - api-uploads:/app/uploads
+
+  web:
+    build:
+      context: ./mundosmart-app
+      dockerfile: Dockerfile
+    container_name: mundosmart-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo-data:
+  api-uploads:

@@ -1,0 +1,8 @@
+bin/
+obj/
+uploads/
+**/.vs/
+**/.vscode/
+*.user
+Dockerfile
+.dockerignore

@@ -25,6 +25,22 @@ export class EscPosEncoder {
     return this;
   }
 
+  /** Imprime bitmap monocromático usando o comando ESC/POS GS v 0. */
+  imagemRaster(largura: number, altura: number, dados: Uint8Array): this {
+    const bytesPorLinha = Math.ceil(largura / 8);
+    if (dados.length !== bytesPorLinha * altura) {
+      throw new Error('Bitmap ESC/POS inválido.');
+    }
+
+    this.bytes.push(
+      0x1d, 0x76, 0x30, 0x00,
+      bytesPorLinha & 0xff, (bytesPorLinha >> 8) & 0xff,
+      altura & 0xff, (altura >> 8) & 0xff,
+      ...dados,
+    );
+    return this;
+  }
+
   texto(conteudo: string): this {
     const normalizado = normalizarTextoTermico(conteudo);
     for (let i = 0; i < normalizado.length; i++) {

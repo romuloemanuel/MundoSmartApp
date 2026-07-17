@@ -205,14 +205,16 @@ function estilosImpressao(): string {
     .logo-impressao {
       display: flex;
       justify-content: center;
+      align-items: center;
       line-height: 0;
-      margin: 0 0 4px;
+      margin: 0 0 6px;
     }
     .logo-impressao img {
-      height: 34px;
+      height: 62.4px;
       width: auto;
-      max-width: min(280px, 100%);
+      max-width: min(432px, 100%);
       object-fit: contain;
+      object-position: center;
       print-color-adjust: exact;
       -webkit-print-color-adjust: exact;
     }
@@ -381,8 +383,8 @@ function estilosImpressao(): string {
     }
     body.os-unica h1 { font-size: 17px; }
     body.os-unica .cabecalho { margin-bottom: 4px; padding-bottom: 3px; }
-    body.os-unica .logo-impressao { margin-bottom: 2px; }
-    body.os-unica .logo-impressao img { height: 26px; max-width: min(220px, 100%); }
+    body.os-unica .logo-impressao { margin-bottom: 3px; }
+    body.os-unica .logo-impressao img { height: 50.4px; max-width: min(360px, 100%); }
     body.os-unica .cabecalho p { font-size: 11px; }
     body.os-unica .secao { padding: 6px 8px; margin-bottom: 5px; border-radius: 4px; }
     body.os-unica .secao-titulo { font-size: 11px; margin-bottom: 4px; }
