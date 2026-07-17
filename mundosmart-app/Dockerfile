@@ -15,8 +15,12 @@ RUN npm run build
 # ── Runtime (nginx) ────────────────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime
 
-# Config que serve o SPA e faz proxy de /api e /uploads para a API
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Endereço interno da API — sobrescreva via env no deploy
+# (compose: http://api:5276 | Easypanel: http://<projeto>_<app-api>:5276)
+ENV API_URL=http://api:5276
+
+# Template processado pelo entrypoint do nginx (envsubst) na subida
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 # Artefatos do build do Angular (application builder => browser/)
 COPY --from=build /app/dist/mundosmart-app/browser /usr/share/nginx/html

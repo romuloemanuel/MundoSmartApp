@@ -19,7 +19,6 @@ export interface OsImpressaoTermicaContexto {
 }
 
 const LOGO_TERMICA_LARGURA = 256;
-const LOGO_TERMICA_ALTURA = 72;
 
 async function carregarLogoTermicaEscPos(): Promise<{
   largura: number;
@@ -31,9 +30,17 @@ async function carregarLogoTermicaEscPos(): Promise<{
   return new Promise(resolve => {
     const imagem = new Image();
     imagem.onload = () => {
+      if (!imagem.naturalWidth || !imagem.naturalHeight) {
+        resolve(null);
+        return;
+      }
       const canvas = document.createElement('canvas');
       canvas.width = LOGO_TERMICA_LARGURA;
-      canvas.height = LOGO_TERMICA_ALTURA;
+      // Mantém a proporção original da logo para não achatar na térmica.
+      canvas.height = Math.max(
+        8,
+        Math.round((LOGO_TERMICA_LARGURA * imagem.naturalHeight) / imagem.naturalWidth),
+      );
       const contexto = canvas.getContext('2d', { willReadFrequently: true });
       if (!contexto) {
         resolve(null);
@@ -155,9 +162,8 @@ function estilosCupomTermicoHtml(): string {
     .empresa-info { font-size: 14px; text-align: center; margin: 0 0 1px; }
     .logo-termica {
       display: block;
-      width: 54mm;
-      height: 15mm;
-      object-fit: fill;
+      width: 40mm;
+      height: auto;
       margin: 0 auto 3mm;
       filter: grayscale(1) contrast(1.35);
     }
