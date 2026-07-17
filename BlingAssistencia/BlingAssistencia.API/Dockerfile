@@ -16,11 +16,14 @@ RUN dotnet publish BlingAssistencia.API.csproj -c Release -o /app/publish /p:Use
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Porta interna do Kestrel dentro do container
+# Ambiente de produção por padrão (evita subir em modo Development no deploy).
+ENV ASPNETCORE_ENVIRONMENT=Production
+# Porta interna do Kestrel dentro do container (aponte o proxy do Easypanel aqui).
 ENV ASPNETCORE_URLS=http://+:5276
 EXPOSE 5276
 
-# Diretório persistível de uploads
+# Diretório de uploads (fotos de OS). No Easypanel, monte um volume
+# persistente em /app/uploads para não perder as imagens a cada deploy.
 RUN mkdir -p /app/uploads
 
 COPY --from=build /app/publish ./
