@@ -506,6 +506,31 @@
         ></textarea>
         <p class="campo-erro" *ngIf="temErroCampo('defeito')">{{ mensagemErroCampo('defeito') }}</p>
       </div>
+
+      <div class="form-group">
+        <label class="toggle-label">
+          <input
+            type="checkbox"
+            [(ngModel)]="os.temRisco"
+            name="temRisco"
+            [disabled]="somenteLeitura"
+            (ngModelChange)="onTemRiscoChange()"
+          />
+          <span class="toggle-text">Existe risco no reparo (cliente ciente e aceita)</span>
+        </label>
+      </div>
+      <div class="form-group" *ngIf="os.temRisco" data-campo="riscoAcordado" [class.campo-invalido]="temErroCampo('riscoAcordado')">
+        <label>Risco acordado <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <textarea
+          [(ngModel)]="os.riscoAcordado"
+          name="riscoAcordado"
+          rows="2"
+          placeholder="Descreva o risco informado e aceito pelo cliente..."
+          [readonly]="somenteLeitura"
+        ></textarea>
+        <p class="campo-erro" *ngIf="temErroCampo('riscoAcordado')">{{ mensagemErroCampo('riscoAcordado') }}</p>
+      </div>
+
       <div class="form-group">
         <label>Descri&ccedil;&atilde;o do Servi&ccedil;o Realizado</label>
         <textarea [(ngModel)]="os.descricao" name="descricao" rows="2"></textarea>
@@ -846,8 +871,8 @@
         </div>
       </div>
 
-      <div class="form-group pagamento-acordado-opcoes">
-        <label class="pagamento-acordado-label">Forma de pagamento</label>
+      <div class="form-group pagamento-acordado-opcoes" data-campo="formaPagamento" [class.campo-invalido]="temErroCampo('formaPagamento')">
+        <label class="pagamento-acordado-label">Forma de pagamento combinada <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
         <div class="pagamento-acordado-radios">
           <label class="pagamento-acordado-opcao" *ngFor="let forma of formasPagamentoAcordado">
             <input
@@ -861,6 +886,7 @@
             {{ forma === 'avista' ? 'À vista' : 'Parcelado' }}
           </label>
         </div>
+        <p class="campo-erro" *ngIf="temErroCampo('formaPagamento')">{{ mensagemErroCampo('formaPagamento') }}</p>
       </div>
 
       <div class="form-row" *ngIf="exigeParcelasPagamento()">

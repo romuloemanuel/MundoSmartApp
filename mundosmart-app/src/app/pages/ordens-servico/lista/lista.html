@@ -260,9 +260,9 @@
         <td class="col-loja" [title]="tituloLoja(os)">
           <span class="grid-loja-sigla">{{ siglaLoja(os) }}</span>
         </td>
-        <td class="col-data" [title]="dataEntradaLabel(os) | date:'dd/MM/yyyy HH:mm'">
-          <span>{{ dataEntradaLabel(os) | date:'dd/MM/yy' }}</span>
-          <span class="col-data-hora" *ngIf="dataEntradaLabel(os)">{{ dataEntradaLabel(os) | date:'HH:mm' }}</span>
+        <td class="col-data" [title]="dataEntradaLabel(os) | date:'dd/MM/yyyy HH:mm':tz">
+          <span>{{ dataEntradaLabel(os) | date:'dd/MM/yy':tz }}</span>
+          <span class="col-data-hora" *ngIf="dataEntradaLabel(os)">{{ dataEntradaLabel(os) | date:'HH:mm':tz }}</span>
         </td>
         <td class="col-valor">{{ valorCompacto(os.valorTotalAcordado ?? os.valorTotal) }}</td>
         <td class="col-acoes">

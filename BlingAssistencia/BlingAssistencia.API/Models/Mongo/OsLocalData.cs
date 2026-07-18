@@ -148,6 +148,14 @@ public class OsLocalData
     [BsonElement("defeito")]
     public string? Defeito { get; set; }
 
+    /// <summary>Cliente aceitou risco no reparo.</summary>
+    [BsonElement("temRisco")]
+    public bool TemRisco { get; set; }
+
+    /// <summary>Descrição do risco acordado com o cliente.</summary>
+    [BsonElement("riscoAcordado")]
+    public string? RiscoAcordado { get; set; }
+
     [BsonElement("descricao")]
     public string? Descricao { get; set; }
 

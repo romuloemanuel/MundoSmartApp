@@ -74,6 +74,8 @@ internal static class BlingLocalMappings
             Imei = local.Imei,
             CpfCnpj = local.CpfCnpj,
             Defeito = local.Defeito,
+            TemRisco = local.TemRisco,
+            RiscoAcordado = local.RiscoAcordado,
             Observacoes = local.Observacoes,
             ValorTotal = local.ValorTotalAcordado ?? local.ValorTotal,
             ValorTotalAcordado = local.ValorTotalAcordado ?? local.ValorTotal,
@@ -182,6 +184,8 @@ internal static class BlingLocalMappings
             MarcaNome = local.MarcaNome,
             ModeloNome = local.ModeloNome,
             Defeito = local.Defeito,
+            TemRisco = local.TemRisco,
+            RiscoAcordado = local.RiscoAcordado,
             TipoPecaProblemaNome = local.TipoPecaProblemaNome,
             PreferenciaContatoSelecionado = local.PreferenciaContatoSelecionado,
             LojaOrigem = OsLojaHelper.Normalizar(local.LojaOrigem),
@@ -291,6 +295,10 @@ internal static class BlingLocalMappings
         local.TesteEntradaRealizado = os.TesteEntradaRealizado;
         local.TesteSaidaRealizado = os.TesteSaidaRealizado;
         local.Defeito = os.Defeito;
+        local.TemRisco = os.TemRisco;
+        local.RiscoAcordado = os.TemRisco
+            ? (string.IsNullOrWhiteSpace(os.RiscoAcordado) ? null : os.RiscoAcordado.Trim())
+            : null;
         local.ContatoPrincipalIndice = os.ContatoPrincipalIndice;
         local.PreferenciaContatoSelecionado = os.PreferenciaContatoSelecionado;
         local.SenhaDispositivoTipo = string.IsNullOrWhiteSpace(os.SenhaDispositivoTipo) ? null : os.SenhaDispositivoTipo;

@@ -56,12 +56,13 @@
           (atualizar)="recarregarFotos()"
         />
       </div>
-      <div><strong>Data:</strong> {{ os.data | date:'dd/MM/yyyy' }}</div>
-      <div><strong>Prev. Entrega:</strong> {{ os.dataPrevista | date:'dd/MM/yyyy' }}</div>
+      <div><strong>Data:</strong> {{ os.data | date:'dd/MM/yyyy HH:mm':'UTC' }}</div>
+      <div><strong>Prev. Entrega:</strong> {{ os.dataPrevista | date:'dd/MM/yyyy':'UTC' }}</div>
       <div *ngIf="os.situacao === 'Aguardando Peça' && os.dataPrazoPeca">
-        <strong>Prazo pe&ccedil;a:</strong> {{ os.dataPrazoPeca | date:'dd/MM/yyyy HH:mm' }}
+        <strong>Prazo pe&ccedil;a:</strong> {{ os.dataPrazoPeca | date:'dd/MM/yyyy HH:mm':'UTC' }}
       </div>
       <div class="full"><strong>Defeito:</strong> {{ os.defeito }}</div>
+      <div class="full" *ngIf="os.temRisco"><strong>Risco acordado:</strong> {{ os.riscoAcordado }}</div>
       <div class="full"><strong>Descrição:</strong> {{ os.descricao }}</div>
       <div class="full"><strong>Observações:</strong> {{ os.observacoes }}</div>
     </div>

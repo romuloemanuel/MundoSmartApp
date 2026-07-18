@@ -18,6 +18,10 @@ public class BlingOrdemServico
     public string? Imei { get; set; }
     public string? CpfCnpj { get; set; }
     public string? Defeito { get; set; }
+    /// <summary>Cliente aceitou risco no reparo.</summary>
+    public bool TemRisco { get; set; }
+    /// <summary>Descrição do risco acordado (obrigatório se TemRisco).</summary>
+    public string? RiscoAcordado { get; set; }
     public string? Observacoes { get; set; }
     public decimal? ValorTotal { get; set; }
     /// <summary>Valor total acordado com o cliente (pode diferir da soma dos itens).</summary>

@@ -23,6 +23,15 @@ public static class OsOrdemValidacao
         if (string.IsNullOrWhiteSpace(os.Defeito))
             throw new ArgumentException("Informe o defeito relatado pelo cliente.");
 
+        if (os.TemRisco && string.IsNullOrWhiteSpace(os.RiscoAcordado))
+            throw new ArgumentException("Informe o risco acordado com o cliente.");
+
+        if (!os.TemRisco)
+            os.RiscoAcordado = null;
+
+        if (string.IsNullOrWhiteSpace(os.FormaPagamento))
+            throw new ArgumentException("Informe a forma de pagamento combinada.");
+
         if (string.IsNullOrWhiteSpace(os.TipoServico))
             throw new ArgumentException("Informe o tipo de serviço.");
 

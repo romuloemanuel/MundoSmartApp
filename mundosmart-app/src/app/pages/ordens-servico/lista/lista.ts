@@ -408,6 +408,8 @@ import { agoraDataBrasil } from '../../../utils/horario-brasil.util';
   `],
 })
 export class OrdensServicoLista implements OnInit, OnDestroy {
+  /** Datas operacionais da OS: horário de Brasília gravado como UTC. */
+  readonly tz = 'UTC';
   ordens: BlingOrdemServico[] = [];
   totalRegistros = 0;
   carregando = false;

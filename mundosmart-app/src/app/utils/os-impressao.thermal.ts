@@ -77,14 +77,26 @@ function fmtData(valor?: string | null): string {
   if (!valor) return '-';
   const d = new Date(valor);
   if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleDateString('pt-BR');
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 
 function fmtDataHora(valor?: string | null): string {
   if (!valor) return '-';
   const d = new Date(valor);
   if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  return d.toLocaleString('pt-BR', {
+    timeZone: 'UTC',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+}
+
+function fmtDataHoraAgora(): string {
+  return new Date().toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
 }
 
 function numeroOs(os: BlingOrdemServico): string {
@@ -317,7 +329,7 @@ async function montarComprovanteDeixadoNaLoja(
   encoder
     .alinhar('center')
     .tamanhoFonte(1, 2)
-    .linha(fmtDataHora(new Date().toISOString()))
+    .linha(fmtDataHoraAgora())
     .tamanhoFonte(1, 1)
     .avanco(2)
     .cortar();
@@ -373,7 +385,7 @@ async function montarGarantiaTermica(
     .avanco(1)
     .alinhar('center')
     .tamanhoFonte(1, 2)
-    .linha(fmtDataHora(new Date().toISOString()))
+    .linha(fmtDataHoraAgora())
     .tamanhoFonte(1, 1)
     .avanco(2)
     .cortar();
@@ -409,7 +421,7 @@ export async function montarTesteImpressoraTermica(
     .negrito(false)
     .tamanhoFonte(1, 2)
     .linha('Epson termica OK')
-    .linha(fmtDataHora(new Date().toISOString()))
+    .linha(fmtDataHoraAgora())
     .tamanhoFonte(1, 1)
     .avanco(2)
     .cortar();
@@ -445,6 +457,9 @@ export function montarHtmlCupomTermico(
   corpo += linhaCampoHtml('Aparelho:', equipamentoGridLabel(os));
   if (os.imei?.trim()) corpo += linhaCampoHtml('IMEI:', os.imei.trim());
   corpo += linhaCampoHtml('Serviço:', servicoRealizado(os));
+  if (os.temRisco) {
+    corpo += linhaCampoHtml('Risco acordado:', os.riscoAcordado?.trim() || '-');
+  }
 
   if (tipo === 'garantia-termico') {
     corpo += '<hr class="separador" />';
@@ -453,7 +468,7 @@ export function montarHtmlCupomTermico(
     corpo += `<p class="texto-garantia">${escHtml(ctx.empresa.textoGarantiaTermica)}</p>`;
   }
 
-  corpo += `<p class="rodape">${escHtml(fmtDataHora(new Date().toISOString()))}</p>`;
+  corpo += `<p class="rodape">${escHtml(fmtDataHoraAgora())}</p>`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -479,7 +494,7 @@ export function montarHtmlTesteImpressoraTermica(empresa: ImpressaoEmpresaConfig
     '<hr class="separador" />',
     '<p class="titulo-doc">Teste de impressão</p>',
     '<p class="linha">Selecione a Epson no diálogo do Windows.</p>',
-    `<p class="rodape">${escHtml(fmtDataHora(new Date().toISOString()))}</p>`,
+    `<p class="rodape">${escHtml(fmtDataHoraAgora())}</p>`,
   ].join('');
 
   return `<!DOCTYPE html>

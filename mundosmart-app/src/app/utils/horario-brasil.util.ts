@@ -25,12 +25,26 @@ export function agoraDatetimeLocalBrasil(base: Date = new Date()): string {
   return `${p['year']}-${p['month']}-${p['day']}T${p['hour']}:${p['minute']}`;
 }
 
-/** Converte ISO/UTC da API para datetime-local em horário de Brasília. */
+/** Converte ISO da API (relógio de Brasília marcado como UTC) para datetime-local. */
 export function formatarDatetimeLocalBrasil(valor?: string | null): string | undefined {
   if (!valor?.trim()) return undefined;
   const d = new Date(valor);
   if (Number.isNaN(d.getTime())) return undefined;
-  return agoraDatetimeLocalBrasil(d);
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  const p = Object.fromEntries(
+    fmt.formatToParts(d)
+      .filter(part => part.type !== 'literal')
+      .map(part => [part.type, part.value]),
+  );
+  return `${p['year']}-${p['month']}-${p['day']}T${p['hour']}:${p['minute']}`;
 }
 
 /** Data YYYY-MM-DD em horário de Brasília. */
@@ -60,4 +74,26 @@ export function adicionarDiasUteisBrasil(diasUteis: number, base: Date | string 
   const m = String(data.getMonth() + 1).padStart(2, '0');
   const d = String(data.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/** Data/hora operacional da OS (relógio de Brasília gravado como UTC). */
+export function formatarDataHoraBrasil(valor?: string | Date | null): string {
+  if (valor == null || valor === '') return '—';
+  const d = valor instanceof Date ? valor : new Date(valor);
+  if (Number.isNaN(d.getTime())) return '—';
+  // Datas operacionais (entrada, previsão etc.) são gravadas com o horário de
+  // Brasília, mas o Mongo/JSON marca como UTC — exibir o relógio sem converter.
+  return d.toLocaleString('pt-BR', {
+    timeZone: 'UTC',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+}
+
+/** Só data operacional da OS (mesmo critério de formatarDataHoraBrasil). */
+export function formatarDataBrasil(valor?: string | Date | null): string {
+  if (valor == null || valor === '') return '—';
+  const d = valor instanceof Date ? valor : new Date(valor);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }

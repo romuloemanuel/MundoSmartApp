@@ -1,7 +1,8 @@
 namespace MundoSmart.BlingAssistencia.API.Config;
 
 /// <summary>
-/// Horário de Brasília (America/Sao_Paulo) — datas operacionais da OS usam este fuso, não UTC.
+/// Horário de Brasília (America/Sao_Paulo) — datas operacionais da OS usam este fuso.
+/// Persistidas como relógio de parede (Unspecified); a UI deve exibir sem reconverter o fuso.
 /// </summary>
 public static class HorarioBrasil
 {

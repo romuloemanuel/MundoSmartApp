@@ -499,6 +499,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     estadoTela: 'Estado da tela',
     condicoesAparelho: 'Condições gerais do aparelho',
     defeito: 'Defeito relatado pelo cliente',
+    riscoAcordado: 'Risco acordado',
+    formaPagamento: 'Forma de pagamento',
     senhaDispositivo: 'Tipo de senha do aparelho',
     tecnicoNome: 'Técnico responsável',
     motivoRetorno: 'Motivo do retorno',
@@ -512,6 +514,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     estadoTela: 'Informe o estado da tela.',
     condicoesAparelho: 'Descreva as condições gerais do aparelho.',
     defeito: 'Informe o defeito relatado pelo cliente.',
+    riscoAcordado: 'Informe o risco acordado com o cliente.',
+    formaPagamento: 'Informe a forma de pagamento combinada.',
     senhaDispositivo: 'Selecione o tipo de senha do aparelho.',
     tecnicoNome: 'Selecione um técnico cadastrado.',
     motivoRetorno: 'Informe o motivo do retorno.',
@@ -519,7 +523,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   };
 
   private readonly ordemCamposValidacao = [
-    'cliente', 'modelo', 'tipoServico', 'senhaDispositivo', 'estadoTela', 'condicoesAparelho', 'defeito',
+    'cliente', 'modelo', 'tipoServico', 'senhaDispositivo', 'estadoTela', 'condicoesAparelho', 'defeito', 'riscoAcordado', 'formaPagamento',
     'tecnicoNome', 'motivoRetorno', 'osOriginal',
   ] as const;
 
@@ -536,6 +540,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       estadoTela: !this.os.estadoTela?.trim(),
       condicoesAparelho: !this.os.condicoesAparelho?.trim(),
       defeito: !this.os.defeito?.trim(),
+      riscoAcordado: !!this.os.temRisco && !this.os.riscoAcordado?.trim(),
+      formaPagamento: !this.os.formaPagamento?.trim(),
     };
     if (this.tecnicoObrigatorio) {
       erros['tecnicoNome'] = !this.tecnicoSelecionadoValido();
@@ -1854,6 +1860,13 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     }
   }
 
+  onTemRiscoChange(): void {
+    if (!this.os.temRisco) {
+      this.os.riscoAcordado = undefined;
+    }
+    this.cdr.markForCheck();
+  }
+
   recalcularValorTotalAcordado(): void {
     this.os.valorTotalAcordado = this.totalOsItens;
   }
@@ -2105,6 +2118,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     if (!this.os.estadoTela?.trim()) faltando.push('estado da tela');
     if (!this.os.condicoesAparelho?.trim()) faltando.push('condições gerais do aparelho');
     if (!this.os.defeito?.trim()) faltando.push('defeito relatado pelo cliente');
+    if (this.os.temRisco && !this.os.riscoAcordado?.trim()) faltando.push('risco acordado');
+    if (!this.os.formaPagamento?.trim()) faltando.push('forma de pagamento combinada');
     if (!this.senhaDispositivoInformada()) faltando.push('tipo de senha do aparelho');
 
     const pecaEstoqueSemCatalogo = (this.os.itens ?? []).some(
@@ -2255,6 +2270,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       [/estado da tela/i, 'estadoTela'],
       [/condi[cç][oõ]es gerais/i, 'condicoesAparelho'],
       [/defeito/i, 'defeito'],
+      [/risco/i, 'riscoAcordado'],
+      [/forma de pagamento/i, 'formaPagamento'],
       [/motivo do retorno/i, 'motivoRetorno'],
       [/os original/i, 'osOriginal'],
     ];

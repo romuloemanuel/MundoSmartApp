@@ -6,6 +6,7 @@ import { labelTipoServicoOs } from '../config/os-servico.config';
 import { htmlSenhaDispositivoImpressao } from './senha-dispositivo-print.util';
 import { equipamentoGridLabel } from './os-grid-display.util';
 import { htmlLogoCabecalhoImpressao } from './logo-impressao.util';
+import { formatarDataBrasil, formatarDataHoraBrasil } from './horario-brasil.util';
 
 const MAX_ITENS_TABELA_OS = 4;
 
@@ -23,17 +24,20 @@ function esc(valor?: string | number | null): string {
 }
 
 function fmtData(valor?: string | null): string {
-  if (!valor) return '—';
-  const d = new Date(valor);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  return formatarDataHoraBrasil(valor);
 }
 
 function fmtDataCurta(valor?: string | null): string {
-  if (!valor) return '—';
-  const d = new Date(valor);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('pt-BR');
+  return formatarDataBrasil(valor);
+}
+
+/** Instantâneo real (ex.: "emitido em") — converte UTC → Brasília. */
+function fmtAgora(): string {
+  return new Date().toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
 }
 
 function fmtMoeda(valor?: number | null): string {
@@ -493,15 +497,17 @@ function templateComprovante(os: BlingOrdemServico): string {
       <h2>Recebimento</h2>
       <div class="grid">
         <div class="campo"><label>Defeito informado</label><span>${esc(os.defeito || '—')}</span></div>
+        ${os.temRisco ? `<div class="campo" style="grid-column: 1 / -1;"><label>Risco acordado</label><span>${esc(os.riscoAcordado || '—')}</span></div>` : ''}
         <div class="campo"><label>Estado da tela</label><span>${esc(os.estadoTela || '—')}</span></div>
         <div class="campo"><label>Condições do aparelho</label><span>${esc(os.condicoesAparelho || '—')}</span></div>
         <div class="campo"><label>Acessórios</label><span>${esc(acessorios)}</span></div>
         <div class="campo"><label>Tipo de serviço</label><span>${esc(labelTipoServicoOs(os.tipoServico) || '—')}</span></div>
         <div class="campo"><label>Previsão</label><span>${esc(fmtDataCurta(os.dataPrevistaTermino || os.dataPrevista))}</span></div>
+        <div class="campo"><label>Pagamento</label><span>${esc(labelPagamentoAcordadoOs(os))}</span></div>
         <div class="campo campo-senha" style="grid-column: 1 / -1;"><label>Senha do aparelho</label>${htmlSenhaDispositivoImpressao(os)}</div>
       </div>
     </div>
-    <p class="muted">Data de emissão: ${esc(fmtData(new Date().toISOString()))}</p>
+    <p class="muted">Data de emissão: ${esc(fmtAgora())}</p>
     ${blocoAssinaturaCliente()}`;
 }
 
@@ -544,6 +550,7 @@ function templateOs(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}): strin
     <div class="secao">
       <div class="secao-titulo">Defeito relatado</div>
       <p class="texto-longo">${esc(os.defeito || '—')}</p>
+      ${os.temRisco ? `<div class="secao-titulo" style="margin-top:6px;">Risco acordado (ciente o cliente)</div><p class="texto-longo">${esc(os.riscoAcordado || '—')}</p>` : ''}
     </div>
 
     <div class="secao">
@@ -564,7 +571,7 @@ function templateOs(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}): strin
 
     ${blocoTermosHtml(textos.termosCondicoes)}
 
-    <p class="rodape-os"><strong>Emitido em ${esc(fmtData(new Date().toISOString()))}</strong></p>
+    <p class="rodape-os"><strong>Emitido em ${esc(fmtAgora())}</strong></p>
     ${blocoAssinaturaCliente('Assinatura do cliente', 'Declaro estar ciente das condições e do recebimento do aparelho nesta OS.')}
   </div>`;
 }
@@ -608,6 +615,7 @@ function templateOsComTeste(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}
     <div class="secao">
       <div class="secao-titulo">Defeito relatado</div>
       <p class="texto-longo">${esc(os.defeito || '—')}</p>
+      ${os.temRisco ? `<div class="secao-titulo" style="margin-top:6px;">Risco acordado (ciente o cliente)</div><p class="texto-longo">${esc(os.riscoAcordado || '—')}</p>` : ''}
     </div>
 
     <div class="secao">
@@ -628,7 +636,7 @@ function templateOsComTeste(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}
 
     ${blocoTermosHtml(textos.termosCondicoes)}
 
-    <p class="rodape-os"><strong>Emitido em ${esc(fmtData(new Date().toISOString()))}</strong></p>
+    <p class="rodape-os"><strong>Emitido em ${esc(fmtAgora())}</strong></p>
     ${blocoAssinaturaCliente('1ª assinatura — Ordem de serviço', 'Declaro estar ciente das condições e do recebimento do aparelho nesta OS.')}
   </div>
 
@@ -672,8 +680,10 @@ function templateGarantia(os: BlingOrdemServico): string {
       <h2>Serviço executado</h2>
       <div class="grid">
         <div class="campo"><label>Defeito</label><span>${esc(os.defeito || '—')}</span></div>
+        ${os.temRisco ? `<div class="campo" style="grid-column: 1 / -1;"><label>Risco acordado</label><span>${esc(os.riscoAcordado || '—')}</span></div>` : ''}
         <div class="campo"><label>Peça / serviço</label><span>${esc(os.tipoPecaProblemaNome || labelTipoServicoOs(os.tipoServico) || '—')}</span></div>
         <div class="campo"><label>Conclusão</label><span>${esc(fmtDataCurta(conclusao))}</span></div>
+        <div class="campo"><label>Pagamento</label><span>${esc(labelPagamentoAcordadoOs(os))}</span></div>
         <div class="campo"><label>Valor</label><span>${esc(fmtMoeda(os.valorTotalAcordado ?? os.valorTotal))}</span></div>
       </div>
     </div>
@@ -685,7 +695,7 @@ function templateGarantia(os: BlingOrdemServico): string {
         <p>Para acionar a garantia, apresente este documento e a ordem de serviço #${esc(os.numero || os.id)}.</p>
       </div>
     </div>
-    <p class="muted">Emitido em ${esc(fmtData(new Date().toISOString()))}</p>
+    <p class="muted">Emitido em ${esc(fmtAgora())}</p>
     ${blocoAssinaturaCliente()}`;
 }
 

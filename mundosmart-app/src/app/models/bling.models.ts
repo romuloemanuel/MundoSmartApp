@@ -99,6 +99,10 @@ export interface BlingOrdemServico {
   imei?: string;
   cpfCnpj?: string;
   defeito?: string;
+  /** Cliente aceitou risco no reparo. */
+  temRisco?: boolean;
+  /** Descrição do risco acordado (obrigatório se temRisco). */
+  riscoAcordado?: string;
   observacoes?: string;
   valorTotal?: number;
   /** Valor total acordado com o cliente */
