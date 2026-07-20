@@ -3,8 +3,8 @@ export const environment = {
   production: true,
   apiUrl: '/api',
   filesUrl: '',
-  /** Em produção a URL do QR vem da API (Intake__AppBaseUrl). Deixe vazio. */
-  intakeAppUrl: '',
+  /** DNS fixo do QR de intake / impressão em produção. */
+  intakeAppUrl: 'https://gestaosmart.mundosmartmococa.com.br',
   authEnabled: true,
   estoque: {
     limiteLaranja: 3,

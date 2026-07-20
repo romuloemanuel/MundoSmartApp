@@ -19,6 +19,7 @@ import { HistoricoAlteracoesPage } from './pages/historico-alteracoes/historico-
 import { EstoquePage } from './pages/estoque/estoque';
 import { LotesRetornoPage } from './pages/estoque/lotes-retorno/lotes-retorno';
 import { AnaliseRetornoPage } from './pages/estoque/analise-retorno/analise-retorno';
+import { LotesVencendoPage } from './pages/estoque/lotes-vencendo/lotes-vencendo';
 import { ComissoesPage } from './pages/comissoes/comissoes';
 import { LoginPage } from './pages/login/login';
 import { AlterarSenhaPage } from './pages/conta/alterar-senha';
@@ -90,6 +91,7 @@ export const routes: Routes = [
       { path: 'estoque', component: EstoquePage },
       { path: 'estoque/lotes-retorno', component: LotesRetornoPage },
       { path: 'estoque/analise-retorno', component: AnaliseRetornoPage },
+      { path: 'estoque/lotes-vencendo', component: LotesVencendoPage },
       {
         path: 'configuracoes/impressao-os',
         canActivate: [adminGuard],

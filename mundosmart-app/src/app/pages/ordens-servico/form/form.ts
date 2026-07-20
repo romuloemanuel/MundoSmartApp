@@ -71,7 +71,7 @@ import {
   OsImpressaoTipoHtml,
 } from '../../../config/os-impressao.config';
 import { agruparPecasPorCategoria, categoriaUsaCoresPorModelo, labelPecaCatalogo } from '../../../config/peca-categoria.config';
-import { agoraDatetimeLocalBrasil, formatarDatetimeLocalBrasil } from '../../../utils/horario-brasil.util';
+import { agoraDatetimeLocalBrasil, formatarDatetimeLocalBrasil, paraIsoOperacionalBrasil } from '../../../utils/horario-brasil.util';
 import { AcrescimoEstoqueConfigService } from '../../../services/acrescimo-estoque-config.service';
 
 type ContatoAlternativoOpcao = {
@@ -1201,9 +1201,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   }
 
   onClienteSelecionado(cliente: BlingContato | null): void {
-    this.os.contato = cliente?.id != null
-      ? { id: cliente.id, nome: cliente.nome }
-      : undefined;
+    this.os.contato = this.montarContatoRefOs(cliente);
 
     if (cliente?.id != null) {
       this.os.preferenciaContatoSelecionado = false;
@@ -1224,9 +1222,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   }
 
   onClienteSalvo(cliente: BlingContato): void {
-    this.os.contato = cliente.id != null
-      ? { id: cliente.id, nome: cliente.nome }
-      : undefined;
+    this.os.contato = this.montarContatoRefOs(cliente);
     if (cliente.id != null) {
       this.aplicarClienteParaAviso(cliente, {
         indiceSalvo: this.os.contatoPrincipalIndice,
@@ -1373,6 +1369,17 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
         parentesco: c.parentesco,
       }))
       .filter(c => c.nome.length > 0);
+  }
+
+  /** Snapshot do cliente na OS — inclui telefones para impressão/consulta sem depender só do cadastro. */
+  private montarContatoRefOs(cliente: BlingContato | null): BlingOrdemServico['contato'] {
+    if (cliente?.id == null) return undefined;
+    return {
+      id: cliente.id,
+      nome: cliente.nome,
+      telefone: cliente.telefone,
+      celular: cliente.celular,
+    };
   }
 
   private preencherContatoAlternativo(indice: number): void {
@@ -1846,6 +1853,23 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     }
   }
 
+  /** Datas operacionais: datetime-local → ISO com Z (relógio de parede, sem conversão de fuso). */
+  private prepararOsParaSalvar(): BlingOrdemServico {
+    return {
+      ...this.os,
+      dataEntrada: paraIsoOperacionalBrasil(this.os.dataEntrada),
+      data: paraIsoOperacionalBrasil(this.os.dataEntrada ?? this.os.data),
+      dataInicioAssistencia: paraIsoOperacionalBrasil(this.os.dataInicioAssistencia),
+      dataPrazoPeca: paraIsoOperacionalBrasil(this.os.dataPrazoPeca),
+      dataUltimaAlteracaoSituacao: paraIsoOperacionalBrasil(this.os.dataUltimaAlteracaoSituacao),
+      dataPrevistaTermino: paraIsoOperacionalBrasil(this.os.dataPrevistaTermino),
+      dataPrevista: paraIsoOperacionalBrasil(this.os.dataPrevistaTermino ?? this.os.dataPrevista),
+      dataAtualizacao: paraIsoOperacionalBrasil(this.os.dataAtualizacao),
+      dataSaida: paraIsoOperacionalBrasil(this.os.dataSaida),
+      dataConclusao: paraIsoOperacionalBrasil(this.os.dataConclusao),
+    };
+  }
+
   onFormaPagamentoChange(forma: string): void {
     if (forma !== 'avista' && forma !== 'parcelado') return;
     this.onFormaPagamentoChangeInterno(forma);
@@ -2211,9 +2235,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       this.adicionarJustificativaAtraso();
     }
     this.prepararItensParaSalvar();
+    const payload = this.prepararOsParaSalvar();
     const op = this.editando
-      ? this.service.atualizar(this.os.id!, this.os)
-      : this.service.criar(this.os);
+      ? this.service.atualizar(this.os.id!, payload)
+      : this.service.criar(payload);
 
     op.subscribe({
       next: (salva) => {

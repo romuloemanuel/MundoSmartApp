@@ -144,6 +144,18 @@ export class EstoqueService {
     return this.http.get<LoteGarantiaItem[]>(`${this.base}/lotes/em-garantia`, { params });
   }
 
+  listarLotesPrestesAVencer(filtros?: {
+    dias?: number;
+    fornecedor?: string;
+    busca?: string;
+  }): Observable<LoteGarantiaItem[]> {
+    let params = new HttpParams();
+    if (filtros?.dias != null) params = params.set('dias', String(filtros.dias));
+    if (filtros?.fornecedor?.trim()) params = params.set('fornecedor', filtros.fornecedor.trim());
+    if (filtros?.busca?.trim()) params = params.set('busca', filtros.busca.trim());
+    return this.http.get<LoteGarantiaItem[]>(`${this.base}/lotes/prestes-a-vencer`, { params });
+  }
+
   sugerirOsGarantia(termo: string): Observable<EstoqueSugestaoItem[]> {
     let params = new HttpParams();
     if (termo?.trim()) params = params.set('termo', termo.trim());

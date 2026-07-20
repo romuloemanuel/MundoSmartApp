@@ -8,6 +8,6 @@ import { LOGO_MUNDO_SMART_DATA_URI } from './logo-mundo-smart.data';
  */
 export function htmlLogoCabecalhoImpressao(): string {
   return `<div class="logo-impressao">
-    <img src="${LOGO_MUNDO_SMART_DATA_URI}" alt="${LOJA_IMPRESSAO_NOME}" width="432" height="108" />
+    <img src="${LOGO_MUNDO_SMART_DATA_URI}" alt="${LOJA_IMPRESSAO_NOME}" width="518" height="130" />
   </div>`;
 }

@@ -38,6 +38,15 @@ public interface IEstoqueLoteService
         string? fornecedor = null,
         string? osNumero = null,
         string? lote = null);
+
+    /// <summary>
+    /// Peças ainda em estoque na assistência (não aplicadas no aparelho)
+    /// cuja garantia do fornecedor vence em até N dias.
+    /// </summary>
+    Task<List<LoteGarantiaItem>> ListarLotesPrestesAVencerAsync(
+        int dias = 30,
+        string? fornecedor = null,
+        string? pecaOuPedido = null);
     /// <summary>Coloca a peça na caixa de retorno (defeito) — ainda não envia ao fornecedor.</summary>
     Task<CaixaRetornoAdicaoResponse> AdicionarCaixaRetornoGarantiaAsync(RegistrarDevolucaoGarantiaRequest request);
     Task<CaixaRetornoGarantiaResponse> ListarCaixaRetornoGarantiaAsync(string? fornecedor = null);
@@ -1185,6 +1194,54 @@ public class EstoqueLoteService : IEstoqueLoteService
             .ThenBy(x => x.DataVencimentoGarantia)
             .ThenBy(x => x.PecaNome)
             .Limit(300)
+            .ToListAsync();
+
+        var fornecedoresEstoque = await ListarFornecedoresEstoqueCadastradosAsync();
+        return lotes
+            .Where(l => EhFornecedorEstoqueCadastrado(l.Fornecedor)
+                && fornecedoresEstoque.Contains(l.Fornecedor.Trim()))
+            .Select(l => MapearLoteGarantia(l, hoje))
+            .ToList();
+    }
+
+    public async Task<List<LoteGarantiaItem>> ListarLotesPrestesAVencerAsync(
+        int dias = 30,
+        string? fornecedor = null,
+        string? pecaOuPedido = null)
+    {
+        var hoje = HorarioBrasil.Agora.Date;
+        var horizonte = Math.Clamp(dias, 1, 365);
+        var limite = hoje.AddDays(horizonte);
+
+        // Saldo > 0 = peça ainda na assistência, não consumida em OS/aparelho.
+        var filtro = Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0)
+            & Builders<LoteEstoque>.Filter.Gte(x => x.DataVencimentoGarantia, hoje)
+            & Builders<LoteEstoque>.Filter.Lte(x => x.DataVencimentoGarantia, limite);
+
+        var fornTermo = fornecedor?.Trim();
+        if (!string.IsNullOrWhiteSpace(fornTermo))
+        {
+            filtro &= Builders<LoteEstoque>.Filter.Regex(
+                x => x.Fornecedor,
+                new BsonRegularExpression(System.Text.RegularExpressions.Regex.Escape(fornTermo), "i"));
+        }
+
+        var busca = pecaOuPedido?.Trim();
+        if (!string.IsNullOrWhiteSpace(busca))
+        {
+            var esc = System.Text.RegularExpressions.Regex.Escape(busca);
+            filtro &= Builders<LoteEstoque>.Filter.Or(
+                Builders<LoteEstoque>.Filter.Regex(x => x.PecaNome, new BsonRegularExpression(esc, "i")),
+                Builders<LoteEstoque>.Filter.Regex(x => x.NumeroPedido, new BsonRegularExpression(esc, "i")),
+                Builders<LoteEstoque>.Filter.Regex(x => x.ModeloNome, new BsonRegularExpression(esc, "i")),
+                Builders<LoteEstoque>.Filter.Regex(x => x.MarcaPeca, new BsonRegularExpression(esc, "i")));
+        }
+
+        var lotes = await _lotes.Find(filtro)
+            .SortBy(x => x.DataVencimentoGarantia)
+            .ThenBy(x => x.Fornecedor)
+            .ThenBy(x => x.PecaNome)
+            .Limit(500)
             .ToListAsync();
 
         var fornecedoresEstoque = await ListarFornecedoresEstoqueCadastradosAsync();

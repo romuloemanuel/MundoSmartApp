@@ -167,6 +167,16 @@ public class EstoqueController : ControllerBase
         [FromQuery] string? lote) =>
         Ok(await _estoque.ListarLotesEmGarantiaAsync(fornecedor, osNumero, lote));
 
+    /// <summary>
+    /// Peças em estoque (não usadas no aparelho) com garantia do fornecedor a vencer em até N dias.
+    /// </summary>
+    [HttpGet("lotes/prestes-a-vencer")]
+    public async Task<IActionResult> ListarLotesPrestesAVencer(
+        [FromQuery] int dias = 30,
+        [FromQuery] string? fornecedor = null,
+        [FromQuery] string? busca = null) =>
+        Ok(await _estoque.ListarLotesPrestesAVencerAsync(dias, fornecedor, busca));
+
     [HttpGet("sugestoes/os-garantia")]
     public async Task<IActionResult> SugerirOsGarantia([FromQuery] string? termo, [FromQuery] int limite = 20) =>
         Ok(await _estoque.SugerirOsGarantiaAsync(termo, limite));

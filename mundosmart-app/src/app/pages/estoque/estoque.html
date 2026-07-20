@@ -19,6 +19,7 @@
     <button type="button" [class.ativa]="aba === 'garantia'" (click)="irPara('garantia')">Retorno garantia</button>
     <a class="estoque-aba-link" routerLink="/estoque/lotes-retorno">Lotes baixados</a>
     <a class="estoque-aba-link" routerLink="/estoque/analise-retorno">An&aacute;lise retorno</a>
+    <a class="estoque-aba-link" routerLink="/estoque/lotes-vencendo">Lotes a vencer</a>
   </div>
 
   <p *ngIf="erro" class="erro">{{ erro }}</p>
@@ -663,6 +664,8 @@
       <a routerLink="/estoque/lotes-retorno">Lotes baixados</a>
       ·
       <a routerLink="/estoque/analise-retorno">An&aacute;lise (fornecedor / pe&ccedil;a)</a>
+      ·
+      <a routerLink="/estoque/lotes-vencendo">Lotes a vencer</a>
     </p>
     <p class="campo-hint" style="margin:0 0 14px">
       S&oacute; entram fornecedores que alimentam o estoque via <strong>pedido de compra</strong>

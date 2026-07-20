@@ -105,16 +105,30 @@ function numeroOs(os: BlingOrdemServico): string {
 
 function telefoneContato(os: BlingOrdemServico): string {
   const c = os.contato;
-  return c?.celular?.trim() || c?.telefone?.trim() || '-';
+  const numeros = [c?.celular, c?.telefone]
+    .map(t => t?.trim())
+    .filter((t): t is string => !!t);
+  const unicos = [...new Set(numeros)];
+  return unicos.length ? unicos.join(' / ') : '-';
 }
 
-function contatoAvisoLinha(os: BlingOrdemServico): string {
+/** Nome · tel · parentesco · retira · ligar — null se não houver alternativo. */
+function contatoAlternativoCompacto(os: BlingOrdemServico): string | null {
   const a = os.contatoAviso;
-  if (!a?.nome?.trim()) return '-';
-  const tel = a.celular?.trim() || a.telefone?.trim();
-  const partes = [a.nome.trim(), tel, a.parentesco?.trim()].filter(Boolean);
-  if (a.autorizadoRetirada !== false) partes.push('autorizado a retirar');
-  return partes.join(' / ') || '-';
+  if (!a?.nome?.trim() && !a?.celular?.trim() && !a?.telefone?.trim()) return null;
+
+  const tel = [a?.celular, a?.telefone]
+    .map(t => t?.trim())
+    .filter((t): t is string => !!t);
+  const telUnico = [...new Set(tel)].join('/');
+
+  const partes: string[] = [];
+  if (a?.nome?.trim()) partes.push(a.nome.trim());
+  if (telUnico) partes.push(telUnico);
+  if (a?.parentesco?.trim()) partes.push(a.parentesco.trim());
+  if (a && a.autorizadoRetirada !== false) partes.push('retira');
+  partes.push(os.preferenciaContatoSelecionado ? 'so nele' : 'ligar tbm');
+  return partes.join(' / ');
 }
 
 function servicoRealizado(os: BlingOrdemServico): string {
@@ -278,8 +292,13 @@ function blocoClienteEscPos(encoder: EscPosEncoder, os: BlingOrdemServico, largu
     encoder.linha(linha);
   }
   encoder.linha(linhaRotuloValor('Tel:', telefoneContato(os), largura));
-  for (const linha of linhaRotuloQuebra('Autorizado retirar:', contatoAvisoLinha(os), largura)) {
-    encoder.linha(linha);
+  const alt = contatoAlternativoCompacto(os);
+  if (alt) {
+    encoder.linha('-'.repeat(Math.min(largura, 32)));
+    for (const linha of linhaRotuloQuebra('Alt:', alt, largura)) {
+      encoder.linha(linha);
+    }
+    encoder.linha('-'.repeat(Math.min(largura, 32)));
   }
   encoder.tamanhoFonte(1, 1).linha(linhaSeparadora(largura));
 }
@@ -452,7 +471,11 @@ export function montarHtmlCupomTermico(
   corpo += '<hr class="separador" />';
   corpo += linhaCampoHtml('Cliente:', os.contato?.nome || '-');
   corpo += linhaCampoHtml('Tel:', telefoneContato(os));
-  corpo += linhaCampoHtml('Autorizado a retirar:', contatoAvisoLinha(os));
+  const altHtml = contatoAlternativoCompacto(os);
+  if (altHtml) {
+    corpo += '<hr class="separador" />';
+    corpo += linhaCampoHtml('Contato alt.:', altHtml);
+  }
   corpo += '<hr class="separador" />';
   corpo += linhaCampoHtml('Aparelho:', equipamentoGridLabel(os));
   if (os.imei?.trim()) corpo += linhaCampoHtml('IMEI:', os.imei.trim());

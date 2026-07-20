@@ -2,7 +2,9 @@ namespace MundoSmart.BlingAssistencia.API.Config;
 
 /// <summary>
 /// Horário de Brasília (America/Sao_Paulo) — datas operacionais da OS usam este fuso.
-/// Persistidas como relógio de parede (Unspecified); a UI deve exibir sem reconverter o fuso.
+/// Convenção: gravar o relógio de parede com Kind=Utc (sem converter), para o MongoDB
+/// não aplicar Local→UTC de novo (o que somava +3h ou +6h após idas e voltas).
+/// A UI exibe com timeZone: 'UTC' para mostrar o mesmo relógio.
 /// </summary>
 public static class HorarioBrasil
 {
@@ -10,13 +12,13 @@ public static class HorarioBrasil
 
     public static TimeZoneInfo TimeZone => Zona;
 
-    /// <summary>Agora em horário de Brasília (Kind = Unspecified).</summary>
+    /// <summary>Agora em horário de Brasília (Kind = Utc, valor = relógio de parede).</summary>
     public static DateTime Agora
     {
         get
         {
             var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Zona);
-            return DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+            return DateTime.SpecifyKind(local, DateTimeKind.Utc);
         }
     }
 
@@ -31,22 +33,30 @@ public static class HorarioBrasil
             if (data.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)
                 restantes--;
         }
-        return DateTime.SpecifyKind(data, DateTimeKind.Unspecified);
+        return DateTime.SpecifyKind(data, DateTimeKind.Utc);
     }
 
-    public static DateTime ParaBrasil(DateTime valor)
+    /// <summary>
+    /// Preserva o relógio de parede e marca Utc — evita conversão de fuso no Mongo/JSON.
+    /// </summary>
+    public static DateTime ComoUtcParede(DateTime valor)
     {
-        return valor.Kind switch
-        {
-            DateTimeKind.Utc => DateTime.SpecifyKind(
-                TimeZoneInfo.ConvertTimeFromUtc(valor, Zona),
-                DateTimeKind.Unspecified),
-            DateTimeKind.Local => DateTime.SpecifyKind(
-                TimeZoneInfo.ConvertTime(valor, TimeZoneInfo.Local, Zona),
-                DateTimeKind.Unspecified),
-            _ => valor
-        };
+        if (valor.Kind == DateTimeKind.Utc)
+            return valor;
+
+        return DateTime.SpecifyKind(
+            new DateTime(valor.Year, valor.Month, valor.Day, valor.Hour, valor.Minute, valor.Second, valor.Millisecond),
+            DateTimeKind.Utc);
     }
+
+    public static DateTime? ComoUtcParede(DateTime? valor) =>
+        valor.HasValue ? ComoUtcParede(valor.Value) : null;
+
+    /// <summary>
+    /// Normaliza para a convenção operacional (relógio de parede + Kind Utc).
+    /// Não converte fuso — evita deslocar datas já no horário de Brasília.
+    /// </summary>
+    public static DateTime ParaBrasil(DateTime valor) => ComoUtcParede(valor);
 
     private static TimeZoneInfo ResolverZona()
     {

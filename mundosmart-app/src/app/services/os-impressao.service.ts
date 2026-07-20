@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
-import { BlingOrdemServico } from '../models/bling.models';
+import { BlingContato, BlingOrdemServico } from '../models/bling.models';
 import { isImpressaoTermica, OsImpressaoTipo, OsImpressaoTipoHtml, OsImpressaoTipoTermico } from '../config/os-impressao.config';
 import { montarHtmlImpressaoOs } from '../utils/os-impressao.templates';
 import { montarEscPosImpressaoOs, montarHtmlCupomTermico } from '../utils/os-impressao.thermal';
@@ -97,13 +97,33 @@ export class OsImpressaoService {
           : of(null);
 
         return cliente$.pipe(
-          map(cliente => ({
-            os: mesclada,
-            enderecoCliente: formatarEnderecoCliente(cliente?.endereco),
-          })),
+          map(cliente => {
+            const osImpressao = this.enriquecerContatoParaImpressao(mesclada, cliente);
+            return {
+              os: osImpressao,
+              enderecoCliente: formatarEnderecoCliente(cliente?.endereco),
+            };
+          }),
         );
       }),
     );
+  }
+
+  /** Garante telefones do cliente (e, se faltar na OS, do cadastro) na impressão. */
+  private enriquecerContatoParaImpressao(
+    os: BlingOrdemServico,
+    cliente: BlingContato | null,
+  ): BlingOrdemServico {
+    if (!os.contato && !cliente) return os;
+
+    const contato = {
+      ...(os.contato ?? { id: cliente?.id ?? 0, nome: cliente?.nome ?? '' }),
+      nome: os.contato?.nome?.trim() || cliente?.nome || os.contato?.nome,
+      telefone: os.contato?.telefone?.trim() || cliente?.telefone || os.contato?.telefone,
+      celular: os.contato?.celular?.trim() || cliente?.celular || os.contato?.celular,
+    };
+
+    return { ...os, contato };
   }
 
   /**

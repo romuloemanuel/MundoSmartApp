@@ -4,7 +4,6 @@ import { OsImpressaoTipoHtml } from '../config/os-impressao.config';
 import { labelPagamentoAcordadoOs } from '../config/os-pagamento.config';
 import { labelTipoServicoOs } from '../config/os-servico.config';
 import { htmlSenhaDispositivoImpressao } from './senha-dispositivo-print.util';
-import { equipamentoGridLabel } from './os-grid-display.util';
 import { htmlLogoCabecalhoImpressao } from './logo-impressao.util';
 import { formatarDataBrasil, formatarDataHoraBrasil } from './horario-brasil.util';
 
@@ -47,16 +46,61 @@ function fmtMoeda(valor?: number | null): string {
 
 function telefoneContato(os: BlingOrdemServico): string {
   const c = os.contato;
-  return c?.celular?.trim() || c?.telefone?.trim() || '—';
+  const numeros = [c?.celular, c?.telefone]
+    .map(t => t?.trim())
+    .filter((t): t is string => !!t);
+  const unicos = [...new Set(numeros)];
+  return unicos.length ? unicos.join(' / ') : '—';
 }
 
-function contatoAvisoLinha(os: BlingOrdemServico): string {
+/** Uma linha compacta: nome · tel · parentesco · retira · ligar. */
+function contatoAlternativoCompacto(os: BlingOrdemServico): string | null {
   const a = os.contatoAviso;
-  if (!a?.nome?.trim()) return '—';
-  const tel = a.celular?.trim() || a.telefone?.trim();
-  const partes = [a.nome.trim(), tel, a.parentesco?.trim()].filter(Boolean);
-  if (a.autorizadoRetirada !== false) partes.push('autorizado a retirar');
+  if (!a?.nome?.trim() && !a?.celular?.trim() && !a?.telefone?.trim()) return null;
+
+  const tel = [a?.celular, a?.telefone]
+    .map(t => t?.trim())
+    .filter((t): t is string => !!t);
+  const telUnico = [...new Set(tel)].join('/');
+
+  const partes: string[] = [];
+  if (a?.nome?.trim()) partes.push(a.nome.trim());
+  if (telUnico) partes.push(telUnico);
+  if (a?.parentesco?.trim()) partes.push(a.parentesco.trim());
+  if (a && a.autorizadoRetirada !== false) partes.push('retira');
+  partes.push(os.preferenciaContatoSelecionado ? 'só nele' : 'ligar tbm');
   return partes.join(' · ');
+}
+
+function htmlCampoContatoAlternativo(os: BlingOrdemServico): string {
+  const linha = contatoAlternativoCompacto(os);
+  if (!linha) return '';
+  return `<div class="contato-alt-box">
+    <label>Contato alternativo</label>
+    <span>${esc(linha)}</span>
+  </div>`;
+}
+
+function htmlLinhaClienteIdentidade(os: BlingOrdemServico): string {
+  return `<div class="grid-cliente-id">
+    <div class="campo"><label>Nome</label><span>${esc(os.contato?.nome || '—')}</span></div>
+    <div class="campo"><label>CPF / CNPJ</label><span>${esc(os.cpfCnpj || '—')}</span></div>
+    <div class="campo"><label>Telefone</label><span>${esc(telefoneContato(os))}</span></div>
+  </div>`;
+}
+
+function htmlLinhaModeloImei(os: BlingOrdemServico): string {
+  return `<div class="grid-modelo-imei">
+    <div class="campo"><label>Modelo</label><span>${esc(modeloAparelho(os))}</span></div>
+    <div class="campo"><label>IMEI</label><span>${esc(os.imei || '—')}</span></div>
+  </div>`;
+}
+
+function htmlLinhaTelaAcessorios(os: BlingOrdemServico): string {
+  return `<div class="grid-tela-acessorios">
+    <div class="campo"><label>Estado da tela</label><span>${esc(os.estadoTela || '—')}</span></div>
+    <div class="campo"><label>Acessórios</label><span>${esc(acessoriosEntregues(os))}</span></div>
+  </div>`;
 }
 
 function modeloAparelho(os: BlingOrdemServico): string {
@@ -214,9 +258,9 @@ function estilosImpressao(): string {
       margin: 0 0 6px;
     }
     .logo-impressao img {
-      height: 62.4px;
+      height: 74.88px;
       width: auto;
-      max-width: min(432px, 100%);
+      max-width: min(518px, 100%);
       object-fit: contain;
       object-position: center;
       print-color-adjust: exact;
@@ -233,6 +277,50 @@ function estilosImpressao(): string {
     }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
     .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 12px; }
+    .grid-cliente-id {
+      display: grid;
+      grid-template-columns: 60% 20% 20%;
+      gap: 6px 8px;
+      align-items: start;
+    }
+    .grid-cliente-id .campo { min-width: 0; }
+    .grid-cliente-id .campo span { word-break: break-word; overflow-wrap: anywhere; }
+    .grid-modelo-imei {
+      display: grid;
+      grid-template-columns: 60% 40%;
+      gap: 6px 8px;
+      align-items: start;
+    }
+    .grid-modelo-imei .campo { min-width: 0; }
+    .grid-tela-acessorios {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 8px;
+      align-items: start;
+    }
+    .contato-alt-box {
+      margin-top: 8px;
+      padding: 6px 8px;
+      border: 1px dashed #64748b;
+      border-radius: 4px;
+      background: #f1f5f9;
+    }
+    .contato-alt-box label {
+      display: block;
+      font-size: 9px;
+      text-transform: uppercase;
+      color: #334155;
+      letter-spacing: .35px;
+      margin-bottom: 2px;
+      font-weight: 700;
+    }
+    .contato-alt-box span {
+      display: block;
+      font-weight: 600;
+      color: #0f172a;
+      font-size: 11px;
+      line-height: 1.35;
+    }
     .campo label {
       display: block;
       font-size: 9px;
@@ -388,13 +476,22 @@ function estilosImpressao(): string {
     body.os-unica h1 { font-size: 17px; }
     body.os-unica .cabecalho { margin-bottom: 4px; padding-bottom: 3px; }
     body.os-unica .logo-impressao { margin-bottom: 3px; }
-    body.os-unica .logo-impressao img { height: 50.4px; max-width: min(360px, 100%); }
+    body.os-unica .logo-impressao img { height: 60.48px; max-width: min(432px, 100%); }
     body.os-unica .cabecalho p { font-size: 11px; }
     body.os-unica .secao { padding: 6px 8px; margin-bottom: 5px; border-radius: 4px; }
     body.os-unica .secao-titulo { font-size: 11px; margin-bottom: 4px; }
     body.os-unica .campo label { font-size: 9.5px; }
     body.os-unica .campo span { font-size: 11px; font-weight: 600; }
     body.os-unica .grid-compacto { gap: 4px 8px; }
+    body.os-unica .grid-cliente-id { gap: 3px 6px; margin-bottom: 2px; }
+    body.os-unica .grid-modelo-imei,
+    body.os-unica .grid-tela-acessorios { gap: 3px 6px; margin-top: 4px; }
+    body.os-unica .contato-alt-box {
+      margin-top: 5px;
+      padding: 4px 6px;
+    }
+    body.os-unica .contato-alt-box label { font-size: 8.5px; margin-bottom: 1px; }
+    body.os-unica .contato-alt-box span { font-size: 10px; }
     body.os-unica .linhas-duplas {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -477,17 +574,16 @@ function camposOsBase(os: BlingOrdemServico): string {
   return `<div class="grid">
     <div class="campo"><label>OS</label><span>#${esc(os.numero || os.id)}</span></div>
     <div class="campo"><label>Situação</label><span>${esc(os.situacao || '—')}</span></div>
-    <div class="campo"><label>Cliente</label><span>${esc(os.contato?.nome || '—')}</span></div>
-    <div class="campo"><label>Telefone</label><span>${esc(telefoneContato(os))}</span></div>
-    <div class="campo"><label>Equipamento</label><span>${esc(equipamentoGridLabel(os))}</span></div>
-    <div class="campo"><label>IMEI</label><span>${esc(os.imei || '—')}</span></div>
+    <div style="grid-column: 1 / -1;">
+      ${htmlLinhaClienteIdentidade(os)}
+      ${htmlCampoContatoAlternativo(os)}
+    </div>
+    <div style="grid-column: 1 / -1;">${htmlLinhaModeloImei(os)}</div>
     <div class="campo"><label>Entrada</label><span>${esc(fmtData(os.dataEntrada || os.data))}</span></div>
-    <div class="campo"><label>Autorizado a retirar</label><span>${esc(contatoAvisoLinha(os))}</span></div>
   </div>`;
 }
 
 function templateComprovante(os: BlingOrdemServico): string {
-  const acessorios = (os.acessorios ?? []).filter(Boolean).join(', ') || '—';
   return `${cabecalhoLoja('Comprovante de recebimento do aparelho')}
     <div class="destaque">
       <p>Declaro que deixei o aparelho descrito abaixo para assistência técnica, ciente das condições registradas nesta ordem de serviço.</p>
@@ -498,9 +594,8 @@ function templateComprovante(os: BlingOrdemServico): string {
       <div class="grid">
         <div class="campo"><label>Defeito informado</label><span>${esc(os.defeito || '—')}</span></div>
         ${os.temRisco ? `<div class="campo" style="grid-column: 1 / -1;"><label>Risco acordado</label><span>${esc(os.riscoAcordado || '—')}</span></div>` : ''}
-        <div class="campo"><label>Estado da tela</label><span>${esc(os.estadoTela || '—')}</span></div>
-        <div class="campo"><label>Condições do aparelho</label><span>${esc(os.condicoesAparelho || '—')}</span></div>
-        <div class="campo"><label>Acessórios</label><span>${esc(acessorios)}</span></div>
+        <div class="campo" style="grid-column: 1 / -1;"><label>Condições do aparelho</label><span>${esc(os.condicoesAparelho || '—')}</span></div>
+        <div style="grid-column: 1 / -1;">${htmlLinhaTelaAcessorios(os)}</div>
         <div class="campo"><label>Tipo de serviço</label><span>${esc(labelTipoServicoOs(os.tipoServico) || '—')}</span></div>
         <div class="campo"><label>Previsão</label><span>${esc(fmtDataCurta(os.dataPrevistaTermino || os.dataPrevista))}</span></div>
         <div class="campo"><label>Pagamento</label><span>${esc(labelPagamentoAcordadoOs(os))}</span></div>
@@ -523,27 +618,22 @@ function templateOs(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}): strin
     <div class="linhas-duplas">
       <div class="secao">
         <div class="secao-titulo">Cliente</div>
-        <div class="grid grid-compacto">
-          <div class="campo" style="grid-column: 1 / -1;"><label>Nome</label><span>${esc(os.contato?.nome || '—')}</span></div>
-          <div class="campo"><label>Telefone</label><span>${esc(telefoneContato(os))}</span></div>
-          <div class="campo"><label>CPF / CNPJ</label><span>${esc(os.cpfCnpj || '—')}</span></div>
+        ${htmlLinhaClienteIdentidade(os)}
+        ${htmlCampoContatoAlternativo(os)}
+        <div class="grid grid-compacto" style="margin-top: 6px;">
           <div class="campo" style="grid-column: 1 / -1;"><label>Endereço</label><span>${esc(endereco)}</span></div>
           <div class="campo"><label>Entrada</label><span>${esc(fmtData(os.dataEntrada || os.data))}</span></div>
-          <div class="campo"><label>Autorizado a retirar</label><span>${esc(contatoAvisoLinha(os))}</span></div>
         </div>
       </div>
 
       <div class="secao">
         <div class="secao-titulo">Aparelho</div>
-        <div class="grid grid-compacto">
-          <div class="campo" style="grid-column: 1 / -1;"><label>Modelo</label><span>${esc(modeloAparelho(os))}</span></div>
-          <div class="campo"><label>IMEI</label><span>${esc(os.imei || '—')}</span></div>
-          <div class="campo"><label>Nº série</label><span>${esc(os.numeroSerie || '—')}</span></div>
-          <div class="campo"><label>Estado da tela</label><span>${esc(os.estadoTela || '—')}</span></div>
+        ${htmlLinhaModeloImei(os)}
+        <div class="grid grid-compacto" style="margin-top: 4px;">
           <div class="campo campo-senha" style="grid-column: 1 / -1;"><label>Senha</label>${htmlSenhaDispositivoImpressao(os, true)}</div>
           <div class="campo" style="grid-column: 1 / -1;"><label>Condições</label><span class="texto-longo">${esc(os.condicoesAparelho || '—')}</span></div>
-          <div class="campo" style="grid-column: 1 / -1;"><label>Acessórios</label><span>${esc(acessoriosEntregues(os))}</span></div>
         </div>
+        ${htmlLinhaTelaAcessorios(os)}
       </div>
     </div>
 
@@ -588,27 +678,22 @@ function templateOsComTeste(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}
     <div class="linhas-duplas">
       <div class="secao">
         <div class="secao-titulo">Cliente</div>
-        <div class="grid grid-compacto">
-          <div class="campo" style="grid-column: 1 / -1;"><label>Nome</label><span>${esc(os.contato?.nome || '—')}</span></div>
-          <div class="campo"><label>Telefone</label><span>${esc(telefoneContato(os))}</span></div>
-          <div class="campo"><label>CPF / CNPJ</label><span>${esc(os.cpfCnpj || '—')}</span></div>
+        ${htmlLinhaClienteIdentidade(os)}
+        ${htmlCampoContatoAlternativo(os)}
+        <div class="grid grid-compacto" style="margin-top: 6px;">
           <div class="campo" style="grid-column: 1 / -1;"><label>Endereço</label><span>${esc(endereco)}</span></div>
           <div class="campo"><label>Entrada</label><span>${esc(fmtData(os.dataEntrada || os.data))}</span></div>
-          <div class="campo"><label>Autorizado a retirar</label><span>${esc(contatoAvisoLinha(os))}</span></div>
         </div>
       </div>
 
       <div class="secao">
         <div class="secao-titulo">Aparelho</div>
-        <div class="grid grid-compacto">
-          <div class="campo" style="grid-column: 1 / -1;"><label>Modelo</label><span>${esc(modeloAparelho(os))}</span></div>
-          <div class="campo"><label>IMEI</label><span>${esc(os.imei || '—')}</span></div>
-          <div class="campo"><label>Nº série</label><span>${esc(os.numeroSerie || '—')}</span></div>
-          <div class="campo"><label>Estado da tela</label><span>${esc(os.estadoTela || '—')}</span></div>
+        ${htmlLinhaModeloImei(os)}
+        <div class="grid grid-compacto" style="margin-top: 4px;">
           <div class="campo campo-senha" style="grid-column: 1 / -1;"><label>Senha</label>${htmlSenhaDispositivoImpressao(os, true)}</div>
           <div class="campo" style="grid-column: 1 / -1;"><label>Condições</label><span class="texto-longo">${esc(os.condicoesAparelho || '—')}</span></div>
-          <div class="campo" style="grid-column: 1 / -1;"><label>Acessórios</label><span>${esc(acessoriosEntregues(os))}</span></div>
         </div>
+        ${htmlLinhaTelaAcessorios(os)}
       </div>
     </div>
 
@@ -644,9 +729,9 @@ function templateOsComTeste(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}
     ${cabecalhoLoja(`Folha de teste — OS #${numeroOs}`)}
     <div class="secao">
       <div class="secao-titulo">Dados básicos</div>
-      <div class="grid">
-        <div class="campo"><label>Nome do cliente</label><span>${esc(os.contato?.nome || '—')}</span></div>
-        <div class="campo"><label>Telefone</label><span>${esc(telefoneContato(os))}</span></div>
+      ${htmlLinhaClienteIdentidade(os)}
+      ${htmlCampoContatoAlternativo(os)}
+      <div class="grid" style="margin-top: 6px;">
         <div class="campo" style="grid-column: 1 / -1;"><label>Aparelho</label><span>${esc(modeloAparelho(os))}</span></div>
       </div>
     </div>
@@ -661,9 +746,9 @@ function templateTeste(os: BlingOrdemServico): string {
     ${cabecalhoLoja(`Folha de teste — OS #${numeroOs}`)}
     <div class="secao">
       <div class="secao-titulo">Dados básicos</div>
-      <div class="grid">
-        <div class="campo"><label>Nome do cliente</label><span>${esc(os.contato?.nome || '—')}</span></div>
-        <div class="campo"><label>Telefone</label><span>${esc(telefoneContato(os))}</span></div>
+      ${htmlLinhaClienteIdentidade(os)}
+      ${htmlCampoContatoAlternativo(os)}
+      <div class="grid" style="margin-top: 6px;">
         <div class="campo" style="grid-column: 1 / -1;"><label>Aparelho</label><span>${esc(modeloAparelho(os))}</span></div>
       </div>
     </div>

@@ -14,7 +14,7 @@ export function intakeUrlEditavel(): boolean {
 /**
  * URL do app acessível pelo celular (QR de intake).
  * Dev: localStorage → environment.intakeAppUrl (se localhost) → origin.
- * Prod: só environment.intakeAppUrl (build); se vazio, a API usa Intake__AppBaseUrl.
+ * Prod: environment.intakeAppUrl (DNS fixo) e, na API, Intake:AppBaseUrl.
  */
 export function obterUrlAppIntake(): string {
   if (typeof window === 'undefined') return '';

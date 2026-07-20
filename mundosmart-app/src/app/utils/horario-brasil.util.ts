@@ -25,6 +25,22 @@ export function agoraDatetimeLocalBrasil(base: Date = new Date()): string {
   return `${p['year']}-${p['month']}-${p['day']}T${p['hour']}:${p['minute']}`;
 }
 
+/**
+ * Converte datetime-local (relógio de Brasília) para ISO com Z.
+ * O Z aqui NÃO significa UTC real — marca o relógio de parede para a API/Mongo
+ * não converter fuso (evita +3h/+6h).
+ */
+export function paraIsoOperacionalBrasil(valor?: string | null): string | undefined {
+  if (!valor?.trim()) return undefined;
+  const v = valor.trim();
+  if (v.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(v)) return v;
+  // YYYY-MM-DDTHH:mm ou YYYY-MM-DDTHH:mm:ss
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) return `${v}:00.000Z`;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(v)) return `${v}.000Z`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T00:00:00.000Z`;
+  return v;
+}
+
 /** Converte ISO da API (relógio de Brasília marcado como UTC) para datetime-local. */
 export function formatarDatetimeLocalBrasil(valor?: string | null): string | undefined {
   if (!valor?.trim()) return undefined;

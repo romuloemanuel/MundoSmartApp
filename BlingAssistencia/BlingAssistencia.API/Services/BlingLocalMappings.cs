@@ -251,35 +251,39 @@ internal static class BlingLocalMappings
         local.MarcaNome = os.MarcaNome;
         local.ModeloId = os.ModeloId;
         local.ModeloNome = os.ModeloNome;
-        local.DataEntrada = os.DataEntrada ?? os.Data;
+        local.DataEntrada = HorarioBrasil.ComoUtcParede(os.DataEntrada ?? os.Data);
         local.DataInicioAssistencia = OsSituacaoHelper.DataUtilValida(existente?.DataInicioAssistencia)
             ? existente!.DataInicioAssistencia
-            : (OsSituacaoHelper.DataUtilValida(os.DataInicioAssistencia) ? os.DataInicioAssistencia : null);
+            : (OsSituacaoHelper.DataUtilValida(os.DataInicioAssistencia)
+                ? HorarioBrasil.ComoUtcParede(os.DataInicioAssistencia)
+                : null);
         local.DataPrazoPeca = OsSituacaoHelper.DataUtilValida(os.DataPrazoPeca)
-            ? os.DataPrazoPeca
+            ? HorarioBrasil.ComoUtcParede(os.DataPrazoPeca)
             : existente?.DataPrazoPeca;
         local.DataUltimaAlteracaoSituacao = OsSituacaoHelper.DataUtilValida(existente?.DataUltimaAlteracaoSituacao)
             ? existente!.DataUltimaAlteracaoSituacao
-            : (OsSituacaoHelper.DataUtilValida(os.DataUltimaAlteracaoSituacao) ? os.DataUltimaAlteracaoSituacao : null);
+            : (OsSituacaoHelper.DataUtilValida(os.DataUltimaAlteracaoSituacao)
+                ? HorarioBrasil.ComoUtcParede(os.DataUltimaAlteracaoSituacao)
+                : null);
         local.JustificativasAtraso = (os.JustificativasAtraso ?? [])
             .Where(j => !string.IsNullOrWhiteSpace(j.Texto))
             .Select(j => new JustificativaAtrasoLocal
             {
                 Texto = j.Texto.Trim(),
-                CriadoEm = j.CriadoEm ?? HorarioBrasil.Agora
+                CriadoEm = HorarioBrasil.ComoUtcParede(j.CriadoEm) ?? HorarioBrasil.Agora
             })
             .ToList();
         local.JustificativaAtrasoLegado = null;
-        local.DataPrevistaTermino = os.DataPrevistaTermino ?? os.DataPrevista;
-        local.DataAtualizacao = os.DataAtualizacao ?? HorarioBrasil.Agora;
+        local.DataPrevistaTermino = HorarioBrasil.ComoUtcParede(os.DataPrevistaTermino ?? os.DataPrevista);
+        local.DataAtualizacao = HorarioBrasil.ComoUtcParede(os.DataAtualizacao) ?? HorarioBrasil.Agora;
         local.DataConclusao = OsSituacaoHelper.DataUtilValida(os.DataConclusao)
-            ? os.DataConclusao
+            ? HorarioBrasil.ComoUtcParede(os.DataConclusao)
             : existente?.DataConclusao;
         local.DataSaida = OsSituacaoHelper.DataUtilValida(os.DataSaida)
-            ? os.DataSaida
+            ? HorarioBrasil.ComoUtcParede(os.DataSaida)
             : existente?.DataSaida;
-        local.Data = os.Data ?? local.DataEntrada;
-        local.DataPrevista = os.DataPrevista ?? local.DataPrevistaTermino;
+        local.Data = HorarioBrasil.ComoUtcParede(os.Data) ?? local.DataEntrada;
+        local.DataPrevista = HorarioBrasil.ComoUtcParede(os.DataPrevista) ?? local.DataPrevistaTermino;
         local.EstadoTela = os.EstadoTela;
         local.CondicoesAparelho = os.CondicoesAparelho;
         local.Acessorios = os.Acessorios ?? [];
