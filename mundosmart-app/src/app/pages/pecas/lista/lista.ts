@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { PecasService } from '../../../services/pecas';
 import { AparelhosService } from '../../../services/aparelhos';
 import { PecaEstoque } from '../../../models/bling.models';
@@ -240,7 +241,7 @@ export class PecasLista implements OnInit {
       },
       error: err => {
         this.excluindoId = '';
-        this.erro = err?.error?.erro ?? 'Erro ao excluir peça.';
+        this.erro = this.mensagemErroExcluir(err);
       },
     });
   }
@@ -301,7 +302,6 @@ export class PecasLista implements OnInit {
     return (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
   }
 
-  /** Primeiro modelo (marca + nome) em ordem alfabética — chave de ordenação da coluna Modelos. */
   private chaveOrdenacaoModelo(p: PecaEstoque): string {
     const rotulos = (p.modelosCompativeis ?? [])
       .map(mc => {
@@ -314,5 +314,22 @@ export class PecasLista implements OnInit {
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
     return rotulos[0] ?? '';
+  }
+
+  private mensagemErroExcluir(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      if (err.status === 0) {
+        return 'Sem conexão com a API. Verifique se o backend está rodando.';
+      }
+      if (err.status === 404 || err.status === 405) {
+        return 'Exclusão indisponível na API. Reinicie o backend e tente novamente.';
+      }
+      const body = err.error;
+      if (body && typeof body === 'object' && 'erro' in body && typeof (body as { erro: unknown }).erro === 'string') {
+        return (body as { erro: string }).erro;
+      }
+      if (typeof body === 'string' && body.trim()) return body.trim();
+    }
+    return 'Erro ao excluir peça.';
   }
 }

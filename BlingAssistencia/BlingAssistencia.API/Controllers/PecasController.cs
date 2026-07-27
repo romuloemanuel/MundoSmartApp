@@ -46,7 +46,7 @@ public class PecasController : ControllerBase
         var peca = await _repo.ObterPorIdAsync(id);
         if (peca is null) return NotFound();
 
-        if ((peca.QuantidadeEstoque ?? 0) > 0)
+        if (peca.QuantidadeEstoque > 0)
             return Conflict(new { erro = "Não é possível excluir peça com saldo em estoque. Zere o estoque antes." });
 
         var lotesComSaldo = await _estoque.ListarLotesAsync(id, somenteComSaldo: true);
