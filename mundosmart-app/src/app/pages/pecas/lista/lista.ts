@@ -21,7 +21,7 @@ import { GridPaginator } from '../../../components/grid-paginator/grid-paginator
 import { GridAcao } from '../../../components/grid-acao/grid-acao';
 import { GridPaginationState } from '../../../utils/grid-pagination.state';
 
-type PecaOrdenacaoCampo = 'peca' | 'categoria' | 'preco' | 'estoque';
+type PecaOrdenacaoCampo = 'peca' | 'categoria' | 'modelo' | 'preco' | 'estoque';
 
 @Component({
   selector: 'app-pecas-lista',
@@ -194,6 +194,9 @@ export class PecasLista implements OnInit {
         if (cmp === 0) cmp = a.nome.localeCompare(b.nome, 'pt-BR');
         break;
       }
+      case 'modelo':
+        cmp = this.chaveOrdenacaoModelo(a).localeCompare(this.chaveOrdenacaoModelo(b), 'pt-BR');
+        break;
       case 'preco':
         cmp = (a.valorSugeridoTroca ?? 0) - (b.valorSugeridoTroca ?? 0);
         break;
@@ -264,5 +267,20 @@ export class PecasLista implements OnInit {
 
   private mesmaMarca(a?: string, b?: string): boolean {
     return (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
+  }
+
+  /** Primeiro modelo (marca + nome) em ordem alfabética — chave de ordenação da coluna Modelos. */
+  private chaveOrdenacaoModelo(p: PecaEstoque): string {
+    const rotulos = (p.modelosCompativeis ?? [])
+      .map(mc => {
+        const nome = (mc.modeloNome ?? mc.modeloId).trim();
+        if (!nome) return '';
+        const marca = mc.marcaNome?.trim();
+        return marca ? `${marca} ${nome}` : nome;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+    return rotulos[0] ?? '';
   }
 }

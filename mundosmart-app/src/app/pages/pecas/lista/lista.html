@@ -72,7 +72,11 @@
             Categoria <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('categoria') }}</span>
           </button>
         </th>
-        <th>Modelos</th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('modelo')" (click)="ordenar('modelo')">
+            Modelos <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('modelo') }}</span>
+          </button>
+        </th>
         <th>
           <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('preco')" (click)="ordenar('preco')">
             Pre&ccedil;o <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('preco') }}</span>
