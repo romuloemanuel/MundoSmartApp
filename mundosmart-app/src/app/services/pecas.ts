@@ -23,6 +23,10 @@ export class PecasService {
     return this.http.post<PecaEstoque>(this.apiUrl, peca);
   }
 
+  excluir(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/${id}`);
+  }
+
   consultarDisponibilidade(modeloId: string, pecaId?: string): Observable<DisponibilidadePecaResponse[]> {
     let params = new HttpParams().set('modeloId', modeloId);
     if (pecaId) params = params.set('pecaId', pecaId);

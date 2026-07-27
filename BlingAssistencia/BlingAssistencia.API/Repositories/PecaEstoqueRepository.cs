@@ -12,6 +12,7 @@ public interface IPecaEstoqueRepository
     Task<List<PecaEstoque>> BuscarAsync(string? termo = null);
     Task<PecaEstoque?> ObterPorIdAsync(string id);
     Task<PecaEstoque> SalvarAsync(PecaEstoque peca);
+    Task<bool> ExcluirAsync(string id);
     Task<List<DisponibilidadePecaResponse>> ConsultarDisponibilidadeAsync(string modeloId, string? pecaId = null);
     Task<ModeloServicosValoresResponse> ConsultarServicosValoresAsync(string modeloId);
     Task<ModeloOperacaoResponse> ConsultarOperacaoAsync(string modeloId, long? excluirBlingId = null);
@@ -168,6 +169,17 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
 
         await InvalidarCacheReferenciaAsync();
         return peca;
+    }
+
+    public async Task<bool> ExcluirAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return false;
+
+        var result = await _pecas.DeleteOneAsync(x => x.Id == id);
+        if (result.DeletedCount == 0) return false;
+
+        await InvalidarCacheReferenciaAsync();
+        return true;
     }
 
     public async Task<List<DisponibilidadePecaResponse>> ConsultarDisponibilidadeAsync(

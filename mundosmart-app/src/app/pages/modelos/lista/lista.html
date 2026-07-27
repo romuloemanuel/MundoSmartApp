@@ -76,7 +76,7 @@
         <td>{{ qtdCompativeis(m) }}</td>
         <td class="grid-acoes-cell">
           <div class="grid-acoes">
-            <app-grid-acao tipo="editar" (acao)="editar(m.id!)" />
+            <app-grid-acao tipo="editar" [rotaNovaAba]="['/modelos', m.id!]" (acao)="editar(m.id!)" />
           </div>
         </td>
       </tr>

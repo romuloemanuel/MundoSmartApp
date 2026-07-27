@@ -135,7 +135,7 @@
         <td>{{ valorExibido(o) | currency:'BRL' }}</td>
         <td class="grid-acoes-cell">
           <div class="grid-acoes orc-grid-acoes">
-            <app-grid-acao tipo="editar" (acao)="editar(o.id!)" />
+            <app-grid-acao tipo="editar" [rotaNovaAba]="['/orcamentos', o.id!]" (acao)="editar(o.id!)" />
             <app-grid-acao
               tipo="imprimir"
               titulo="Imprimir pré-orçamento"

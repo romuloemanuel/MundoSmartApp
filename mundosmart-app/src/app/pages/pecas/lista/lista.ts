@@ -48,6 +48,7 @@ export class PecasLista implements OnInit {
   marcasCatalogo: string[] = [];
   carregando = false;
   erro = '';
+  excluindoId = '';
   readonly grid = new GridPaginationState();
   readonly nivelClasses = ESTOQUE_NIVEL_CLASSES;
 
@@ -222,6 +223,37 @@ export class PecasLista implements OnInit {
 
   editar(id: string): void {
     this.router.navigate(['/pecas', id]);
+  }
+
+  excluir(p: PecaEstoque): void {
+    if (!p.id || this.excluindoId) return;
+
+    const rotulo = p.nome?.trim() || inferirCategoriaPeca(p.nome, p.categoria);
+    if (!confirm(`Excluir a peça "${rotulo}"?\n\nO cadastro será removido permanentemente.`)) return;
+
+    this.excluindoId = p.id;
+    this.erro = '';
+    this.service.excluir(p.id).subscribe({
+      next: () => {
+        this.excluindoId = '';
+        this.carregar();
+      },
+      error: err => {
+        this.excluindoId = '';
+        this.erro = err?.error?.erro ?? 'Erro ao excluir peça.';
+      },
+    });
+  }
+
+  tituloExcluirPeca(p: PecaEstoque): string {
+    const qtd = p.quantidadeEstoque ?? 0;
+    if (this.excluindoId === p.id) return 'Excluindo…';
+    if (qtd > 0) return `Não é possível excluir: ${qtd} un. em estoque`;
+    return 'Excluir peça';
+  }
+
+  podeExcluirPeca(p: PecaEstoque): boolean {
+    return !!p.id && this.excluindoId !== p.id && (p.quantidadeEstoque ?? 0) <= 0;
   }
 
   modelosDaPeca(p: PecaEstoque): string[] {

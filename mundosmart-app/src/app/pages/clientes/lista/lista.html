@@ -39,7 +39,7 @@
         <td>{{ c.email || '-' }}</td>
         <td class="grid-acoes-cell">
           <div class="grid-acoes">
-            <app-grid-acao tipo="editar" (acao)="editar(c.id!)" />
+            <app-grid-acao tipo="editar" [rotaNovaAba]="['/clientes', c.id!]" (acao)="editar(c.id!)" />
           </div>
         </td>
       </tr>

@@ -13,9 +13,14 @@ import { posicionarPopoverFixo } from '../../utils/popover-posicao.util';
   imports: [CommonModule, GridAcao],
   template: `
     <div class="grid-acoes-os">
-      <app-grid-acao tipo="ver" (acao)="ver.emit()" />
+      <app-grid-acao
+        tipo="ver"
+        [rotaNovaAba]="rotaVer"
+        (acao)="ver.emit()"
+      />
       <app-grid-acao
         tipo="editar"
+        [rotaNovaAba]="rotaEditar"
         (acao)="editar.emit()"
         [disabled]="editarDesabilitado"
         [titulo]="tituloEditar"
@@ -150,6 +155,15 @@ export class GridAcoesOs implements OnDestroy {
   readonly opcoesImpressao = OS_IMPRESSAO_OPCOES;
   menuAberto = false;
   menuStyle: Record<string, string> = {};
+
+  get rotaVer(): unknown[] | null {
+    return this.os.id != null ? ['/ordens-servico', this.os.id] : null;
+  }
+
+  get rotaEditar(): unknown[] | null {
+    if (this.os.id == null || this.editarDesabilitado) return null;
+    return ['/ordens-servico', this.os.id, 'editar'];
+  }
 
   private readonly onScroll = () => this.fecharMenu();
 

@@ -40,6 +40,23 @@ public class PecasController : ControllerBase
         return Ok(salva);
     }
 
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Excluir(string id)
+    {
+        var peca = await _repo.ObterPorIdAsync(id);
+        if (peca is null) return NotFound();
+
+        if ((peca.QuantidadeEstoque ?? 0) > 0)
+            return Conflict(new { erro = "Não é possível excluir peça com saldo em estoque. Zere o estoque antes." });
+
+        var lotesComSaldo = await _estoque.ListarLotesAsync(id, somenteComSaldo: true);
+        if (lotesComSaldo.Count > 0)
+            return Conflict(new { erro = "Não é possível excluir peça com lotes que ainda possuem saldo." });
+
+        var ok = await _repo.ExcluirAsync(id);
+        return ok ? NoContent() : NotFound();
+    }
+
     /// <summary>
     /// Consulta disponibilidade de peças compatíveis com um modelo.
     /// Retorna estoque, quantas OS em execução consomem a peça e valores.

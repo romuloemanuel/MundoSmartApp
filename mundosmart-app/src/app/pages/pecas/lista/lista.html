@@ -119,7 +119,13 @@
         </td>
         <td class="grid-acoes-cell">
           <div class="grid-acoes">
-            <app-grid-acao tipo="editar" (acao)="editar(p.id!)" />
+            <app-grid-acao tipo="editar" [rotaNovaAba]="['/pecas', p.id!]" (acao)="editar(p.id!)" />
+            <app-grid-acao
+              tipo="excluir"
+              [disabled]="!podeExcluirPeca(p)"
+              [titulo]="tituloExcluirPeca(p)"
+              (acao)="excluir(p)"
+            />
           </div>
         </td>
       </tr>
