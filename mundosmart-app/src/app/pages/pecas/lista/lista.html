@@ -18,6 +18,24 @@
       (keyup.enter)="carregar()"
     />
     <select
+      class="pecas-filtro-select"
+      [(ngModel)]="filtroCategoria"
+      name="filtroCategoria"
+      (ngModelChange)="onFiltroLocalChange()"
+    >
+      <option value="">Todas categorias</option>
+      <option *ngFor="let c of categoriasFiltro" [value]="c">{{ c }}</option>
+    </select>
+    <select
+      class="pecas-filtro-select"
+      [(ngModel)]="filtroMarca"
+      name="filtroMarca"
+      (ngModelChange)="onFiltroLocalChange()"
+    >
+      <option value="">Marca do aparelho</option>
+      <option *ngFor="let m of marcasDisponiveis" [value]="m">{{ m }}</option>
+    </select>
+    <select
       class="pecas-filtro-nivel"
       [(ngModel)]="filtroNivel"
       name="filtroNivel"
@@ -44,24 +62,37 @@
   <table class="data-grid" *ngIf="!carregando && pecasFiltradas.length > 0">
     <thead>
       <tr>
-        <th>Pe&ccedil;a</th>
-        <th>Fornecedor</th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('peca')" (click)="ordenar('peca')">
+            Pe&ccedil;a <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('peca') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('categoria')" (click)="ordenar('categoria')">
+            Categoria <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('categoria') }}</span>
+          </button>
+        </th>
         <th>Modelos</th>
-        <th>Pre&ccedil;o</th>
-        <th>Estoque</th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('preco')" (click)="ordenar('preco')">
+            Pre&ccedil;o <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('preco') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('estoque')" (click)="ordenar('estoque')">
+            Estoque <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('estoque') }}</span>
+          </button>
+        </th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       <tr *ngFor="let p of pecasPaginadas">
         <td>
-          <strong>{{ inferirCategoria(p) }}</strong>
-          <div *ngIf="p.nome && p.nome.trim().toLowerCase() !== inferirCategoria(p).toLowerCase()" class="campo-hint">
-            {{ p.nome }}
-          </div>
+          <strong>{{ p.nome }}</strong>
           <div *ngIf="p.descricao" class="campo-hint">{{ p.descricao }}</div>
         </td>
-        <td>{{ p.marcaPeca || '—' }}</td>
+        <td>{{ inferirCategoria(p) }}</td>
         <td class="pecas-modelos-col" [title]="tooltipModelosCompativeis(p)">
           <ng-container *ngIf="modelosDaPeca(p).length; else semModelo">
             {{ modelosDaPeca(p).join(', ') }}
@@ -93,6 +124,6 @@
 
   <p *ngIf="!carregando && pecas.length === 0 && !erro">Nenhuma pe&ccedil;a cadastrada.</p>
   <p *ngIf="!carregando && pecas.length > 0 && pecasFiltradas.length === 0 && !erro">
-    Nenhuma pe&ccedil;a neste n&iacute;vel de estoque.
+    Nenhuma pe&ccedil;a com os filtros selecionados.
   </p>
 </div>
