@@ -48,6 +48,50 @@ public class EstoqueController : ControllerBase
         [FromQuery] bool somenteComSaldo = false) =>
         Ok(await _estoque.ListarLotesAsync(pecaId, somenteComSaldo));
 
+    [HttpPut("lotes/{id}")]
+    public async Task<IActionResult> AtualizarLote(string id, [FromBody] AtualizarLoteEstoqueRequest request)
+    {
+        try
+        {
+            return Ok(await _estoque.AtualizarLoteAsync(id, request));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
+    [HttpDelete("lotes/{id}")]
+    public async Task<IActionResult> ExcluirLote(string id)
+    {
+        try
+        {
+            await _estoque.ExcluirLoteAsync(id);
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { erro = ex.Message });
+        }
+    }
+
+    [HttpPost("pedidos/{id}/itens")]
+    public async Task<IActionResult> AdicionarItemPedido(string id, [FromBody] ItemPedidoCompraRequest item)
+    {
+        try
+        {
+            return Ok(await _estoque.AdicionarItemPedidoAsync(id, item));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
     [HttpGet("movimentacoes")]
     public async Task<IActionResult> ListarMovimentacoes(
         [FromQuery] string? tipo,

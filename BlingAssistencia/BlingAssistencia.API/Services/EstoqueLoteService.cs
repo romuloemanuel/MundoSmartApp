@@ -15,6 +15,11 @@ public interface IEstoqueLoteService
     Task<PedidoCompraDetalheResponse?> ObterPedidoAsync(string id);
     Task<PedidoCompraDetalheResponse> RegistrarPedidoAsync(RegistrarPedidoCompraRequest request);
     Task<List<LoteEstoque>> ListarLotesAsync(string? pecaId = null, bool somenteComSaldo = false);
+    Task<LoteEstoque> AtualizarLoteAsync(string id, AtualizarLoteEstoqueRequest request);
+    /// <summary>Inclui um novo item (lote) em um pedido de compra já existente.</summary>
+    Task<LoteEstoque> AdicionarItemPedidoAsync(string pedidoId, ItemPedidoCompraRequest item);
+    /// <summary>Remove um lote do pedido — só se ainda não houver saída.</summary>
+    Task ExcluirLoteAsync(string id);
     Task<List<MovimentacaoEstoque>> ListarMovimentacoesAsync(
         string? tipo = null, DateTime? inicio = null, DateTime? fim = null, int limite = 200);
     Task<List<MovimentacaoEstoque>> RegistrarSaidaAsync(RegistrarSaidaEstoqueRequest request);
@@ -300,6 +305,267 @@ public class EstoqueLoteService : IEstoqueLoteService
             .ThenBy(x => x.CriadoEm)
             .Limit(500)
             .ToListAsync();
+    }
+
+    public async Task<LoteEstoque> AtualizarLoteAsync(string id, AtualizarLoteEstoqueRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("Id do lote é obrigatório.");
+        if (request is null)
+            throw new ArgumentException("Dados do lote são obrigatórios.");
+
+        var lote = await _lotes.Find(x => x.Id == id).FirstOrDefaultAsync()
+            ?? throw new ArgumentException("Lote não encontrado.");
+
+        var qtdInicialAnterior = lote.QuantidadeInicial;
+        var qtdRestanteAnterior = lote.QuantidadeRestante;
+        var consumido = Math.Max(0, qtdInicialAnterior - qtdRestanteAnterior);
+        var custoAnterior = lote.CustoUnitario;
+        var alterouQtd = false;
+        var alterouCusto = false;
+
+        if (request.Fornecedor != null)
+        {
+            var forn = request.Fornecedor.Trim();
+            if (string.IsNullOrWhiteSpace(forn))
+                throw new ArgumentException("Fornecedor não pode ficar vazio.");
+            lote.Fornecedor = forn;
+        }
+
+        if (request.MarcaPeca != null)
+            lote.MarcaPeca = string.IsNullOrWhiteSpace(request.MarcaPeca) ? null : request.MarcaPeca.Trim();
+
+        if (request.CustoUnitario.HasValue)
+        {
+            if (request.CustoUnitario.Value < 0)
+                throw new ArgumentException("Custo unitário não pode ser negativo.");
+            lote.CustoUnitario = request.CustoUnitario.Value;
+            alterouCusto = lote.CustoUnitario != custoAnterior;
+        }
+
+        if (request.GarantiaMeses.HasValue)
+        {
+            var meses = request.GarantiaMeses.Value;
+            if (meses <= 0)
+                throw new ArgumentException("Garantia em meses deve ser maior que zero.");
+            lote.GarantiaMeses = meses;
+            lote.DataVencimentoGarantia = lote.DataEntrada.AddMonths(meses);
+        }
+
+        if (request.QuantidadeInicial.HasValue)
+        {
+            var novaInicial = request.QuantidadeInicial.Value;
+            if (novaInicial <= 0)
+                throw new ArgumentException("Quantidade inicial deve ser maior que zero.");
+            if (novaInicial < consumido)
+                throw new ArgumentException(
+                    $"Não é possível reduzir para {novaInicial}: já saíram {consumido} unidade(s) deste lote.");
+
+            var delta = novaInicial - qtdInicialAnterior;
+            if (delta != 0)
+            {
+                lote.QuantidadeInicial = novaInicial;
+                lote.QuantidadeRestante = qtdRestanteAnterior + delta;
+                alterouQtd = true;
+
+                if (!string.IsNullOrWhiteSpace(lote.Cor) && !string.IsNullOrWhiteSpace(lote.ModeloId))
+                {
+                    if (delta > 0)
+                    {
+                        await IncrementarEstoqueCorModeloAsync(
+                            lote.PecaId, lote.ModeloId, lote.ModeloNome, lote.Cor, delta);
+                    }
+                    else
+                    {
+                        await DecrementarEstoqueCorModeloAsync(
+                            lote.PecaId, lote.ModeloId, lote.ModeloNome, lote.Cor, -delta);
+                    }
+                }
+            }
+        }
+
+        await _lotes.ReplaceOneAsync(x => x.Id == lote.Id, lote);
+
+        if (alterouQtd || alterouCusto)
+        {
+            var filtroEntrada = Builders<MovimentacaoEstoque>.Filter.Eq(x => x.LoteId, lote.Id)
+                & Builders<MovimentacaoEstoque>.Filter.Eq(x => x.Tipo, "entrada");
+            var entrada = await _movimentacoes.Find(filtroEntrada).SortBy(x => x.CriadoEm).FirstOrDefaultAsync();
+            if (entrada is not null)
+            {
+                entrada.Quantidade = lote.QuantidadeInicial;
+                entrada.CustoUnitario = lote.CustoUnitario;
+                entrada.MarcaPeca = lote.MarcaPeca;
+                await _movimentacoes.ReplaceOneAsync(x => x.Id == entrada.Id, entrada);
+            }
+            else if (alterouQtd)
+            {
+                var delta = lote.QuantidadeInicial - qtdInicialAnterior;
+                if (delta != 0)
+                {
+                    await _movimentacoes.InsertOneAsync(new MovimentacaoEstoque
+                    {
+                        Tipo = "ajuste",
+                        PecaId = lote.PecaId,
+                        PecaNome = lote.PecaNome,
+                        MarcaPeca = lote.MarcaPeca,
+                        ModeloId = lote.ModeloId,
+                        ModeloNome = lote.ModeloNome,
+                        Cor = lote.Cor,
+                        LoteId = lote.Id,
+                        PedidoCompraId = lote.PedidoCompraId,
+                        NumeroPedido = lote.NumeroPedido,
+                        Quantidade = Math.Abs(delta),
+                        CustoUnitario = lote.CustoUnitario,
+                        Observacao = delta > 0
+                            ? $"Ajuste (+) lote pedido {lote.NumeroPedido}"
+                            : $"Ajuste (−) lote pedido {lote.NumeroPedido}",
+                        Data = HorarioBrasil.Agora,
+                        CriadoEm = HorarioBrasil.Agora,
+                    });
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(lote.PedidoCompraId))
+            await RecalcularTotaisPedidoAsync(lote.PedidoCompraId);
+
+        await SincronizarQuantidadePecaAsync(lote.PecaId);
+        await _pecasRepo.InvalidarCacheReferenciaAsync();
+
+        return lote;
+    }
+
+    public async Task<LoteEstoque> AdicionarItemPedidoAsync(string pedidoId, ItemPedidoCompraRequest item)
+    {
+        if (string.IsNullOrWhiteSpace(pedidoId))
+            throw new ArgumentException("Id do pedido é obrigatório.");
+        if (item is null)
+            throw new ArgumentException("Item é obrigatório.");
+
+        var pedido = await _pedidos.Find(x => x.Id == pedidoId).FirstOrDefaultAsync()
+            ?? throw new ArgumentException("Pedido não encontrado.");
+
+        ValidarItemPedido(item);
+
+        var peca = await _pecasRepo.ObterPorIdAsync(item.PecaId)
+            ?? throw new ArgumentException($"Peça {item.PecaId} não encontrada.");
+
+        var qtd = item.Quantidade;
+        var categoria = InferirCategoriaPeca(peca);
+        var cor = string.IsNullOrWhiteSpace(item.Cor) ? null : item.Cor.Trim();
+        if (categoria == "Tampa traseira" || categoria == "Vidro Traseiro")
+        {
+            if (string.IsNullOrWhiteSpace(item.ModeloId))
+                throw new ArgumentException($"Informe o modelo da {categoria} ({peca.Nome}).");
+            if (string.IsNullOrWhiteSpace(cor))
+                throw new ArgumentException($"Informe a cor da {categoria} para o modelo ({peca.Nome}).");
+        }
+
+        var garantiaMeses = item.GarantiaMeses > 0 ? item.GarantiaMeses : 12;
+        var dataPedido = pedido.DataPedido;
+        var vencimento = dataPedido.AddMonths(garantiaMeses);
+
+        var lote = new LoteEstoque
+        {
+            PedidoCompraId = pedido.Id!,
+            NumeroPedido = pedido.NumeroPedido,
+            Fornecedor = string.IsNullOrWhiteSpace(item.Fornecedor)
+                ? pedido.Fornecedor
+                : item.Fornecedor.Trim(),
+            PecaId = peca.Id!,
+            PecaNome = peca.Nome,
+            MarcaPeca = string.IsNullOrWhiteSpace(item.MarcaPeca) ? peca.MarcaPeca : item.MarcaPeca.Trim(),
+            ModeloId = string.IsNullOrWhiteSpace(item.ModeloId) ? null : item.ModeloId.Trim(),
+            ModeloNome = ResolverModeloNome(peca, item.ModeloId, item.ModeloNome),
+            Cor = cor,
+            QuantidadeInicial = qtd,
+            QuantidadeRestante = qtd,
+            CustoUnitario = item.CustoUnitario,
+            GarantiaMeses = garantiaMeses,
+            DataEntrada = dataPedido,
+            DataVencimentoGarantia = vencimento,
+            CriadoEm = HorarioBrasil.Agora,
+        };
+
+        await _lotes.InsertOneAsync(lote);
+
+        await _movimentacoes.InsertOneAsync(new MovimentacaoEstoque
+        {
+            Tipo = "entrada",
+            PecaId = lote.PecaId,
+            PecaNome = lote.PecaNome,
+            MarcaPeca = lote.MarcaPeca,
+            ModeloId = lote.ModeloId,
+            ModeloNome = lote.ModeloNome,
+            Cor = lote.Cor,
+            LoteId = lote.Id,
+            PedidoCompraId = pedido.Id,
+            NumeroPedido = pedido.NumeroPedido,
+            Quantidade = lote.QuantidadeInicial,
+            CustoUnitario = lote.CustoUnitario,
+            Observacao = string.IsNullOrWhiteSpace(lote.Cor)
+                ? $"Entrada pedido {pedido.NumeroPedido} (item incluído)"
+                : $"Entrada pedido {pedido.NumeroPedido} (item incluído) — {lote.Cor}",
+            Data = dataPedido,
+            CriadoEm = HorarioBrasil.Agora,
+        });
+
+        if (!string.IsNullOrWhiteSpace(cor) && !string.IsNullOrWhiteSpace(item.ModeloId))
+        {
+            await IncrementarEstoqueCorModeloAsync(
+                item.PecaId, item.ModeloId, item.ModeloNome, cor, qtd);
+        }
+
+        await RecalcularTotaisPedidoAsync(pedido.Id!);
+        await SincronizarQuantidadePecaAsync(lote.PecaId);
+        await _pecasRepo.InvalidarCacheReferenciaAsync();
+
+        return lote;
+    }
+
+    public async Task ExcluirLoteAsync(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            throw new ArgumentException("Id do lote é obrigatório.");
+
+        var lote = await _lotes.Find(x => x.Id == id).FirstOrDefaultAsync()
+            ?? throw new ArgumentException("Lote não encontrado.");
+
+        if (lote.QuantidadeRestante != lote.QuantidadeInicial)
+            throw new InvalidOperationException(
+                "Não é possível excluir: já houve saída deste lote. Ajuste a quantidade ou estorne as saídas.");
+
+        if (lote.QuantidadeRestante > 0
+            && !string.IsNullOrWhiteSpace(lote.Cor)
+            && !string.IsNullOrWhiteSpace(lote.ModeloId))
+        {
+            await DecrementarEstoqueCorModeloAsync(
+                lote.PecaId, lote.ModeloId, lote.ModeloNome, lote.Cor, lote.QuantidadeRestante);
+        }
+
+        await _movimentacoes.DeleteManyAsync(
+            Builders<MovimentacaoEstoque>.Filter.Eq(x => x.LoteId, lote.Id));
+
+        await _lotes.DeleteOneAsync(x => x.Id == lote.Id);
+
+        if (!string.IsNullOrWhiteSpace(lote.PedidoCompraId))
+            await RecalcularTotaisPedidoAsync(lote.PedidoCompraId);
+
+        await SincronizarQuantidadePecaAsync(lote.PecaId);
+        await _pecasRepo.InvalidarCacheReferenciaAsync();
+    }
+
+    private async Task RecalcularTotaisPedidoAsync(string pedidoId)
+    {
+        var pedido = await _pedidos.Find(x => x.Id == pedidoId).FirstOrDefaultAsync();
+        if (pedido is null) return;
+
+        var lotes = await _lotes.Find(x => x.PedidoCompraId == pedidoId).ToListAsync();
+        pedido.TotalItens = lotes.Count;
+        pedido.TotalUnidades = lotes.Sum(l => l.QuantidadeInicial);
+        pedido.ValorTotal = lotes.Sum(l => l.CustoUnitario * l.QuantidadeInicial);
+        await _pedidos.ReplaceOneAsync(x => x.Id == pedidoId, pedido);
     }
 
     public async Task<List<MovimentacaoEstoque>> ListarMovimentacoesAsync(
@@ -813,6 +1079,18 @@ public class EstoqueLoteService : IEstoqueLoteService
             throw new ArgumentException("Fornecedor é obrigatório.");
         if (request.Itens is null || request.Itens.Count == 0)
             throw new ArgumentException("Informe ao menos um item no pedido.");
+        foreach (var item in request.Itens)
+            ValidarItemPedido(item);
+    }
+
+    private static void ValidarItemPedido(ItemPedidoCompraRequest item)
+    {
+        if (string.IsNullOrWhiteSpace(item.PecaId))
+            throw new ArgumentException("Peça do item é obrigatória.");
+        if (item.Quantidade <= 0)
+            throw new ArgumentException("Quantidade do item deve ser maior que zero.");
+        if (item.CustoUnitario < 0)
+            throw new ArgumentException("Custo unitário não pode ser negativo.");
     }
 
     private async Task<string> GerarNumeroPedidoAsync(DateTime dataPedido)

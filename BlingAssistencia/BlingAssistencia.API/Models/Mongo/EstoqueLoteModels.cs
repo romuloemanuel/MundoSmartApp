@@ -197,6 +197,20 @@ public class RegistrarSaidaEstoqueRequest
     public string? Observacao { get; set; }
 }
 
+/// <summary>Altera metadados e/ou quantidade de um lote já lançado (pedido de compra).</summary>
+public class AtualizarLoteEstoqueRequest
+{
+    public string? Fornecedor { get; set; }
+    public string? MarcaPeca { get; set; }
+    public decimal? CustoUnitario { get; set; }
+    public int? GarantiaMeses { get; set; }
+    /// <summary>
+    /// Nova quantidade inicial do lote.
+    /// Deve ser ≥ unidades já saídas (inicial − restante).
+    /// </summary>
+    public int? QuantidadeInicial { get; set; }
+}
+
 public class RegistrarEstornoOsRequest
 {
     public string PecaId { get; set; } = string.Empty;

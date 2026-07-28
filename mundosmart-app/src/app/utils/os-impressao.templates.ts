@@ -188,6 +188,7 @@ const TESTES_FUNCIONAIS_OS: string[] = [
   'Vibracall',
   'Microfones',
   'Rede / Wi-Fi',
+  'NFC',
   'Ligação',
   'Câmera traseira / flash',
   'Carregamento',

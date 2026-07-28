@@ -98,6 +98,14 @@ export interface RegistrarSaidaEstoqueRequest {
   observacao?: string;
 }
 
+export interface AtualizarLoteEstoqueRequest {
+  fornecedor?: string;
+  marcaPeca?: string;
+  custoUnitario?: number;
+  garantiaMeses?: number;
+  quantidadeInicial?: number;
+}
+
 export interface PedidoCompraDetalhe {
   pedido: PedidoCompraEstoque;
   lotes: LoteEstoque[];

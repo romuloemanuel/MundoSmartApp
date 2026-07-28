@@ -9,6 +9,8 @@ import {
   LoteEstoque,
   RegistrarPedidoCompraRequest,
   RegistrarSaidaEstoqueRequest,
+  AtualizarLoteEstoqueRequest,
+  ItemPedidoCompraRequest,
   ReposicaoSemanalResponse,
   RelatorioReposicaoParams,
   RelatorioReposicaoHistorico,
@@ -50,6 +52,18 @@ export class EstoqueService {
     if (pecaId) params = params.set('pecaId', pecaId);
     if (somenteComSaldo) params = params.set('somenteComSaldo', 'true');
     return this.http.get<LoteEstoque[]>(`${this.base}/lotes`, { params });
+  }
+
+  atualizarLote(id: string, body: AtualizarLoteEstoqueRequest): Observable<LoteEstoque> {
+    return this.http.put<LoteEstoque>(`${this.base}/lotes/${id}`, body);
+  }
+
+  adicionarItemPedido(pedidoId: string, item: ItemPedidoCompraRequest): Observable<LoteEstoque> {
+    return this.http.post<LoteEstoque>(`${this.base}/pedidos/${pedidoId}/itens`, item);
+  }
+
+  excluirLote(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/lotes/${id}`);
   }
 
   listarMovimentacoes(tipo?: string, inicio?: string, fim?: string): Observable<MovimentacaoEstoque[]> {

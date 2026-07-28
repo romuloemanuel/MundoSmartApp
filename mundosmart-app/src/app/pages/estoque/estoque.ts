@@ -243,6 +243,22 @@ interface EstoqueGrupoMarca {
     }
     .reposicao-alerta { color: #b45309; font-weight: 600; }
     .detalhe-pedido { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+    .lote-edit-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+      padding: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+    .lote-edit-acoes {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+      flex-wrap: wrap;
+    }
     .estoque-resumo {
       display: flex;
       flex-wrap: wrap;
@@ -415,6 +431,19 @@ export class EstoquePage implements OnInit {
 
   pedidos: PedidoCompraEstoque[] = [];
   pedidoDetalhe?: PedidoCompraDetalhe;
+  loteEditandoId = '';
+  loteEdit: {
+    fornecedor: string;
+    marcaPeca: string;
+    custoUnitario: number;
+    garantiaMeses: number;
+    quantidadeInicial: number;
+    unidadesJaSaidas: number;
+  } | null = null;
+  salvandoLote = false;
+  excluindoLoteId = '';
+  incluindoItem = false;
+  itemPedidoExtra: ItemPedidoCompraUi = this.itemVazio();
   movimentacoes: MovimentacaoEstoque[] = [];
   relatorio?: ReposicaoSemanalResponse;
   financeiro?: RelatorioFinanceiroEstoque;
@@ -547,6 +576,11 @@ export class EstoquePage implements OnInit {
     this.erro = '';
     this.sucesso = '';
     this.pedidoDetalhe = undefined;
+    this.loteEditandoId = '';
+    this.loteEdit = null;
+    this.excluindoLoteId = '';
+    this.incluindoItem = false;
+    this.itemPedidoExtra = this.itemVazio();
     this.pecaLotesExpandida = '';
     this.lotesPeca = [];
 
@@ -924,9 +958,203 @@ export class EstoquePage implements OnInit {
   }
 
   verPedido(id: string): void {
+    this.loteEditandoId = '';
+    this.loteEdit = null;
+    this.excluindoLoteId = '';
+    this.incluindoItem = false;
+    this.itemPedidoExtra = this.itemVazio();
+    this.carregarPecas();
+    this.carregarModelosPedido();
     this.service.obterPedido(id).subscribe({
       next: d => { this.pedidoDetalhe = d; },
       error: () => { this.erro = 'Erro ao carregar pedido.'; },
+    });
+  }
+
+  iniciarEdicaoLote(l: LoteEstoque): void {
+    if (!l.id) return;
+    this.erro = '';
+    this.sucesso = '';
+    this.loteEditandoId = l.id;
+    const jaSaidas = Math.max(0, (l.quantidadeInicial ?? 0) - (l.quantidadeRestante ?? 0));
+    this.loteEdit = {
+      fornecedor: l.fornecedor || '',
+      marcaPeca: l.marcaPeca || '',
+      custoUnitario: l.custoUnitario ?? 0,
+      garantiaMeses: l.garantiaMeses ?? 12,
+      quantidadeInicial: l.quantidadeInicial ?? 0,
+      unidadesJaSaidas: jaSaidas,
+    };
+  }
+
+  cancelarEdicaoLote(): void {
+    this.loteEditandoId = '';
+    this.loteEdit = null;
+  }
+
+  salvarEdicaoLote(): void {
+    if (!this.loteEditandoId || !this.loteEdit || this.salvandoLote) return;
+
+    const edit = this.loteEdit;
+    if (!edit.fornecedor.trim()) {
+      this.erro = 'Informe o fornecedor do lote.';
+      return;
+    }
+    if (edit.quantidadeInicial <= 0) {
+      this.erro = 'Quantidade inicial deve ser maior que zero.';
+      return;
+    }
+    if (edit.quantidadeInicial < edit.unidadesJaSaidas) {
+      this.erro = `Não é possível reduzir abaixo de ${edit.unidadesJaSaidas} (já saíram do lote).`;
+      return;
+    }
+    if (edit.garantiaMeses <= 0) {
+      this.erro = 'Garantia em meses deve ser maior que zero.';
+      return;
+    }
+    if (edit.custoUnitario < 0) {
+      this.erro = 'Custo unitário não pode ser negativo.';
+      return;
+    }
+
+    this.salvandoLote = true;
+    this.erro = '';
+    this.sucesso = '';
+    const pedidoId = this.pedidoDetalhe?.pedido.id;
+
+    this.service.atualizarLote(this.loteEditandoId, {
+      fornecedor: edit.fornecedor.trim(),
+      marcaPeca: edit.marcaPeca.trim() || undefined,
+      custoUnitario: edit.custoUnitario,
+      garantiaMeses: edit.garantiaMeses,
+      quantidadeInicial: edit.quantidadeInicial,
+    }).subscribe({
+      next: () => {
+        this.salvandoLote = false;
+        this.loteEditandoId = '';
+        this.loteEdit = null;
+        this.sucesso = 'Lote atualizado.';
+        if (pedidoId) this.verPedido(pedidoId);
+        this.carregarPedidos();
+      },
+      error: err => {
+        this.salvandoLote = false;
+        this.erro = err?.error?.erro
+          ?? (err?.status === 404
+            ? 'Edição de lote indisponível. Reinicie a API e tente novamente.'
+            : 'Erro ao atualizar lote.');
+      },
+    });
+  }
+
+  lotePodeExcluir(l: LoteEstoque): boolean {
+    return !!l.id
+      && (l.quantidadeRestante ?? 0) === (l.quantidadeInicial ?? 0)
+      && this.excluindoLoteId !== l.id;
+  }
+
+  tituloExcluirLote(l: LoteEstoque): string {
+    if (this.excluindoLoteId === l.id) return 'Excluindo…';
+    if ((l.quantidadeRestante ?? 0) !== (l.quantidadeInicial ?? 0)) {
+      return 'Não é possível excluir: já houve saída deste lote';
+    }
+    return 'Excluir item do pedido';
+  }
+
+  excluirLotePedido(l: LoteEstoque): void {
+    if (!l.id || !this.lotePodeExcluir(l)) return;
+    const rotulo = l.pecaNome || 'item';
+    if (!confirm(`Excluir o item "${rotulo}" deste pedido?\n\nO lote e a entrada de estoque serão removidos.`)) {
+      return;
+    }
+
+    this.excluindoLoteId = l.id;
+    this.erro = '';
+    this.sucesso = '';
+    const pedidoId = this.pedidoDetalhe?.pedido.id;
+
+    this.service.excluirLote(l.id).subscribe({
+      next: () => {
+        this.excluindoLoteId = '';
+        this.sucesso = 'Item excluído do pedido.';
+        if (pedidoId) this.verPedido(pedidoId);
+        this.carregarPedidos();
+      },
+      error: err => {
+        this.excluindoLoteId = '';
+        this.erro = err?.error?.erro ?? 'Erro ao excluir item do pedido.';
+      },
+    });
+  }
+
+  abrirIncluirItemPedido(): void {
+    this.erro = '';
+    this.sucesso = '';
+    this.loteEditandoId = '';
+    this.loteEdit = null;
+    this.incluindoItem = true;
+    this.itemPedidoExtra = this.itemVazio();
+    if (this.pedidoDetalhe?.pedido.fornecedor) {
+      this.itemPedidoExtra.fornecedor = this.pedidoDetalhe.pedido.fornecedor;
+    }
+    this.carregarPecas();
+    this.carregarModelosPedido();
+  }
+
+  cancelarIncluirItemPedido(): void {
+    this.incluindoItem = false;
+    this.itemPedidoExtra = this.itemVazio();
+  }
+
+  salvarIncluirItemPedido(): void {
+    const pedidoId = this.pedidoDetalhe?.pedido.id;
+    if (!pedidoId || this.salvandoLote) return;
+
+    const item = this.itemPedidoExtra;
+    if (!item.categoria?.trim() || !item.modeloId?.trim() || !item.pecaId?.trim()) {
+      this.erro = 'Informe categoria, modelo e peça do novo item.';
+      return;
+    }
+    if (this.itemUsaCor(item) && !item.cor?.trim()) {
+      this.erro = 'Informe a cor do item.';
+      return;
+    }
+    if ((item.quantidade ?? 0) <= 0) {
+      this.erro = 'Quantidade deve ser maior que zero.';
+      return;
+    }
+    if ((item.custoUnitario ?? 0) < 0) {
+      this.erro = 'Custo unitário não pode ser negativo.';
+      return;
+    }
+
+    this.salvandoLote = true;
+    this.erro = '';
+    this.sucesso = '';
+
+    this.service.adicionarItemPedido(pedidoId, {
+      pecaId: item.pecaId,
+      fornecedor: item.fornecedor?.trim() || this.pedidoDetalhe?.pedido.fornecedor,
+      marcaPeca: item.marcaPeca?.trim() || undefined,
+      modeloId: item.modeloId,
+      modeloNome: item.modeloNome,
+      cor: item.cor?.trim() || undefined,
+      quantidade: item.quantidade,
+      custoUnitario: item.custoUnitario,
+      garantiaMeses: item.garantiaMeses > 0 ? item.garantiaMeses : 12,
+    }).subscribe({
+      next: () => {
+        this.salvandoLote = false;
+        this.incluindoItem = false;
+        this.itemPedidoExtra = this.itemVazio();
+        this.sucesso = 'Item incluído no pedido.';
+        this.verPedido(pedidoId);
+        this.carregarPedidos();
+      },
+      error: err => {
+        this.salvandoLote = false;
+        this.erro = err?.error?.erro ?? 'Erro ao incluir item no pedido.';
+      },
     });
   }
 
