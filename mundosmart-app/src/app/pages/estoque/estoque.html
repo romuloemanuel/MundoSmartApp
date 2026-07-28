@@ -16,6 +16,7 @@
     <button type="button" [class.ativa]="aba === 'saidas'" (click)="irPara('saidas')">Sa&iacute;das</button>
     <button type="button" [class.ativa]="aba === 'nova-saida'" (click)="irPara('nova-saida')">+ Registrar sa&iacute;da</button>
     <button type="button" [class.ativa]="aba === 'reposicao'" (click)="irPara('reposicao')">Reposi&ccedil;&atilde;o</button>
+    <button type="button" [class.ativa]="aba === 'financeiro'" (click)="irPara('financeiro')">Investimento R$</button>
     <button type="button" [class.ativa]="aba === 'garantia'" (click)="irPara('garantia')">Retorno garantia</button>
     <a class="estoque-aba-link" routerLink="/estoque/lotes-retorno">Lotes baixados</a>
     <a class="estoque-aba-link" routerLink="/estoque/analise-retorno">An&aacute;lise retorno</a>
@@ -506,6 +507,95 @@
       <input [(ngModel)]="saidaObs" name="saidaObs" />
     </div>
     <button type="button" (click)="salvarSaida()" [disabled]="carregando">Registrar sa&iacute;da</button>
+  </div>
+
+  <!-- INVESTIMENTO R$ -->
+  <div class="estoque-painel" *ngIf="aba === 'financeiro' && !carregando && financeiro">
+    <h3 style="margin:0 0 8px">Investimento em estoque</h3>
+    <p class="campo-hint" style="margin:0 0 14px">
+      Valores a <strong>custo de compra</strong> (n&atilde;o pre&ccedil;o de venda).
+      Investimento = pedidos de compra; giro = sa&iacute;das do estoque local (OS e manuais).
+      Lotes de estoque inicial / estorno sem custo n&atilde;o entram no valor atual.
+    </p>
+
+    <div class="fin-meses-opts">
+      <span class="campo-hint" style="align-self:center">Per&iacute;odo:</span>
+      <button
+        type="button"
+        *ngFor="let m of opcoesMesesFinanceiro"
+        [class.ativo]="financeiroMeses === m"
+        (click)="selecionarMesesFinanceiro(m)"
+      >{{ m }} meses</button>
+    </div>
+
+    <div class="fin-kpis">
+      <div class="fin-kpi destaque">
+        <div class="campo-hint">Estoque dispon&iacute;vel hoje</div>
+        <strong>{{ formatarMoeda(financeiro.valorEstoqueAtual) }}</strong>
+        <div class="campo-hint">{{ financeiro.unidadesEmEstoque }} un. · {{ financeiro.lotesComSaldo }} lote(s)</div>
+      </div>
+      <div class="fin-kpi">
+        <div class="campo-hint">Investido neste m&ecirc;s</div>
+        <strong>{{ formatarMoeda(financeiro.investimentoMesAtual) }}</strong>
+        <div class="campo-hint">M&eacute;dia {{ financeiro.mesesAnalisados }} meses: {{ formatarMoeda(financeiro.mediaInvestimentoMensal) }}</div>
+      </div>
+      <div class="fin-kpi">
+        <div class="campo-hint">Giro (sa&iacute;das) neste m&ecirc;s</div>
+        <strong>{{ formatarMoeda(financeiro.saidasCustoMesAtual) }}</strong>
+        <div class="campo-hint">M&eacute;dia {{ financeiro.mesesAnalisados }} meses: {{ formatarMoeda(financeiro.mediaSaidasCustoMensal) }}</div>
+      </div>
+      <div class="fin-kpi">
+        <div class="campo-hint">Total investido no per&iacute;odo</div>
+        <strong>{{ formatarMoeda(financeiro.totalInvestidoPeriodo) }}</strong>
+        <div class="campo-hint">Sa&iacute;das no per&iacute;odo: {{ formatarMoeda(financeiro.totalSaidasCustoPeriodo) }}</div>
+      </div>
+    </div>
+
+    <h4 style="margin:8px 0 8px;font-size:14px">Por m&ecirc;s</h4>
+    <table *ngIf="mesesFinanceiroOrdenados.length > 0">
+      <thead>
+        <tr>
+          <th>M&ecirc;s</th>
+          <th>Investido (compras)</th>
+          <th>Pedidos</th>
+          <th>Un. compradas</th>
+          <th>Giro (sa&iacute;das a custo)</th>
+          <th>Un. sa&iacute;da</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let m of mesesFinanceiroOrdenados">
+          <td>{{ m.label }}</td>
+          <td>{{ formatarMoeda(m.investimento) }}</td>
+          <td>{{ m.pedidosCompra }}</td>
+          <td>{{ m.unidadesCompradas }}</td>
+          <td>{{ formatarMoeda(m.saidasCusto) }}</td>
+          <td>{{ m.unidadesSaida }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4 style="margin:20px 0 8px;font-size:14px" *ngIf="financeiro.topPecasEmEstoque?.length">
+      Maiores valores em estoque hoje
+    </h4>
+    <table *ngIf="financeiro.topPecasEmEstoque?.length">
+      <thead>
+        <tr>
+          <th>Pe&ccedil;a</th>
+          <th>Marca pe&ccedil;a</th>
+          <th>Unidades</th>
+          <th>Valor (custo)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let p of financeiro.topPecasEmEstoque">
+          <td>{{ p.pecaNome }}</td>
+          <td>{{ p.marcaPeca || '—' }}</td>
+          <td>{{ p.unidades }}</td>
+          <td>{{ formatarMoeda(p.valor) }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <!-- REPOSIÇÃO -->

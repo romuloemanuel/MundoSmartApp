@@ -26,6 +26,8 @@ public interface IEstoqueLoteService
         string? periodo = null,
         string? modeloId = null);
     Task<CustoPecaReferenciaResponse?> ObterCustoReferenciaPecaAsync(string pecaId);
+    /// <summary>Valor em estoque, investimento mensal e giro (saídas a custo).</summary>
+    Task<RelatorioFinanceiroEstoqueResponse> RelatorioFinanceiroAsync(int meses = 12);
     /// <summary>Cria lote a partir do estoque informado no cadastro da peça, se ainda não houver saldo em lotes.</summary>
     Task GarantirLoteCatalogoAsync(string pecaId);
 
@@ -1040,6 +1042,105 @@ public class EstoqueLoteService : IEstoqueLoteService
             Fonte = usarFifo ? "fifo" : "media",
         };
     }
+
+    public async Task<RelatorioFinanceiroEstoqueResponse> RelatorioFinanceiroAsync(int meses = 12)
+    {
+        meses = Math.Clamp(meses, 1, 36);
+        var agora = HorarioBrasil.Agora;
+        var inicioPeriodo = new DateTime(agora.Year, agora.Month, 1).AddMonths(-(meses - 1));
+        var fimPeriodo = new DateTime(agora.Year, agora.Month, 1).AddMonths(1).AddTicks(-1);
+
+        var pedidosExcluidos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "estoque-inicial",
+            "estorno-os",
+        };
+
+        var lotesComSaldo = await _lotes
+            .Find(x => x.QuantidadeRestante > 0)
+            .ToListAsync();
+
+        var valorEstoque = 0m;
+        var unidades = 0;
+        foreach (var l in lotesComSaldo)
+        {
+            if (pedidosExcluidos.Contains(l.PedidoCompraId)) continue;
+            unidades += l.QuantidadeRestante;
+            valorEstoque += l.QuantidadeRestante * l.CustoUnitario;
+        }
+
+        var topPecas = lotesComSaldo
+            .Where(l => !pedidosExcluidos.Contains(l.PedidoCompraId))
+            .GroupBy(l => l.PecaId)
+            .Select(g => new FinanceiroEstoquePecaItem
+            {
+                PecaId = g.Key,
+                PecaNome = g.First().PecaNome,
+                MarcaPeca = g.Select(x => x.MarcaPeca).FirstOrDefault(m => !string.IsNullOrWhiteSpace(m)),
+                Unidades = g.Sum(x => x.QuantidadeRestante),
+                Valor = g.Sum(x => x.QuantidadeRestante * x.CustoUnitario),
+            })
+            .OrderByDescending(x => x.Valor)
+            .Take(15)
+            .ToList();
+
+        var pedidos = await _pedidos
+            .Find(x => x.DataPedido >= inicioPeriodo && x.DataPedido <= fimPeriodo)
+            .ToListAsync();
+
+        var saidas = await _movimentacoes
+            .Find(x =>
+                x.Tipo == "saida"
+                && x.EstoqueLocal
+                && x.Data >= inicioPeriodo
+                && x.Data <= fimPeriodo)
+            .ToListAsync();
+
+        var cultura = new System.Globalization.CultureInfo("pt-BR");
+        var porMes = new List<FinanceiroEstoqueMesItem>();
+        for (var i = 0; i < meses; i++)
+        {
+            var mesRef = inicioPeriodo.AddMonths(i);
+            var anoMes = $"{mesRef.Year:D4}-{mesRef.Month:D2}";
+            var pedidosMes = pedidos.Where(p => ChaveAnoMes(p.DataPedido) == anoMes).ToList();
+            var saidasMes = saidas.Where(s => ChaveAnoMes(s.Data) == anoMes).ToList();
+
+            porMes.Add(new FinanceiroEstoqueMesItem
+            {
+                AnoMes = anoMes,
+                Label = mesRef.ToString("MMM/yyyy", cultura),
+                Investimento = pedidosMes.Sum(p => p.ValorTotal),
+                PedidosCompra = pedidosMes.Count,
+                UnidadesCompradas = pedidosMes.Sum(p => p.TotalUnidades),
+                SaidasCusto = saidasMes.Sum(s => s.Quantidade * (s.CustoUnitario ?? 0m)),
+                UnidadesSaida = saidasMes.Sum(s => s.Quantidade),
+            });
+        }
+
+        var mesAtual = $"{agora.Year:D4}-{agora.Month:D2}";
+        var itemAtual = porMes.FirstOrDefault(m => m.AnoMes == mesAtual);
+        var totalInvestido = porMes.Sum(m => m.Investimento);
+        var totalSaidas = porMes.Sum(m => m.SaidasCusto);
+
+        return new RelatorioFinanceiroEstoqueResponse
+        {
+            GeradoEm = agora,
+            MesesAnalisados = meses,
+            ValorEstoqueAtual = valorEstoque,
+            UnidadesEmEstoque = unidades,
+            LotesComSaldo = lotesComSaldo.Count(l => !pedidosExcluidos.Contains(l.PedidoCompraId)),
+            TotalInvestidoPeriodo = totalInvestido,
+            MediaInvestimentoMensal = meses > 0 ? Math.Round(totalInvestido / meses, 2) : 0m,
+            InvestimentoMesAtual = itemAtual?.Investimento ?? 0m,
+            TotalSaidasCustoPeriodo = totalSaidas,
+            MediaSaidasCustoMensal = meses > 0 ? Math.Round(totalSaidas / meses, 2) : 0m,
+            SaidasCustoMesAtual = itemAtual?.SaidasCusto ?? 0m,
+            PorMes = porMes,
+            TopPecasEmEstoque = topPecas,
+        };
+    }
+
+    private static string ChaveAnoMes(DateTime data) => $"{data.Year:D4}-{data.Month:D2}";
 
     public async Task<RelatorioReposicaoHistorico> SalvarRelatorioReposicaoAsync(SalvarRelatorioReposicaoRequest request)
     {

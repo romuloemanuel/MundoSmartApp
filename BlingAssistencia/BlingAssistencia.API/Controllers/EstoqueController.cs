@@ -72,6 +72,11 @@ public class EstoqueController : ControllerBase
         }
     }
 
+    /// <summary>Valor em estoque hoje + investimento e giro (saídas a custo) por mês.</summary>
+    [HttpGet("relatorios/financeiro")]
+    public async Task<IActionResult> RelatorioFinanceiro([FromQuery] int meses = 12) =>
+        Ok(await _estoque.RelatorioFinanceiroAsync(meses));
+
     [HttpGet("relatorios/reposicao")]
     public Task<IActionResult> Reposicao(
         [FromQuery] DateTime? inicio,

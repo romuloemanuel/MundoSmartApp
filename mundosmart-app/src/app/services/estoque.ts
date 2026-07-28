@@ -23,6 +23,7 @@ import {
   LoteRetornoGarantiaHistorico,
   AnaliseRetornoGarantiaResponse,
   CustoPecaReferencia,
+  RelatorioFinanceiroEstoque,
   PecaCatalogo,
 } from '../models/estoque.models';
 
@@ -224,5 +225,10 @@ export class EstoqueService {
     if (opts?.ate) params = params.set('ate', opts.ate);
     if (opts?.fornecedor?.trim()) params = params.set('fornecedor', opts.fornecedor.trim());
     return this.http.get<AnaliseRetornoGarantiaResponse>(`${this.base}/analise-retorno-garantia`, { params });
+  }
+
+  relatorioFinanceiro(meses = 12): Observable<RelatorioFinanceiroEstoque> {
+    const params = new HttpParams().set('meses', String(meses));
+    return this.http.get<RelatorioFinanceiroEstoque>(`${this.base}/relatorios/financeiro`, { params });
   }
 }

@@ -349,4 +349,38 @@ export interface CustoPecaReferencia {
   fonte: 'fifo' | 'media';
 }
 
+export interface FinanceiroEstoqueMesItem {
+  anoMes: string;
+  label: string;
+  investimento: number;
+  pedidosCompra: number;
+  unidadesCompradas: number;
+  saidasCusto: number;
+  unidadesSaida: number;
+}
+
+export interface FinanceiroEstoquePecaItem {
+  pecaId: string;
+  pecaNome: string;
+  marcaPeca?: string;
+  unidades: number;
+  valor: number;
+}
+
+export interface RelatorioFinanceiroEstoque {
+  geradoEm: string;
+  mesesAnalisados: number;
+  valorEstoqueAtual: number;
+  unidadesEmEstoque: number;
+  lotesComSaldo: number;
+  totalInvestidoPeriodo: number;
+  mediaInvestimentoMensal: number;
+  investimentoMesAtual: number;
+  totalSaidasCustoPeriodo: number;
+  mediaSaidasCustoMensal: number;
+  saidasCustoMesAtual: number;
+  porMes: FinanceiroEstoqueMesItem[];
+  topPecasEmEstoque: FinanceiroEstoquePecaItem[];
+}
+
 export type PecaCatalogo = PecaEstoque;

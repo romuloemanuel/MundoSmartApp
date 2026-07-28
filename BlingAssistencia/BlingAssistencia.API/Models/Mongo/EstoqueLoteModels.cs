@@ -595,3 +595,50 @@ public class AnaliseRetornoPecaItem
     public int Ocorrencias { get; set; }
     public string? FornecedorMaisFrequente { get; set; }
 }
+
+/// <summary>Investimento e giro de estoque em R$ (custo de compra).</summary>
+public class RelatorioFinanceiroEstoqueResponse
+{
+    public DateTime GeradoEm { get; set; }
+    public int MesesAnalisados { get; set; }
+
+    /// <summary>Σ (quantidadeRestante × custoUnitario) nos lotes com saldo.</summary>
+    public decimal ValorEstoqueAtual { get; set; }
+    public int UnidadesEmEstoque { get; set; }
+    public int LotesComSaldo { get; set; }
+
+    /// <summary>Σ valorTotal dos pedidos de compra no período.</summary>
+    public decimal TotalInvestidoPeriodo { get; set; }
+    /// <summary>Média mensal de investimento no período (inclui meses sem compra).</summary>
+    public decimal MediaInvestimentoMensal { get; set; }
+    public decimal InvestimentoMesAtual { get; set; }
+
+    /// <summary>Σ (qtd × custo) das saídas locais no período.</summary>
+    public decimal TotalSaidasCustoPeriodo { get; set; }
+    public decimal MediaSaidasCustoMensal { get; set; }
+    public decimal SaidasCustoMesAtual { get; set; }
+
+    public List<FinanceiroEstoqueMesItem> PorMes { get; set; } = [];
+    public List<FinanceiroEstoquePecaItem> TopPecasEmEstoque { get; set; } = [];
+}
+
+public class FinanceiroEstoqueMesItem
+{
+    /// <summary>yyyy-MM</summary>
+    public string AnoMes { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public decimal Investimento { get; set; }
+    public int PedidosCompra { get; set; }
+    public int UnidadesCompradas { get; set; }
+    public decimal SaidasCusto { get; set; }
+    public int UnidadesSaida { get; set; }
+}
+
+public class FinanceiroEstoquePecaItem
+{
+    public string PecaId { get; set; } = string.Empty;
+    public string PecaNome { get; set; } = string.Empty;
+    public string? MarcaPeca { get; set; }
+    public int Unidades { get; set; }
+    public decimal Valor { get; set; }
+}

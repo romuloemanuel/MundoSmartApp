@@ -38,6 +38,7 @@ import {
   PedidoCompraDetalhe,
   PedidoCompraEstoque,
   PecaCatalogo,
+  RelatorioFinanceiroEstoque,
   RelatorioReposicaoHistorico,
   ReposicaoResumoModelo,
   ReposicaoSemanalItem,
@@ -65,6 +66,7 @@ type AbaEstoque =
   | 'pedidos'
   | 'saidas'
   | 'reposicao'
+  | 'financeiro'
   | 'garantia'
   | 'novo-pedido'
   | 'nova-saida';
@@ -360,6 +362,47 @@ interface EstoqueGrupoMarca {
     .historico-status-select.status-concluido { border-color: #10b981; }
     .garantia-acoes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .garantia-acoes input[type="number"] { width: 72px; }
+    .fin-kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .fin-kpi {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .fin-kpi .campo-hint { margin: 0 0 4px; font-size: 12px; }
+    .fin-kpi strong {
+      display: block;
+      font-size: 22px;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+    }
+    .fin-kpi.destaque {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+    }
+    .fin-kpi.destaque strong { color: #1d4ed8; }
+    .fin-meses-opts {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .fin-meses-opts button {
+      padding: 6px 12px !important;
+      min-width: unset;
+      font-size: 13px !important;
+    }
+    .fin-meses-opts button.ativo {
+      background: #2563eb !important;
+      border-color: #2563eb !important;
+      color: #fff !important;
+    }
   `],
 })
 export class EstoquePage implements OnInit {
@@ -373,6 +416,9 @@ export class EstoquePage implements OnInit {
   pedidoDetalhe?: PedidoCompraDetalhe;
   movimentacoes: MovimentacaoEstoque[] = [];
   relatorio?: ReposicaoSemanalResponse;
+  financeiro?: RelatorioFinanceiroEstoque;
+  financeiroMeses = 12;
+  readonly opcoesMesesFinanceiro = [6, 12, 24];
   historicoRelatorios: RelatorioReposicaoHistorico[] = [];
   filtroStatusHistorico: RelatorioReposicaoStatusFiltro = '';
   readonly statusRelatorioOpcoes = RELATORIO_REPOSICAO_STATUS;
@@ -477,7 +523,7 @@ export class EstoquePage implements OnInit {
     this.carregarMarcasCatalogo();
     const abaQuery = this.route.snapshot.queryParamMap.get('aba') as AbaEstoque | null;
     const abasValidas: AbaEstoque[] = [
-      'estoque', 'pedidos', 'saidas', 'reposicao', 'garantia', 'novo-pedido', 'nova-saida',
+      'estoque', 'pedidos', 'saidas', 'reposicao', 'financeiro', 'garantia', 'novo-pedido', 'nova-saida',
     ];
     this.irPara(abaQuery && abasValidas.includes(abaQuery) ? abaQuery : 'estoque');
   }
@@ -514,6 +560,7 @@ export class EstoquePage implements OnInit {
         this.pesquisarReposicao();
       }
     }
+    if (aba === 'financeiro') this.carregarFinanceiro();
     if (aba === 'garantia') {
       this.carregarFornecedoresEstoqueGarantia();
       this.carregarLotesGarantia();
@@ -1022,6 +1069,35 @@ export class EstoquePage implements OnInit {
         this.erro = err?.error?.erro ?? 'Erro ao salvar o relatório. Reinicie a API e tente novamente.';
       },
     });
+  }
+
+  carregarFinanceiro(): void {
+    this.carregando = true;
+    this.erro = '';
+    this.financeiro = undefined;
+    this.service.relatorioFinanceiro(this.financeiroMeses).subscribe({
+      next: dados => {
+        this.financeiro = dados;
+        this.carregando = false;
+      },
+      error: err => {
+        this.carregando = false;
+        this.erro = err?.error?.erro
+          ?? (err?.status === 404
+            ? 'Relatório financeiro indisponível. Reinicie a API e tente novamente.'
+            : 'Erro ao carregar investimento de estoque.');
+      },
+    });
+  }
+
+  selecionarMesesFinanceiro(meses: number): void {
+    this.financeiroMeses = meses;
+    this.carregarFinanceiro();
+  }
+
+  get mesesFinanceiroOrdenados() {
+    const lista = this.financeiro?.porMes ?? [];
+    return [...lista].reverse();
   }
 
   carregarHistoricoRelatorios(): void {
