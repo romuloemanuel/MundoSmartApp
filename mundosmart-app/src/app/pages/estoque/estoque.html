@@ -284,7 +284,10 @@
       </div>
       <div class="form-group">
         <label>Fornecedor <span class="campo-obrigatorio">*</span></label>
-        <input [(ngModel)]="pedidoFornecedor" name="pedidoFornecedor" />
+        <select [(ngModel)]="pedidoFornecedor" name="pedidoFornecedor">
+          <option value="">Selecione...</option>
+          <option *ngFor="let f of fornecedoresPedidoPrecadastro" [value]="f">{{ f }}</option>
+        </select>
       </div>
       <div class="form-group">
         <label>NF</label>
@@ -375,7 +378,10 @@
       </div>
       <div class="form-group form-group-forn">
         <label>Fornec.</label>
-        <input [(ngModel)]="item.fornecedor" [name]="'forn_' + i" placeholder="—" />
+        <select [(ngModel)]="item.fornecedor" [name]="'forn_' + i">
+          <option value="">—</option>
+          <option *ngFor="let f of fornecedoresPedidoPrecadastro" [value]="f">{{ f }}</option>
+        </select>
       </div>
       <div class="form-group form-group-marca">
         <label>Marca</label>

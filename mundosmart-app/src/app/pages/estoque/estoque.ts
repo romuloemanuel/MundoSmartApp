@@ -60,6 +60,7 @@ import {
   abrirJanelaLoteDevolucaoGarantia,
   montarHtmlLoteDevolucaoGarantia,
 } from '../../utils/garantia-devolucao-pdf.util';
+import { FORNECEDORES_ESTOQUE_PRECADASTRO } from '../../config/os-peca-origem.config';
 
 type AbaEstoque =
   | 'estoque'
@@ -444,6 +445,7 @@ export class EstoquePage implements OnInit {
   gerandoLoteFornecedor = '';
   removendoCaixaId = '';
   readonly categoriasPecaPedido = CATEGORIAS_PECA.filter(c => c !== 'Outros');
+  readonly fornecedoresPedidoPrecadastro = [...FORNECEDORES_ESTOQUE_PRECADASTRO];
   readonly buscarOsGarantiaFn = (termo: string) =>
     this.service.sugerirOsGarantia(termo).pipe(
       map(itens => itens.map(i => ({

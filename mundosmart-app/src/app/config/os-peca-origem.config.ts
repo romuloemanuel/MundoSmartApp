@@ -14,6 +14,18 @@ export const FORNECEDORES_EXTERNOS_PECA: FornecedorExternoPeca[] = [
   { id: 'shopee', label: 'Shopee', permiteRastreio: true },
 ];
 
+/** Fornecedores de compra de estoque (pedido) — opções fixas do select. */
+export const FORNECEDORES_ESTOQUE_PRECADASTRO = [
+  'Baba',
+  'Skytech',
+  'Vic',
+  'Carlos',
+  'Paulo',
+  'Shopee',
+  'Mercado Livre',
+  'Aliexpress',
+] as const;
+
 export const ORIGENS_PECA_OS: { id: OrigemPecaOs; label: string }[] = [
   { id: 'estoque', label: 'Estoque local' },
   { id: 'externo', label: 'Fornecedor externo' },
