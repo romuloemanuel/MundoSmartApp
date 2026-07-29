@@ -483,20 +483,27 @@
       <input [(ngModel)]="pedidoObs" name="pedidoObs" />
     </div>
 
-    <h4 style="margin:16px 0 8px">Itens do pedido</h4>
+    <h4 style="margin:16px 0 8px">
+      Itens do pedido
+      <span class="campo-hint" style="font-weight:400;margin-left:8px">
+        {{ itensPedido.length }} / {{ limiteItensPedido }}
+      </span>
+    </h4>
     <p class="campo-hint" style="margin-bottom:8px">
       Escolha a <strong>categoria</strong> e o <strong>modelo</strong> — o sistema localiza a pe&ccedil;a cadastrada.
       Em <strong>Tampa traseira</strong> e <strong>Vidro Traseiro</strong>, informe tamb&eacute;m a <strong>cor</strong> (quantidade por cor e modelo).
-      Cada linha gera um lote com custo pr&oacute;prio.
+      Cada linha gera um lote com custo pr&oacute;prio. At&eacute; {{ limiteItensPedido }} itens por pedido.
     </p>
-    <div *ngFor="let item of itensPedido; let i = index" class="item-pedido-wrapper">
+    <div class="itens-pedido-lista">
+    <div *ngFor="let item of itensPedido; trackBy: trackByItemPedidoUid; let i = index" class="item-pedido-wrapper">
       <div class="item-pedido-linha">
+      <span class="item-pedido-num" title="Linha">{{ i + 1 }}</span>
       <div class="form-group form-group-cat">
         <label>Cat. <span class="campo-obrigatorio">*</span></label>
         <div class="campo-com-acao">
           <select
             [(ngModel)]="item.categoria"
-            [name]="'cat_' + i"
+            [name]="'cat_' + item.uid"
             (ngModelChange)="onCategoriaItemChange(item)"
           >
             <option value="">—</option>
@@ -533,43 +540,43 @@
       <div class="form-group form-group-cor" *ngIf="itemUsaCor(item)">
         <label>Cor <span class="campo-obrigatorio">*</span></label>
         <input
-          [attr.list]="'cores-tampa-' + i"
+          [attr.list]="'cores-tampa-' + item.uid"
           [(ngModel)]="item.cor"
-          [name]="'cor_' + i"
+          [name]="'cor_' + item.uid"
           placeholder="Ex: Preto"
           (ngModelChange)="onCorItemChange(item)"
         />
-        <datalist [attr.id]="'cores-tampa-' + i">
-          <option *ngFor="let c of coresSugeridasItem(item)" [value]="c"></option>
+        <datalist [attr.id]="'cores-tampa-' + item.uid">
+          <option *ngFor="let c of item.coresSugeridas || []" [value]="c"></option>
         </datalist>
       </div>
-      <div class="form-group form-group-qual" *ngIf="pecasCandidatasItem(item).length > 1">
+      <div class="form-group form-group-qual" *ngIf="(item.pecasCandidatas?.length ?? 0) > 1">
         <label>Qual.</label>
         <select
           [(ngModel)]="item.pecaId"
-          [name]="'qual_' + i"
+          [name]="'qual_' + item.uid"
           (ngModelChange)="onPecaQualidadeItemChange(item)"
         >
           <option value="">—</option>
-          <option *ngFor="let p of pecasCandidatasItem(item)" [value]="p.id">
+          <option *ngFor="let p of item.pecasCandidatas || []" [value]="p.id">
             {{ labelPecaPedido(p) }}
           </option>
         </select>
       </div>
       <div class="form-group form-group-forn">
         <label>Fornec.</label>
-        <select [(ngModel)]="item.fornecedor" [name]="'forn_' + i">
+        <select [(ngModel)]="item.fornecedor" [name]="'forn_' + item.uid">
           <option value="">—</option>
           <option *ngFor="let f of fornecedoresPedidoPrecadastro" [value]="f">{{ f }}</option>
         </select>
       </div>
       <div class="form-group form-group-marca">
         <label>Marca</label>
-        <input [(ngModel)]="item.marcaPeca" [name]="'marca_' + i" placeholder="—" />
+        <input [(ngModel)]="item.marcaPeca" [name]="'marca_' + item.uid" placeholder="—" />
       </div>
       <div class="form-group form-group-qtd">
         <label>Qtd</label>
-        <input type="number" min="1" [(ngModel)]="item.quantidade" [name]="'qtd_' + i" />
+        <input type="number" min="1" [(ngModel)]="item.quantidade" [name]="'qtd_' + item.uid" />
       </div>
       <div class="form-group form-group-custo">
         <label>Custo</label>
@@ -578,13 +585,13 @@
           min="0"
           step="0.01"
           [(ngModel)]="item.custoUnitario"
-          [name]="'custo_' + i"
+          [name]="'custo_' + item.uid"
           placeholder="0,00"
         />
       </div>
       <div class="form-group form-group-gar">
         <label>Meses</label>
-        <input type="number" min="1" [(ngModel)]="item.garantiaMeses" [name]="'gar_' + i" />
+        <input type="number" min="1" [(ngModel)]="item.garantiaMeses" [name]="'gar_' + item.uid" />
       </div>
       <button type="button" class="item-pedido-remover" (click)="removerItemPedido(i)" title="Remover">✕</button>
       </div>
@@ -596,9 +603,19 @@
         {{ item.avisoResolucao }}
       </p>
     </div>
-    <button type="button" (click)="adicionarItemPedido()" style="margin:8px 0">+ Item</button>
+    </div>
+    <div class="itens-pedido-acoes" style="margin:8px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <button type="button" (click)="adicionarItemPedido()" [disabled]="itensPedido.length >= limiteItensPedido">
+        + Item
+      </button>
+      <button type="button" (click)="adicionarItemPedido(10)" [disabled]="itensPedido.length >= limiteItensPedido">
+        + 10 itens
+      </button>
+    </div>
     <div style="margin-top:12px">
-      <button type="button" (click)="salvarPedido()" [disabled]="carregando">Salvar pedido e gerar lotes</button>
+      <button type="button" (click)="salvarPedido()" [disabled]="carregando">
+        {{ carregando ? 'Salvando pedido…' : 'Salvar pedido e gerar lotes' }}
+      </button>
     </div>
 
     <app-nova-peca-pedido-modal

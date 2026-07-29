@@ -67,8 +67,13 @@ export interface ItemPedidoCompraRequest {
   garantiaMeses: number;
 }
 
+/** Máximo de linhas no formulário / API de pedido de compra. */
+export const LIMITE_ITENS_PEDIDO_COMPRA = 100;
+
 /** Estado extra no formulário de pedido (categoria + modelo). */
 export interface ItemPedidoCompraUi extends ItemPedidoCompraRequest {
+  /** Identidade estável para *ngFor (evita recriar 100 autocompletes). */
+  uid: number;
   categoria?: string;
   buscaModelo?: string;
   avisoResolucao?: string;
@@ -76,6 +81,9 @@ export interface ItemPedidoCompraUi extends ItemPedidoCompraRequest {
   modeloAutocompleteKey?: number;
   /** Busca de modelos vinculada à linha (categoria + peças cadastradas). */
   buscarModelosFn?: (termo: string) => Observable<AutocompleteItem[]>;
+  /** Cache da resolução — não recalcular no template a cada CD. */
+  pecasCandidatas?: PecaCatalogo[];
+  coresSugeridas?: string[];
 }
 
 export interface RegistrarPedidoCompraRequest {

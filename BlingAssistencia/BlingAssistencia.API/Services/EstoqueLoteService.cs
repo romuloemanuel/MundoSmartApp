@@ -173,6 +173,19 @@ public class EstoqueLoteService : IEstoqueLoteService
             ? await GerarNumeroPedidoAsync(dataPedido)
             : request.NumeroPedido.Trim();
 
+        var pecaIds = request.Itens
+            .Select(i => i.PecaId?.Trim())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToList();
+        var pecasLista = pecaIds.Count == 0
+            ? new List<PecaEstoque>()
+            : await _pecas.Find(Builders<PecaEstoque>.Filter.In(x => x.Id, pecaIds)).ToListAsync();
+        var pecasById = pecasLista
+            .Where(p => !string.IsNullOrWhiteSpace(p.Id))
+            .ToDictionary(p => p.Id!, StringComparer.OrdinalIgnoreCase);
+
         var pedido = new PedidoCompraEstoque
         {
             NumeroPedido = numeroPedido,
@@ -186,12 +199,13 @@ public class EstoqueLoteService : IEstoqueLoteService
         var lotes = new List<LoteEstoque>();
         var movimentacoes = new List<MovimentacaoEstoque>();
         decimal valorTotal = 0;
-        var pecasAfetadas = new HashSet<string>();
+        var pecasAfetadas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var incrementosCor = new List<(string PecaId, string ModeloId, string? ModeloNome, string Cor, int Quantidade)>();
 
         foreach (var item in request.Itens)
         {
-            var peca = await _pecasRepo.ObterPorIdAsync(item.PecaId)
-                ?? throw new ArgumentException($"Peça {item.PecaId} não encontrada.");
+            if (!pecasById.TryGetValue(item.PecaId.Trim(), out var peca))
+                throw new ArgumentException($"Peça {item.PecaId} não encontrada.");
 
             var qtd = item.Quantidade;
             if (qtd <= 0) throw new ArgumentException($"Quantidade inválida para {peca.Nome}.");
@@ -211,6 +225,7 @@ public class EstoqueLoteService : IEstoqueLoteService
 
             var lote = new LoteEstoque
             {
+                Id = ObjectId.GenerateNewId().ToString(),
                 PedidoCompraId = string.Empty,
                 NumeroPedido = pedido.NumeroPedido,
                 Fornecedor = string.IsNullOrWhiteSpace(item.Fornecedor)
@@ -234,6 +249,16 @@ public class EstoqueLoteService : IEstoqueLoteService
             lotes.Add(lote);
             valorTotal += item.CustoUnitario * qtd;
             pecasAfetadas.Add(peca.Id!);
+
+            if (!string.IsNullOrWhiteSpace(cor) && !string.IsNullOrWhiteSpace(item.ModeloId))
+            {
+                incrementosCor.Add((
+                    peca.Id!,
+                    item.ModeloId.Trim(),
+                    item.ModeloNome,
+                    cor,
+                    qtd));
+            }
         }
 
         pedido.TotalItens = lotes.Count;
@@ -243,10 +268,13 @@ public class EstoqueLoteService : IEstoqueLoteService
         await _pedidos.InsertOneAsync(pedido);
 
         foreach (var lote in lotes)
-        {
             lote.PedidoCompraId = pedido.Id!;
-            await _lotes.InsertOneAsync(lote);
 
+        if (lotes.Count > 0)
+            await _lotes.InsertManyAsync(lotes);
+
+        foreach (var lote in lotes)
+        {
             movimentacoes.Add(new MovimentacaoEstoque
             {
                 Tipo = "entrada",
@@ -272,17 +300,7 @@ public class EstoqueLoteService : IEstoqueLoteService
         if (movimentacoes.Count > 0)
             await _movimentacoes.InsertManyAsync(movimentacoes);
 
-        foreach (var item in request.Itens)
-        {
-            if (string.IsNullOrWhiteSpace(item.Cor) || string.IsNullOrWhiteSpace(item.ModeloId))
-                continue;
-            await IncrementarEstoqueCorModeloAsync(
-                item.PecaId,
-                item.ModeloId,
-                item.ModeloNome,
-                item.Cor,
-                item.Quantidade);
-        }
+        await AplicarIncrementosCorPedidoAsync(incrementosCor);
 
         foreach (var pecaId in pecasAfetadas)
             await SincronizarQuantidadePecaAsync(pecaId);
@@ -447,6 +465,10 @@ public class EstoqueLoteService : IEstoqueLoteService
             ?? throw new ArgumentException("Pedido não encontrado.");
 
         ValidarItemPedido(item);
+
+        var totalAtual = await _lotes.CountDocumentsAsync(x => x.PedidoCompraId == pedidoId);
+        if (totalAtual >= 100)
+            throw new ArgumentException("Limite de 100 itens por pedido.");
 
         var peca = await _pecasRepo.ObterPorIdAsync(item.PecaId)
             ?? throw new ArgumentException($"Peça {item.PecaId} não encontrada.");
@@ -1079,6 +1101,8 @@ public class EstoqueLoteService : IEstoqueLoteService
             throw new ArgumentException("Fornecedor é obrigatório.");
         if (request.Itens is null || request.Itens.Count == 0)
             throw new ArgumentException("Informe ao menos um item no pedido.");
+        if (request.Itens.Count > 100)
+            throw new ArgumentException("Limite de 100 itens por pedido.");
         foreach (var item in request.Itens)
             ValidarItemPedido(item);
     }
@@ -1219,38 +1243,58 @@ public class EstoqueLoteService : IEstoqueLoteService
         if (quantidade <= 0 || string.IsNullOrWhiteSpace(cor) || string.IsNullOrWhiteSpace(modeloId))
             return;
 
-        var peca = await _pecas.Find(x => x.Id == pecaId).FirstOrDefaultAsync();
-        if (peca is null) return;
+        await AplicarIncrementosCorPedidoAsync([(pecaId, modeloId, modeloNome, cor, quantidade)]);
+    }
 
-        var corNorm = cor.Trim();
-        var modeloNorm = modeloId.Trim();
-        var compat = peca.ModelosCompativeis
-            .FirstOrDefault(m => string.Equals(m.ModeloId, modeloNorm, StringComparison.OrdinalIgnoreCase));
+    /// <summary>Aplica vários incrementos de cor por peça em uma única leitura/gravação.</summary>
+    private async Task AplicarIncrementosCorPedidoAsync(
+        IReadOnlyList<(string PecaId, string ModeloId, string? ModeloNome, string Cor, int Quantidade)> incrementos)
+    {
+        if (incrementos.Count == 0) return;
 
-        if (compat is null)
+        foreach (var grupo in incrementos.GroupBy(x => x.PecaId, StringComparer.OrdinalIgnoreCase))
         {
-            compat = new ModeloCompativel
+            var peca = await _pecas.Find(x => x.Id == grupo.Key).FirstOrDefaultAsync();
+            if (peca is null) continue;
+
+            foreach (var inc in grupo)
             {
-                ModeloId = modeloNorm,
-                ModeloNome = string.IsNullOrWhiteSpace(modeloNome) ? null : modeloNome.Trim(),
-            };
-            peca.ModelosCompativeis.Add(compat);
-        }
-        else if (string.IsNullOrWhiteSpace(compat.ModeloNome) && !string.IsNullOrWhiteSpace(modeloNome))
-        {
-            compat.ModeloNome = modeloNome.Trim();
-        }
+                if (inc.Quantidade <= 0
+                    || string.IsNullOrWhiteSpace(inc.Cor)
+                    || string.IsNullOrWhiteSpace(inc.ModeloId))
+                    continue;
 
-        compat.Cores ??= [];
-        var existente = compat.Cores
-            .FirstOrDefault(c => string.Equals(c.Cor, corNorm, StringComparison.OrdinalIgnoreCase));
-        if (existente is not null)
-            existente.Quantidade += quantidade;
-        else
-            compat.Cores.Add(new CorEstoqueModelo { Cor = corNorm, Quantidade = quantidade });
+                var corNorm = inc.Cor.Trim();
+                var modeloNorm = inc.ModeloId.Trim();
+                var compat = peca.ModelosCompativeis
+                    .FirstOrDefault(m => string.Equals(m.ModeloId, modeloNorm, StringComparison.OrdinalIgnoreCase));
 
-        peca.AtualizadoEm = DateTime.UtcNow;
-        await _pecas.ReplaceOneAsync(x => x.Id == pecaId, peca);
+                if (compat is null)
+                {
+                    compat = new ModeloCompativel
+                    {
+                        ModeloId = modeloNorm,
+                        ModeloNome = string.IsNullOrWhiteSpace(inc.ModeloNome) ? null : inc.ModeloNome.Trim(),
+                    };
+                    peca.ModelosCompativeis.Add(compat);
+                }
+                else if (string.IsNullOrWhiteSpace(compat.ModeloNome) && !string.IsNullOrWhiteSpace(inc.ModeloNome))
+                {
+                    compat.ModeloNome = inc.ModeloNome.Trim();
+                }
+
+                compat.Cores ??= [];
+                var existente = compat.Cores
+                    .FirstOrDefault(c => string.Equals(c.Cor, corNorm, StringComparison.OrdinalIgnoreCase));
+                if (existente is not null)
+                    existente.Quantidade += inc.Quantidade;
+                else
+                    compat.Cores.Add(new CorEstoqueModelo { Cor = corNorm, Quantidade = inc.Quantidade });
+            }
+
+            peca.AtualizadoEm = DateTime.UtcNow;
+            await _pecas.ReplaceOneAsync(x => x.Id == peca.Id, peca);
+        }
     }
 
     private static string InferirCategoriaPeca(PecaEstoque peca)

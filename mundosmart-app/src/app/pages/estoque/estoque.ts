@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { Observable, of } from 'rxjs';
+import { Observable, of, TimeoutError, timeout } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { modeloParaAutocomplete } from '../../utils/modelo-autocomplete.util';
 import { EstoqueService } from '../../services/estoque';
@@ -31,6 +31,7 @@ import {
   CaixaRetornoGarantiaResponse,
   ItemPedidoCompraRequest,
   ItemPedidoCompraUi,
+  LIMITE_ITENS_PEDIDO_COMPRA,
   LoteDevolucaoGarantiaDocumento,
   LoteEstoque,
   LoteGarantiaItem,
@@ -143,6 +144,20 @@ interface EstoqueGrupoMarca {
       border-bottom: 1px solid #f1f5f9;
       overflow: visible;
       position: relative;
+    }
+    .itens-pedido-lista {
+      max-height: min(70vh, 920px);
+      overflow-y: auto;
+      padding-right: 4px;
+      margin-bottom: 4px;
+    }
+    .item-pedido-num {
+      flex: 0 0 28px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      padding-top: 22px;
+      text-align: center;
     }
     .item-pedido-linha {
       display: flex;
@@ -522,6 +537,9 @@ export class EstoquePage implements OnInit {
   reposicaoModeloId = '';
 
   // Novo pedido
+  readonly limiteItensPedido = LIMITE_ITENS_PEDIDO_COMPRA;
+  private proximoUidItemPedido = 1;
+  private modeloIdsPorCategoriaCache = new Map<string, Set<string>>();
   pedidoNumero = '';
   pedidoFornecedor = '';
   pedidoNf = '';
@@ -759,6 +777,7 @@ export class EstoquePage implements OnInit {
     this.service.listarPecas().subscribe({
       next: p => {
         this.pecas = p.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        this.modeloIdsPorCategoriaCache.clear();
         this.carregando = false;
         this.carregarModelos();
       },
@@ -869,6 +888,7 @@ export class EstoquePage implements OnInit {
     this.service.listarPecas().subscribe({
       next: p => {
         this.pecas = p.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+        this.modeloIdsPorCategoriaCache.clear();
         onLoaded?.();
       },
       error: () => { onLoaded?.(); },
@@ -1661,13 +1681,30 @@ export class EstoquePage implements OnInit {
     });
   }
 
-  adicionarItemPedido(): void {
-    this.itensPedido = [...this.itensPedido, this.itemVazio()];
+  trackByItemPedidoUid(_index: number, item: ItemPedidoCompraUi): number {
+    return item.uid;
+  }
+
+  adicionarItemPedido(quantidade = 1): void {
+    this.erro = '';
+    const faltam = this.limiteItensPedido - this.itensPedido.length;
+    if (faltam <= 0) {
+      this.erro = `Limite de ${this.limiteItensPedido} itens por pedido.`;
+      return;
+    }
+    const n = Math.min(Math.max(1, quantidade), faltam);
+    // push (não recria o array) + trackBy: evita destruir todos os autocompletes
+    for (let i = 0; i < n; i++) {
+      this.itensPedido.push(this.itemVazio());
+    }
+    if (quantidade > faltam) {
+      this.erro = `Só foi possível adicionar ${n} linha(s) (limite ${this.limiteItensPedido}).`;
+    }
   }
 
   removerItemPedido(i: number): void {
     if (this.itensPedido.length <= 1) return;
-    this.itensPedido = this.itensPedido.filter((_, idx) => idx !== i);
+    this.itensPedido.splice(i, 1);
   }
 
   buscarModelosPedidoFn = (termo: string): Observable<AutocompleteItem[]> =>
@@ -1679,19 +1716,24 @@ export class EstoquePage implements OnInit {
     );
 
   private prepararItemPedido(item: ItemPedidoCompraUi): ItemPedidoCompraUi {
+    if (!item.uid) item.uid = this.proximoUidItemPedido++;
     item.buscarModelosFn = (termo: string) => this.buscarModelosParaItemPedido(termo, item);
     return item;
   }
 
   private modeloIdsDaCategoria(categoria: string): Set<string> {
-    const ids = new Set<string>();
     const cat = categoria.trim();
+    const cached = this.modeloIdsPorCategoriaCache.get(cat);
+    if (cached) return cached;
+
+    const ids = new Set<string>();
     for (const p of this.pecasEstoqueLocal) {
       if (inferirCategoriaPeca(p.nome, p.categoria) !== cat) continue;
       for (const mc of p.modelosCompativeis ?? []) {
         if (mc.modeloId) ids.add(mc.modeloId);
       }
     }
+    this.modeloIdsPorCategoriaCache.set(cat, ids);
     return ids;
   }
 
@@ -1774,6 +1816,8 @@ export class EstoquePage implements OnInit {
     item.pecaId = '';
     item.marcaPeca = '';
     item.avisoResolucao = '';
+    item.pecasCandidatas = [];
+    item.coresSugeridas = [];
     item.modeloAutocompleteKey = (item.modeloAutocompleteKey ?? 0) + 1;
     this.prepararItemPedido(item);
   }
@@ -1804,16 +1848,20 @@ export class EstoquePage implements OnInit {
     const peca = this.pecas.find(p => p.id === item.pecaId);
     if (!peca) return;
     this.aplicarPecaResolvida(item, peca);
+    item.coresSugeridas = this.coresSugeridasItem(item);
   }
 
   resolverPecaPedido(item: ItemPedidoCompraUi): void {
     item.avisoResolucao = '';
+    item.pecasCandidatas = [];
+    item.coresSugeridas = [];
     if (!item.categoria?.trim() || !item.modeloId?.trim()) {
       item.pecaId = '';
       return;
     }
 
     const candidatas = this.pecasCandidatasItem(item);
+    item.pecasCandidatas = candidatas;
     if (candidatas.length === 0) {
       item.pecaId = '';
       item.avisoResolucao = `Nenhuma peça "${item.categoria}" cadastrada para este modelo. Cadastre em Peças.`;
@@ -1823,12 +1871,14 @@ export class EstoquePage implements OnInit {
     if (candidatas.length === 1) {
       this.aplicarPecaResolvida(item, candidatas[0]);
       item.avisoResolucao = `Peça: ${labelPecaCatalogo(candidatas[0].nome, candidatas[0].categoria, candidatas[0].marcaPeca)}`;
+      item.coresSugeridas = this.coresSugeridasItem(item);
       return;
     }
 
     if (item.pecaId && candidatas.some(p => p.id === item.pecaId)) {
       const peca = candidatas.find(p => p.id === item.pecaId)!;
       this.aplicarPecaResolvida(item, peca);
+      item.coresSugeridas = this.coresSugeridasItem(item);
       return;
     }
 
@@ -1997,9 +2047,17 @@ export class EstoquePage implements OnInit {
       return;
     }
 
+    if (this.itensPedido.length > this.limiteItensPedido) {
+      this.erro = `Limite de ${this.limiteItensPedido} itens por pedido.`;
+      return;
+    }
+
     const itens = this.itensPedido
       .filter(i => i.pecaId && i.modeloId && i.quantidade > 0)
-      .map(({ categoria, buscaModelo, avisoResolucao, modeloAutocompleteKey, buscarModelosFn, ...item }) => {
+      .map(({
+        categoria, buscaModelo, avisoResolucao, modeloAutocompleteKey, buscarModelosFn,
+        uid, pecasCandidatas, coresSugeridas, ...item
+      }) => {
         if (!item.modeloNome && item.modeloId) {
           item.modeloNome = this.modelosPedido.find(m => m.id === item.modeloId)?.nome;
         }
@@ -2020,6 +2078,7 @@ export class EstoquePage implements OnInit {
     this.pedidoNumero = numeroPedido;
 
     this.carregando = true;
+    this.sucesso = `Salvando pedido com ${itens.length} item(ns)…`;
     this.service.registrarPedido({
       numeroPedido,
       fornecedor: this.pedidoFornecedor.trim(),
@@ -2027,10 +2086,12 @@ export class EstoquePage implements OnInit {
       dataPedido: this.pedidoData ? new Date(this.pedidoData).toISOString() : undefined,
       observacoes: this.pedidoObs.trim() || undefined,
       itens,
-    }).subscribe({
+    }).pipe(
+      timeout(180_000),
+    ).subscribe({
       next: () => {
         this.carregando = false;
-        this.sucesso = `Pedido ${numeroPedido} registrado e estoque atualizado.`;
+        this.sucesso = `Pedido ${numeroPedido} registrado e estoque atualizado (${itens.length} lotes).`;
         this.pedidoNumero = '';
         this.pedidoFornecedor = '';
         this.pedidoNf = '';
@@ -2040,7 +2101,15 @@ export class EstoquePage implements OnInit {
       },
       error: err => {
         this.carregando = false;
-        this.erro = err.error?.erro ?? 'Erro ao registrar pedido.';
+        this.sucesso = '';
+        if (err instanceof TimeoutError || err?.name === 'TimeoutError') {
+          this.erro = 'Tempo esgotado ao salvar o pedido. Verifique a conexão e tente novamente.';
+          return;
+        }
+        this.erro = err.error?.erro
+          ?? err.error?.message
+          ?? err.message
+          ?? 'Erro ao registrar pedido.';
       },
     });
   }
@@ -2160,10 +2229,13 @@ export class EstoquePage implements OnInit {
 
   private itemVazio(): ItemPedidoCompraUi {
     return this.prepararItemPedido({
+      uid: this.proximoUidItemPedido++,
       categoria: '',
       buscaModelo: '',
       avisoResolucao: '',
       modeloAutocompleteKey: 0,
+      pecasCandidatas: [],
+      coresSugeridas: [],
       pecaId: '',
       fornecedor: '',
       marcaPeca: '',
