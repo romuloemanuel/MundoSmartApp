@@ -8,7 +8,7 @@
   <h2>{{ tituloPagina }}</h2>
 
   <div class="os-form-acoes-topo" *ngIf="osCarregada && os.id">
-    <button type="button" *ngIf="somenteLeitura" (click)="editarOs()">Editar</button>
+    <button type="button" *ngIf="somenteLeitura && podeEditarOsAtual()" (click)="editarOs()">Editar</button>
     <button type="button" class="btn-sec-topo" (click)="abrirHistorico()">Histórico de versões</button>
     <button
       type="button"
@@ -52,9 +52,10 @@
   />
   <app-cadastro-aparelho-modal
     *ngIf="modalCadastroModeloAberto"
+    [nomeInicial]="nomeModeloNovo"
     [tipoDispositivoInicial]="tipoDispositivoOs"
     (modeloSalvo)="onModeloSalvoModal($event)"
-    (fechado)="modalCadastroModeloAberto = false"
+    (fechado)="fecharCadastroModelo()"
   />
   <app-contato-alternativo-modal
     *ngIf="modalContatoAlternativoAberto && clienteCompleto"
@@ -381,16 +382,17 @@
           <app-autocomplete-criavel
             placeholder="Buscar modelo (marca + modelo)..."
             [buscarFn]="buscarModelosFn"
-            [permitirCriar]="false"
+            [permitirCriar]="true"
             [valorInicial]="valorInicialModelo"
             [valorInicialId]="os.modeloId"
             [valorInicialMarcaId]="os.marcaId"
             [valorInicialMarcaNome]="os.marcaNome"
             (itemSelecionadoChange)="onModeloSelecionado($event)"
+            (solicitarCriar)="abrirCadastroModelo($event)"
           />
           <p class="campo-erro" *ngIf="temErroCampo('modelo')">{{ mensagemErroCampo('modelo') }}</p>
           <div class="campo-acoes-inline" *ngIf="!somenteLeitura">
-            <button type="button" class="btn-link" (click)="modalCadastroModeloAberto = true">
+            <button type="button" class="btn-link" (click)="abrirCadastroModelo()">
               + Cadastrar modelo
             </button>
             <a routerLink="/modelos" class="btn-link">Gerenciar modelos</a>

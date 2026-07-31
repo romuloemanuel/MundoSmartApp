@@ -296,7 +296,12 @@ public class OrdensServicoController : ControllerBase
                 : existente.TecnicoNome;
             await OsOrdemValidacao.ValidarTecnicoAsync(request.Situacao, tecnicoNome, _tecnicos);
             await _service.AlterarSituacaoAsync(
-                id, request.Situacao, request.MotivoCancelamento, request.DataPrazoPeca, tecnicoNome);
+                id,
+                request.Situacao,
+                request.MotivoCancelamento,
+                request.DataPrazoPeca,
+                tecnicoNome,
+                permitirOsFinalizada: UsuarioEhAdminOuRoot());
             return NoContent();
         }
         catch (UnauthorizedAccessException ex)
@@ -488,6 +493,9 @@ public class OrdensServicoController : ControllerBase
             ?? throw new KeyNotFoundException($"OS {id} não encontrada.");
         LojaAcessoHelper.GarantirAcesso(User, local.LojaOrigem, "esta OS");
     }
+
+    private bool UsuarioEhAdminOuRoot() =>
+        User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Root);
 }
 
 public record AlterarSituacaoRequest(

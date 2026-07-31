@@ -125,6 +125,8 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
   @Input() limiteConsulta = MODELO_LIMITE_AUTOCOMPLETE_API;
 
   @Output() itemSelecionadoChange = new EventEmitter<AutocompleteItem | null>();
+  /** Quando `permitirCriar` e não há `criarFn`, emite o termo para o pai abrir modal de cadastro. */
+  @Output() solicitarCriar = new EventEmitter<string>();
 
   termo = '';
   sugestoesExibidas: AutocompleteItem[] = [];
@@ -271,9 +273,17 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
   }
 
   criarNovo(): void {
-    if (!this.termo.trim() || !this.criarFn) return;
+    const nome = this.termo.trim();
+    if (!nome) return;
+
+    if (!this.criarFn) {
+      this.aberto = false;
+      this.solicitarCriar.emit(nome);
+      return;
+    }
+
     this.carregando = true;
-    this.criarFn(this.termo.trim()).subscribe({
+    this.criarFn(nome).subscribe({
       next: item => { this.carregando = false; this.selecionar(item); },
       error: () => { this.carregando = false; }
     });

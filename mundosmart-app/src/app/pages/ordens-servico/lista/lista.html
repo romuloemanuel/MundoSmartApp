@@ -231,12 +231,12 @@
         <td class="col-imei" [title]="os.imei || ''">{{ os.imei || '—' }}</td>
         <td class="col-sit">
           <span
-            *ngIf="osSituacaoFinalizada(os)"
+            *ngIf="osSituacaoFinalizada(os) && !podeEditarOs(os)"
             class="grid-situacao-badge"
             [ngClass]="classeBadgeSituacao(os)"
           >{{ os.situacao }}</span>
           <select
-            *ngIf="!osSituacaoFinalizada(os)"
+            *ngIf="!osSituacaoFinalizada(os) || podeEditarOs(os)"
             class="grid-situacao-select"
             [ngClass]="classeSelectSituacao(os)"
             [ngModel]="situacaoExibida(os)"

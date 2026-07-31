@@ -810,14 +810,16 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     return osSituacaoFinalizada(os.situacao);
   }
 
-  /** Ver é livre; editar/situação só na loja permitida (ou Admin). */
+  /** Ver é livre; editar/situação só na loja permitida. Admin/Root também editam OS finalizadas. */
   podeEditarOs(os: BlingOrdemServico): boolean {
-    if (this.osSituacaoFinalizada(os)) return false;
+    if (this.osSituacaoFinalizada(os) && !this.appAuth.isAdmin()) return false;
     return this.appAuth.podeAlterarOsDaLoja(os.lojaOrigem);
   }
 
   tituloEditarOs(os: BlingOrdemServico): string {
-    if (this.osSituacaoFinalizada(os)) return 'OS finalizada — edite pela tela de detalhes';
+    if (this.osSituacaoFinalizada(os) && !this.appAuth.isAdmin()) {
+      return 'OS finalizada — apenas administradores podem editar';
+    }
     if (!this.appAuth.podeAlterarOsDaLoja(os.lojaOrigem)) {
       return 'Só visualização — OS de outra loja';
     }

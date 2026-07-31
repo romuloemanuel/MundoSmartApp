@@ -15,7 +15,7 @@ public interface IBlingOrdemServicoService
     Task<BlingOrdemServico> ObterAsync(long id);
     Task<BlingOrdemServico> CriarAsync(BlingOrdemServico os);
     Task<BlingOrdemServico> AtualizarAsync(long id, BlingOrdemServico os);
-    Task AlterarSituacaoAsync(long id, string situacao, string? motivoCancelamento = null, DateTime? dataPrazoPeca = null, string? tecnicoNome = null);
+    Task AlterarSituacaoAsync(long id, string situacao, string? motivoCancelamento = null, DateTime? dataPrazoPeca = null, string? tecnicoNome = null, bool permitirOsFinalizada = false);
     Task JustificarAtrasoAsync(long id, string justificativaAtraso);
     Task ExcluirAsync(long id);
 }
@@ -204,9 +204,12 @@ public class BlingOrdemServicoService : IBlingOrdemServicoService
         return atualizado;
     }
 
-    public async Task AlterarSituacaoAsync(long id, string situacao, string? motivoCancelamento = null, DateTime? dataPrazoPeca = null, string? tecnicoNome = null)
+    public async Task AlterarSituacaoAsync(long id, string situacao, string? motivoCancelamento = null, DateTime? dataPrazoPeca = null, string? tecnicoNome = null, bool permitirOsFinalizada = false)
     {
         var local = await _localRepo.ObterPorBlingIdAsync(id);
+        if (local is not null && OsSituacaoHelper.EhFinalizada(local.Situacao) && !permitirOsFinalizada)
+            throw new InvalidOperationException("Não é possível alterar a situação de uma OS concluída ou cancelada.");
+
         situacao = OsSituacaoHelper.AjustarParaLoja(situacao, local?.LojaOrigem);
         OsSituacaoHelper.ValidarMotivoCancelamento(situacao, motivoCancelamento);
         OsSituacaoHelper.ValidarSituacaoPorLoja(situacao, local?.LojaOrigem);

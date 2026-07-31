@@ -59,6 +59,7 @@ import {
 import {
   osSituacaoConcluida,
   osSituacaoCancelada,
+  osSituacaoFinalizada,
 } from '../os-situacao.util';
 import { TecnicosService, Tecnico } from '../../../services/tecnicos';
 import { TecnicoSelectDialogService } from '../../../services/tecnico-select-dialog';
@@ -396,6 +397,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   modalPesquisaOsAberto = false;
   retornoOrigemFixo = false;
   modalCadastroModeloAberto = false;
+  nomeModeloNovo = '';
   tipoDispositivoOs = 'Celular';
   readonly tiposDispositivo = TIPOS_DISPOSITIVO;
   readonly tiposServico = TIPOS_SERVICO_OS;
@@ -1169,6 +1171,11 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     };
     this.situacaoAoCarregar = this.os.situacao || situacaoPadraoPorLoja(this.os.lojaOrigem);
     this.conclusaoConfirmada = osSituacaoConcluida(this.situacaoAoCarregar);
+    if (!this.podeEditarOsAtual()) {
+      this.somenteLeitura = true;
+      this.editando = false;
+      this.modoRota = 'visualizar';
+    }
     if (this.os.modeloId) this.carregarPecasModelo(this.os.modeloId);
   }
 
@@ -1447,8 +1454,18 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     });
   }
 
-  onModeloSalvoModal(modelo: ModeloAparelho): void {
+  abrirCadastroModelo(nome = ''): void {
+    this.nomeModeloNovo = nome.trim();
+    this.modalCadastroModeloAberto = true;
+  }
+
+  fecharCadastroModelo(): void {
     this.modalCadastroModeloAberto = false;
+    this.nomeModeloNovo = '';
+  }
+
+  onModeloSalvoModal(modelo: ModeloAparelho): void {
+    this.fecharCadastroModelo();
     this.tipoDispositivoOs = modelo.tipoDispositivo ?? this.tipoDispositivoOs;
     this.onModeloSelecionado({
       id: modelo.id,
@@ -2310,8 +2327,15 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
 
   cancelar(): void { this.router.navigate(['/ordens-servico']); }
 
+  /** Admin/Root editam OS finalizadas; operadores só enquanto em andamento. */
+  podeEditarOsAtual(): boolean {
+    if (osSituacaoFinalizada(this.os?.situacao) && !this.appAuth.isAdmin()) return false;
+    return this.appAuth.podeAlterarOsDaLoja(this.os?.lojaOrigem);
+  }
+
   editarOs(): void {
-    if (this.os.id) this.router.navigate(['/ordens-servico', this.os.id, 'editar']);
+    if (!this.os.id || !this.podeEditarOsAtual()) return;
+    this.router.navigate(['/ordens-servico', this.os.id, 'editar']);
   }
 
   abrirHistorico(): void {

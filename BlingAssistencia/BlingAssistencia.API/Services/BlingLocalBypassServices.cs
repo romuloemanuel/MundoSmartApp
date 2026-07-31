@@ -276,7 +276,7 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
         }).ToList(),
     };
 
-    public async Task AlterarSituacaoAsync(long id, string situacao, string? motivoCancelamento = null, DateTime? dataPrazoPeca = null, string? tecnicoNome = null)
+    public async Task AlterarSituacaoAsync(long id, string situacao, string? motivoCancelamento = null, DateTime? dataPrazoPeca = null, string? tecnicoNome = null, bool permitirOsFinalizada = false)
     {
         var local = await _localRepo.ObterPorBlingIdAsync(id)
             ?? throw new KeyNotFoundException($"Ordem de Serviço {id} não encontrada.");
@@ -289,7 +289,7 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
 
         var situacaoAnterior = local.Situacao;
 
-        if (OsSituacaoHelper.EhFinalizada(situacaoAnterior))
+        if (OsSituacaoHelper.EhFinalizada(situacaoAnterior) && !permitirOsFinalizada)
             throw new InvalidOperationException("Não é possível alterar a situação de uma OS concluída ou cancelada.");
 
         local.Situacao = situacao;
