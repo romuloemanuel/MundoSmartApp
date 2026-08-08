@@ -264,7 +264,7 @@
           <span>{{ dataEntradaLabel(os) | date:'dd/MM/yy':tz }}</span>
           <span class="col-data-hora" *ngIf="dataEntradaLabel(os)">{{ dataEntradaLabel(os) | date:'HH:mm':tz }}</span>
         </td>
-        <td class="col-valor">{{ valorCompacto(os.valorTotalAcordado ?? os.valorTotal) }}</td>
+        <td class="col-valor">{{ valorCompacto(valorAVistaOs(os)) }}</td>
         <td class="col-acoes">
           <app-grid-acoes-os
             [os]="os"

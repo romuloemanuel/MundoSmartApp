@@ -6,6 +6,8 @@ import {
   PedidoCompraEstoque,
   PedidoCompraDetalhe,
   MovimentacaoEstoque,
+  ListarMovimentacoesParams,
+  MovimentacoesPaginadas,
   LoteEstoque,
   RegistrarPedidoCompraRequest,
   RegistrarSaidaEstoqueRequest,
@@ -66,12 +68,17 @@ export class EstoqueService {
     return this.http.delete<void>(`${this.base}/lotes/${id}`);
   }
 
-  listarMovimentacoes(tipo?: string, inicio?: string, fim?: string): Observable<MovimentacaoEstoque[]> {
-    let params = new HttpParams();
-    if (tipo) params = params.set('tipo', tipo);
-    if (inicio) params = params.set('inicio', inicio);
-    if (fim) params = params.set('fim', fim);
-    return this.http.get<MovimentacaoEstoque[]>(`${this.base}/movimentacoes`, { params });
+  listarMovimentacoes(params: ListarMovimentacoesParams = {}): Observable<MovimentacoesPaginadas> {
+    let httpParams = new HttpParams();
+    if (params.tipo) httpParams = httpParams.set('tipo', params.tipo);
+    if (params.inicio) httpParams = httpParams.set('inicio', params.inicio);
+    if (params.fim) httpParams = httpParams.set('fim', params.fim);
+    if (params.busca?.trim()) httpParams = httpParams.set('busca', params.busca.trim());
+    if (params.origem) httpParams = httpParams.set('origem', params.origem);
+    if (params.statusEstorno) httpParams = httpParams.set('statusEstorno', params.statusEstorno);
+    if (params.pagina) httpParams = httpParams.set('pagina', String(params.pagina));
+    if (params.tamanhoPagina) httpParams = httpParams.set('tamanhoPagina', String(params.tamanhoPagina));
+    return this.http.get<MovimentacoesPaginadas>(`${this.base}/movimentacoes`, { params: httpParams });
   }
 
   registrarSaida(body: RegistrarSaidaEstoqueRequest): Observable<MovimentacaoEstoque[]> {

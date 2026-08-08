@@ -51,6 +51,16 @@ function total(o: BlingOrcamento): number {
   }, 0);
 }
 
+function resumoParcelado(o: BlingOrcamento, fallbackTotal: number): string {
+  const totalPrazo = o.valorAPrazo ?? fallbackTotal;
+  const n = o.parcelasPagamento && o.parcelasPagamento >= 2 ? o.parcelasPagamento : 0;
+  if (n >= 2 && totalPrazo != null && totalPrazo > 0) {
+    const parcela = Math.round((totalPrazo / n) * 100) / 100;
+    return `${n}x de ${fmtMoeda(parcela)} (total ${fmtMoeda(totalPrazo)})`;
+  }
+  return fmtMoeda(totalPrazo);
+}
+
 function tabelaItens(o: BlingOrcamento): string {
   const itens = o.itens ?? [];
   if (!itens.length) {
@@ -114,9 +124,10 @@ export function montarHtmlImpressaoOrcamento(o: BlingOrcamento): string {
     ${tabelaItens(o)}
 
     <div class="totais">
-      <div><span>Valor combinado</span><strong>${esc(fmtMoeda(valor))}</strong></div>
+      <div><span>Referência (itens)</span><strong>${esc(fmtMoeda(valor))}</strong></div>
       <div><span>À vista</span><strong>${esc(fmtMoeda(o.valorAVista ?? valor))}</strong></div>
-      <div><span>A prazo${o.parcelasPagamento && o.parcelasPagamento >= 2 ? ` (${o.parcelasPagamento}x)` : ''}</span><strong>${esc(fmtMoeda(o.valorAPrazo ?? valor))}</strong></div>
+      <div><span>Parcelado</span><strong>${esc(resumoParcelado(o, valor))}</strong></div>
+      <div><span>Garantia</span><strong>${esc((o.garantiaMeses && o.garantiaMeses > 0 ? o.garantiaMeses : 3) + ' meses')}</strong></div>
     </div>
 
     <div class="bloco">

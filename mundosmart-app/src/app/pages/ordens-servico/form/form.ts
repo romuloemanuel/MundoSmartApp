@@ -402,6 +402,9 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   readonly tiposDispositivo = TIPOS_DISPOSITIVO;
   readonly tiposServico = TIPOS_SERVICO_OS;
   readonly formasPagamentoAcordado: Array<'avista' | 'parcelado'> = ['avista', 'parcelado'];
+  readonly garantiaMesesPadrao = 3;
+  /** Valor de cada parcela (espelha total parcelado ÷ qtd; editável). */
+  valorParcelaEditavel: number | null = null;
   readonly origensPecaOs = ORIGENS_PECA_OS;
   readonly fornecedoresExternosPeca = FORNECEDORES_EXTERNOS_PECA;
   readonly fornecedorPermiteRastreio = fornecedorPermiteRastreio;
@@ -908,22 +911,23 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     this.os.defeito = orc.observacoes?.trim()
       || `Serviço conforme orçamento ${orc.numero || orc.id}`;
     this.os.observacoesInternas = `Origem: orçamento ${orc.numero || orc.id} (id ${orc.id})`;
-    this.os.valorTotalAcordado = orc.valorAVista ?? orc.valorTotalAcordado ?? orc.valorTotal;
-    this.os.valorTotal = this.os.valorTotalAcordado;
-    // Cliente escolhe na OS: deixa forma vazia; mantém qtd de parcelas da proposta.
+    const valorAVista = Number(orc.valorAVista ?? orc.valorTotalAcordado ?? orc.valorTotal ?? 0) || 0;
+    const valorAPrazo = Number(orc.valorAPrazo ?? orc.valorTotalAcordado ?? orc.valorTotal ?? valorAVista) || 0;
+    const parcelas = orc.parcelasPagamento && orc.parcelasPagamento >= 2 ? orc.parcelasPagamento : 2;
+    const garantiaMeses = orc.garantiaMeses && orc.garantiaMeses > 0
+      ? orc.garantiaMeses
+      : this.garantiaMesesPadrao;
+    this.os.valorAVista = valorAVista;
+    this.os.valorAPrazo = valorAPrazo;
+    this.os.parcelasPagamento = parcelas;
+    this.os.garantiaMeses = garantiaMeses;
+    this.os.garantiaDias = garantiaMeses * 30;
+    this.os.valorTotalAcordado = valorAVista;
+    this.os.valorTotal = valorAVista;
+    // Cliente escolhe na OS: deixa forma vazia; mantém valores das opções do orçamento.
     this.os.formaPagamento = undefined;
-    this.os.parcelasPagamento = orc.parcelasPagamento && orc.parcelasPagamento >= 2
-      ? orc.parcelasPagamento
-      : undefined;
-    const opcVista = orc.valorAVista ?? orc.valorTotalAcordado;
-    const opcPrazo = orc.valorAPrazo ?? orc.valorTotalAcordado;
-    const nParc = orc.parcelasPagamento && orc.parcelasPagamento >= 2 ? orc.parcelasPagamento : null;
-    this.os.observacoes = [
-      `Pré-orçamento ${orc.numero || orc.id}`,
-      opcVista != null || opcPrazo != null
-        ? `Opções: à vista ${this.formatarMoeda(opcVista ?? undefined)} / a prazo ${this.formatarMoeda(opcPrazo ?? undefined)}${nParc ? ` em ${nParc}x` : ''}`
-        : null,
-    ].filter(Boolean).join(' · ');
+    this.sincronizarValorParcelaEditavelOs();
+    this.os.observacoes = `Pré-orçamento ${orc.numero || orc.id}`;
 
     this.os.itens = (orc.itens ?? [])
       .filter(i => !!(i.descricao?.trim()) || (i.valorAcontado ?? i.valorUnitario ?? 0) > 0)
@@ -1161,7 +1165,18 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       dataAtualizacao: this.formatarDataParaInput(os.dataAtualizacao),
       dataSaida: this.formatarDataParaInput(os.dataSaida),
       dataConclusao: this.formatarDataParaInput(os.dataConclusao),
-      valorTotalAcordado: os.valorTotalAcordado ?? os.valorTotal,
+      valorTotalAcordado: os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal,
+      valorAVista: os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal,
+      valorAPrazo: os.valorAPrazo ?? os.valorTotalAcordado ?? os.valorTotal,
+      parcelasPagamento: os.parcelasPagamento && os.parcelasPagamento >= 2 ? os.parcelasPagamento : 2,
+      garantiaMeses: os.garantiaMeses && os.garantiaMeses > 0
+        ? os.garantiaMeses
+        : os.garantiaDias && os.garantiaDias > 0
+          ? Math.max(1, Math.round(os.garantiaDias / 30))
+          : this.garantiaMesesPadrao,
+      garantiaDias: os.garantiaDias && os.garantiaDias > 0
+        ? os.garantiaDias
+        : (os.garantiaMeses && os.garantiaMeses > 0 ? os.garantiaMeses : this.garantiaMesesPadrao) * 30,
       formaPagamento: normalizarFormaPagamentoOs(os.formaPagamento) || undefined,
       juros: os.juros ?? 0,
       // Sem pré-seleção: tipo vazio/legado exige escolha explícita.
@@ -1177,6 +1192,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       this.modoRota = 'visualizar';
     }
     if (this.os.modeloId) this.carregarPecasModelo(this.os.modeloId);
+    this.sincronizarValorParcelaEditavelOs();
   }
 
   private normalizarItemOs(item: BlingOrdemServicoItem): BlingOrdemServicoItem {
@@ -1860,14 +1876,17 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
         item.codigoRastreio = undefined;
       }
     }
-    if (this.os.valorTotalAcordado == null) {
-      this.os.valorTotalAcordado = this.totalOsItens;
+    if (this.os.valorAVista == null && this.os.valorTotalAcordado == null) {
+      this.os.valorAVista = this.totalOsItens;
     }
-    this.os.valorTotal = this.os.valorTotalAcordado;
+    this.sincronizarValoresPagamentoOs();
     this.os.formaPagamento = normalizarFormaPagamentoOs(this.os.formaPagamento) || undefined;
-    if (!this.exigeParcelasPagamento()) {
-      this.os.parcelasPagamento = undefined;
+    if (!this.os.parcelasPagamento || this.os.parcelasPagamento < 2) {
+      this.os.parcelasPagamento = 2;
     }
+    const meses = Math.max(1, Number(this.os.garantiaMeses) || this.garantiaMesesPadrao);
+    this.os.garantiaMeses = meses;
+    this.os.garantiaDias = meses * 30;
   }
 
   /** Datas operacionais: datetime-local → ISO com Z (relógio de parede, sem conversão de fuso). */
@@ -1894,10 +1913,9 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
 
   private onFormaPagamentoChangeInterno(forma: 'avista' | 'parcelado'): void {
     this.os.formaPagamento = forma;
-    if (forma === 'avista') {
-      this.os.parcelasPagamento = undefined;
-    } else if (!this.os.parcelasPagamento || this.os.parcelasPagamento < 2) {
+    if (forma === 'parcelado' && (!this.os.parcelasPagamento || this.os.parcelasPagamento < 2)) {
       this.os.parcelasPagamento = 2;
+      this.sincronizarValorParcelaEditavelOs();
     }
   }
 
@@ -1908,8 +1926,79 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  usarSomaItensNasOpcoesPagamento(): void {
+    const total = this.totalOsItens;
+    this.os.valorAVista = total;
+    this.os.valorAPrazo = total;
+    this.sincronizarValoresPagamentoOs();
+    this.sincronizarValorParcelaEditavelOs();
+  }
+
   recalcularValorTotalAcordado(): void {
-    this.os.valorTotalAcordado = this.totalOsItens;
+    this.usarSomaItensNasOpcoesPagamento();
+  }
+
+  onValorAVistaChange(): void {
+    this.sincronizarValoresPagamentoOs();
+  }
+
+  onValorAPrazoChange(): void {
+    this.sincronizarValorParcelaEditavelOs();
+  }
+
+  onParcelasOsChange(): void {
+    const n = Math.max(2, Number(this.os.parcelasPagamento) || 2);
+    this.os.parcelasPagamento = n;
+    this.sincronizarValorParcelaEditavelOs();
+  }
+
+  onValorParcelaOsChange(valor: number | string | null): void {
+    const n = Math.max(2, Number(this.os.parcelasPagamento) || 2);
+    this.os.parcelasPagamento = n;
+    const parcela = Math.max(0, Number(valor) || 0);
+    this.valorParcelaEditavel = parcela;
+    this.os.valorAPrazo = Math.round(parcela * n * 100) / 100;
+  }
+
+  onGarantiaMesesChange(): void {
+    const meses = Math.max(1, Number(this.os.garantiaMeses) || this.garantiaMesesPadrao);
+    this.os.garantiaMeses = meses;
+    this.os.garantiaDias = meses * 30;
+  }
+
+  private sincronizarValoresPagamentoOs(): void {
+    const aVista = Number(this.os.valorAVista ?? this.os.valorTotalAcordado ?? this.totalOsItens) || 0;
+    this.os.valorAVista = aVista;
+    this.os.valorTotalAcordado = aVista;
+    this.os.valorTotal = aVista;
+    if (this.os.valorAPrazo == null || !(Number(this.os.valorAPrazo) > 0)) {
+      this.os.valorAPrazo = aVista;
+    }
+  }
+
+  private sincronizarValorParcelaEditavelOs(): void {
+    const n = this.os.parcelasPagamento && this.os.parcelasPagamento >= 2
+      ? this.os.parcelasPagamento
+      : 0;
+    if (n < 2) {
+      this.valorParcelaEditavel = null;
+      return;
+    }
+    const total = Number(this.os.valorAPrazo ?? this.os.valorAVista ?? this.totalOsItens) || 0;
+    this.valorParcelaEditavel = total > 0
+      ? Math.round((total / n) * 100) / 100
+      : null;
+  }
+
+  get resumoParceladoOs(): string {
+    const n = this.os.parcelasPagamento && this.os.parcelasPagamento >= 2
+      ? this.os.parcelasPagamento
+      : 0;
+    const total = Number(this.os.valorAPrazo ?? 0) || 0;
+    if (n < 2 || total <= 0) return '';
+    const parcela = this.valorParcelaEditavel
+      ?? Math.round((total / n) * 100) / 100;
+    return `${n}x de ${this.formatarMoeda(parcela)}`;
   }
 
   exigeParcelasPagamento(): boolean {
@@ -1917,10 +2006,12 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   }
 
   valorParcelaPagamento(): number | null {
-    const total = this.os.valorTotalAcordado ?? this.totalOsItens;
+    const total = this.os.formaPagamento === 'parcelado'
+      ? (this.os.valorAPrazo ?? this.os.valorTotalAcordado ?? this.totalOsItens)
+      : (this.os.valorAVista ?? this.os.valorTotalAcordado ?? this.totalOsItens);
     const parc = this.os.parcelasPagamento;
-    if (total == null || !parc || parc < 2) return null;
-    return total / parc;
+    if (!parc || parc < 2 || total == null) return null;
+    return Math.round((Number(total) / parc) * 100) / 100;
   }
 
   labelEstoqueItem(item: BlingOrdemServicoItem): string {
@@ -2161,6 +2252,9 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     if (!this.os.defeito?.trim()) faltando.push('defeito relatado pelo cliente');
     if (this.os.temRisco && !this.os.riscoAcordado?.trim()) faltando.push('risco acordado');
     if (!this.os.formaPagamento?.trim()) faltando.push('forma de pagamento combinada');
+    if (!(Number(this.os.valorAVista ?? this.os.valorTotalAcordado) > 0)) {
+      faltando.push('valor à vista');
+    }
     if (!this.senhaDispositivoInformada()) faltando.push('tipo de senha do aparelho');
 
     const pecaEstoqueSemCatalogo = (this.os.itens ?? []).some(
@@ -2198,6 +2292,9 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     if (formaPagamentoPermiteParcelas(this.os.formaPagamento)) {
       if (!this.os.parcelasPagamento || this.os.parcelasPagamento < 2) {
         faltando.push('quantidade de parcelas');
+      }
+      if (!(Number(this.os.valorAPrazo) > 0)) {
+        faltando.push('valor total parcelado');
       }
     }
 

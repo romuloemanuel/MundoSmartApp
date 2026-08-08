@@ -49,6 +49,14 @@ export class OrcamentosService {
     });
   }
 
+  /** Registra follow-up com anotação (+1 contato) e agenda a próxima data. */
+  registrarFollowUp(
+    id: number,
+    body: { anotacao: string; responsavel?: string; dataFollowUpProxima?: string },
+  ): Observable<BlingOrcamento> {
+    return this.http.post<BlingOrcamento>(`${this.apiUrl}/${id}/follow-ups`, body);
+  }
+
   /** Imprime pré-orçamento (aviso especulativo incluso). Recarrega se só tiver id. */
   imprimir(orcamento: BlingOrcamento): void {
     if (orcamento.id == null) return;

@@ -20,6 +20,9 @@ export const SITUACAO_OS_AGUARDANDO_CLIENTE = 'Aguardando Cliente Retirar';
 export const SITUACAO_OS_CANCELADO = 'Cancelado';
 export const SITUACAO_OS_CONCLUIDO = 'Concluído';
 
+/** Valor do filtro de lista: todas as situações, exceto Concluído e Cancelado. */
+export const SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO = '__exceto_concluido__';
+
 /** Padrão para nova OS (todas as lojas). */
 export const SITUACAO_OS_PADRAO = SITUACAO_OS_ABERTO;
 
@@ -46,6 +49,7 @@ export const SITUACOES_OS: string[] = [
 ];
 
 export const SITUACOES_OS_FILTRO: { value: string; label: string }[] = [
+  { value: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO, label: 'Todas (exceto Concluído e Cancelado)' },
   { value: '', label: 'Todas' },
   ...SITUACOES_OS.map(s => ({ value: s, label: s })),
 ];

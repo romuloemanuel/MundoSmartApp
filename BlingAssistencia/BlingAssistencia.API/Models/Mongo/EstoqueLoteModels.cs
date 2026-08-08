@@ -140,6 +140,15 @@ public class MovimentacaoEstoque
     [BsonElement("quantidade")]
     public int Quantidade { get; set; }
 
+    /// <summary>
+    /// Quantidade desta saída que já voltou ao estoque (remoção de peça / OS cancelada).
+    /// Reposição usa Quantidade − QuantidadeEstornada.
+    /// Documentos antigos sem o campo são tratados como 0 (não quebra nem altera o histórico).
+    /// </summary>
+    [BsonElement("quantidadeEstornada")]
+    [BsonDefaultValue(0)]
+    public int QuantidadeEstornada { get; set; }
+
     [BsonElement("custoUnitario")]
     public decimal? CustoUnitario { get; set; }
 
@@ -220,6 +229,29 @@ public class RegistrarEstornoOsRequest
     public string? ModeloId { get; set; }
     public string? ModeloNome { get; set; }
     public string? Cor { get; set; }
+}
+
+public class ListarMovimentacoesFiltros
+{
+    public string? Tipo { get; set; }
+    public DateTime? Inicio { get; set; }
+    public DateTime? Fim { get; set; }
+    /// <summary>Busca em peça, OS, observação, modelo.</summary>
+    public string? Busca { get; set; }
+    /// <summary>os | manual — origem da saída.</summary>
+    public string? Origem { get; set; }
+    /// <summary>ativas | estornadas | parciais</summary>
+    public string? StatusEstorno { get; set; }
+    public int Pagina { get; set; } = 1;
+    public int TamanhoPagina { get; set; } = 20;
+}
+
+public class MovimentacoesPaginadasResponse
+{
+    public List<MovimentacaoEstoque> Itens { get; set; } = [];
+    public long Total { get; set; }
+    public int Pagina { get; set; }
+    public int TamanhoPagina { get; set; }
 }
 
 public class PedidoCompraDetalheResponse

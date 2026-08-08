@@ -112,7 +112,17 @@
         </tr>
       </tbody>
     </table>
-    <p><strong>Total acordado: {{ (os.valorTotalAcordado ?? os.valorTotal) | currency:'BRL' }}</strong></p>
+    <p><strong>À vista: {{ (os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal) | currency:'BRL' }}</strong></p>
+    <p *ngIf="os.valorAPrazo != null">
+      <strong>Parcelado:</strong>
+      {{ os.valorAPrazo | currency:'BRL' }}
+      <span *ngIf="os.parcelasPagamento && os.parcelasPagamento >= 2">
+        ({{ os.parcelasPagamento }}x)
+      </span>
+    </p>
+    <p *ngIf="os.garantiaMeses">
+      <strong>Garantia:</strong> {{ os.garantiaMeses }} meses
+    </p>
     <p *ngIf="os.juros != null && os.juros > 0">
       <strong>Juros:</strong> {{ os.juros | currency:'BRL' }}
     </p>

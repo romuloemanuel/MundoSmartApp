@@ -13,6 +13,8 @@ public interface IBlingOrcamentoService
     Task<BlingOrdemServico> ConverterEmOsAsync(long id, string? lojaOrigem = null);
     /// <summary>Marca o orçamento como convertido após a OS ser criada na tela de inclusão.</summary>
     Task VincularOsAsync(long id, long osBlingId, string? osNumero = null);
+    /// <summary>Registra um follow-up com anotação (conta +1 contato) e agenda a próxima data.</summary>
+    Task<BlingOrcamento> RegistrarFollowUpAsync(long id, RegistrarFollowUpOrcamentoRequest request);
 }
 
 public class BlingOrcamentoService : IBlingOrcamentoService
@@ -86,4 +88,7 @@ public class BlingOrcamentoService : IBlingOrcamentoService
 
     public Task VincularOsAsync(long id, long osBlingId, string? osNumero = null) =>
         throw new InvalidOperationException("Vínculo de orçamento com OS disponível apenas no modo local.");
+
+    public Task<BlingOrcamento> RegistrarFollowUpAsync(long id, RegistrarFollowUpOrcamentoRequest request) =>
+        throw new InvalidOperationException("Follow-up de orçamento disponível apenas no modo local.");
 }

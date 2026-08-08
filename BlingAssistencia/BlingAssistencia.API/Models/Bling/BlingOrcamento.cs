@@ -17,6 +17,14 @@ public class BlingOrcamento
     public string? JustificativaAguardo { get; set; }
     /// <summary>Dia combinado para retomar contato / mandar mensagem (ex.: virada do cartão).</summary>
     public DateTime? DataRetornoMensagem { get; set; }
+    /// <summary>Colaborador que fez o orçamento (Gabriela, Wesley, Liniker, Rômulo, Pedro).</summary>
+    public string? ResponsavelOrcamento { get; set; }
+    /// <summary>Próxima data agendada para follow-up / mensagem ao cliente.</summary>
+    public DateTime? DataFollowUp { get; set; }
+    /// <summary>Quantidade de follow-ups já registrados (espelha FollowUps.Count).</summary>
+    public int VezesContato { get; set; }
+    /// <summary>Histórico de follow-ups feitos (anotação do colaborador).</summary>
+    public List<OrcamentoFollowUpItem>? FollowUps { get; set; }
     public string? Observacoes { get; set; }
     public decimal? ValorTotal { get; set; }
     /// <summary>Soma dos valores desejados dos itens (sempre recalculado).</summary>
@@ -29,6 +37,8 @@ public class BlingOrcamento
     public string? FormaPagamento { get; set; }
     /// <summary>Quantidade de parcelas da opção a prazo.</summary>
     public int? ParcelasPagamento { get; set; }
+    /// <summary>Prazo de garantia acordado com o cliente (meses). Sugestão: 3.</summary>
+    public int? GarantiaMeses { get; set; }
     public string? MarcaId { get; set; }
     public string? MarcaNome { get; set; }
     public string? ModeloId { get; set; }
@@ -38,6 +48,24 @@ public class BlingOrcamento
     public long? OsGeradaBlingId { get; set; }
     public string? OsGeradaNumero { get; set; }
     public List<BlingOrcamentoItem>? Itens { get; set; }
+}
+
+public class OrcamentoFollowUpItem
+{
+    public DateTime Data { get; set; }
+    /// <summary>Anotação do colaborador ao registrar o contato.</summary>
+    public string Anotacao { get; set; } = string.Empty;
+    /// <summary>Quem registrou este follow-up.</summary>
+    public string? Responsavel { get; set; }
+    public DateTime CriadoEm { get; set; }
+}
+
+public class RegistrarFollowUpOrcamentoRequest
+{
+    public string Anotacao { get; set; } = string.Empty;
+    public string? Responsavel { get; set; }
+    /// <summary>Próxima data de follow-up (se omitida, a API sugere).</summary>
+    public DateTime? DataFollowUpProxima { get; set; }
 }
 
 public class BlingOrcamentoItem

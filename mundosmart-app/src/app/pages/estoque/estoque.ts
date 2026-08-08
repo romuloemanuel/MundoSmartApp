@@ -49,6 +49,8 @@ import { ModeloAparelho, ModeloCompativel, PecaEstoque } from '../../models/blin
 import { MODELO_LIMITE_LISTA } from '../../config/aparelhos.config';
 import { NovaPecaPedidoModal } from '../../components/nova-peca-pedido-modal/nova-peca-pedido-modal';
 import { AutocompleteCriavel, AutocompleteItem } from '../../components/autocomplete-criavel/autocomplete-criavel';
+import { GridPaginator } from '../../components/grid-paginator/grid-paginator';
+import { GridPaginationState } from '../../utils/grid-pagination.state';
 import {
   agruparPecasPorCategoria,
   CATEGORIAS_PECA,
@@ -81,7 +83,7 @@ interface EstoqueGrupoMarca {
 @Component({
   selector: 'app-estoque',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, NovaPecaPedidoModal, AutocompleteCriavel],
+  imports: [CommonModule, FormsModule, RouterLink, NovaPecaPedidoModal, AutocompleteCriavel, GridPaginator],
   templateUrl: './estoque.html',
   styles: [`
     .estoque-abas {
@@ -126,6 +128,68 @@ interface EstoqueGrupoMarca {
       border: 1px solid #e2e8f0;
       border-radius: 10px;
       padding: 16px;
+    }
+    .saida-estornada td { color: #94a3b8; }
+    .badge-estorno {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      color: #475569;
+      white-space: nowrap;
+    }
+    .badge-estorno.parcial {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .saidas-filtros {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+      margin-bottom: 14px;
+    }
+    .saidas-filtros .form-group {
+      margin: 0;
+      min-width: 140px;
+    }
+    .saidas-filtros .form-group.busca {
+      flex: 1 1 220px;
+      min-width: 200px;
+    }
+    .saidas-filtros label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .saidas-filtros input,
+    .saidas-filtros select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 13px;
+      background: #fff;
+    }
+    .saidas-filtros .btn-limpar {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      color: #475569;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .saidas-resumo {
+      font-size: 12px;
+      color: #64748b;
+      margin: 0 0 10px;
     }
     .filtro-modelo-ac {
       min-width: 180px;
@@ -460,6 +524,13 @@ export class EstoquePage implements OnInit {
   incluindoItem = false;
   itemPedidoExtra: ItemPedidoCompraUi = this.itemVazio();
   movimentacoes: MovimentacaoEstoque[] = [];
+  movimentacoesTotal = 0;
+  readonly gridSaidas = new GridPaginationState();
+  saidaFiltroBusca = '';
+  saidaFiltroInicio = '';
+  saidaFiltroFim = '';
+  saidaFiltroOrigem: '' | 'os' | 'manual' = '';
+  saidaFiltroStatus: '' | 'ativas' | 'estornadas' | 'parciais' = '';
   relatorio?: ReposicaoSemanalResponse;
   financeiro?: RelatorioFinanceiroEstoque;
   financeiroMeses = 12;
@@ -1180,10 +1251,76 @@ export class EstoquePage implements OnInit {
 
   carregarSaidas(): void {
     this.carregando = true;
-    this.service.listarMovimentacoes('saida').subscribe({
-      next: m => { this.movimentacoes = m; this.carregando = false; },
-      error: () => { this.erro = 'Erro ao carregar saídas.'; this.carregando = false; },
+    this.erro = '';
+    this.service.listarMovimentacoes({
+      tipo: 'saida',
+      busca: this.saidaFiltroBusca.trim() || undefined,
+      inicio: this.saidaFiltroInicio || undefined,
+      fim: this.saidaFiltroFim || undefined,
+      origem: this.saidaFiltroOrigem || undefined,
+      statusEstorno: this.saidaFiltroStatus || undefined,
+      pagina: this.gridSaidas.page,
+      tamanhoPagina: this.gridSaidas.pageSize,
+    }).subscribe({
+      next: res => {
+        this.movimentacoes = res.itens ?? [];
+        this.movimentacoesTotal = res.total ?? 0;
+        if (res.pagina > 0) this.gridSaidas.page = res.pagina;
+        this.carregando = false;
+      },
+      error: () => {
+        this.erro = 'Erro ao carregar saídas.';
+        this.carregando = false;
+      },
     });
+  }
+
+  aplicarFiltrosSaidas(): void {
+    this.gridSaidas.reset();
+    this.carregarSaidas();
+  }
+
+  limparFiltrosSaidas(): void {
+    this.saidaFiltroBusca = '';
+    this.saidaFiltroInicio = '';
+    this.saidaFiltroFim = '';
+    this.saidaFiltroOrigem = '';
+    this.saidaFiltroStatus = '';
+    this.aplicarFiltrosSaidas();
+  }
+
+  get filtrosSaidasAtivos(): number {
+    let n = 0;
+    if (this.saidaFiltroBusca.trim()) n += 1;
+    if (this.saidaFiltroInicio) n += 1;
+    if (this.saidaFiltroFim) n += 1;
+    if (this.saidaFiltroOrigem) n += 1;
+    if (this.saidaFiltroStatus) n += 1;
+    return n;
+  }
+
+  onSaidasPageChange(page: number): void {
+    this.gridSaidas.onPageChange(page);
+    this.carregarSaidas();
+  }
+
+  onSaidasPageSizeChange(size: number): void {
+    this.gridSaidas.onPageSizeChange(size);
+    this.carregarSaidas();
+  }
+
+  saidaTemEstorno(m: MovimentacaoEstoque): boolean {
+    return (m.quantidadeEstornada ?? 0) > 0;
+  }
+
+  saidaTotalmenteEstornada(m: MovimentacaoEstoque): boolean {
+    const est = m.quantidadeEstornada ?? 0;
+    return est > 0 && est >= (m.quantidade ?? 0);
+  }
+
+  saidaParcialmenteEstornada(m: MovimentacaoEstoque): boolean {
+    const est = m.quantidadeEstornada ?? 0;
+    return est > 0 && est < (m.quantidade ?? 0);
   }
 
   /** Pesquisa as peças utilizadas no período (não persiste). */

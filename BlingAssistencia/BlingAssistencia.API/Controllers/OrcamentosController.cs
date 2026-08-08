@@ -154,4 +154,34 @@ public class OrcamentosController : ControllerBase
             return BadRequest(new { erro = ex.Message });
         }
     }
+
+    /// <summary>
+    /// Registra follow-up com anotação do colaborador (conta 1 contato) e agenda a próxima data.
+    /// </summary>
+    [HttpPost("{id:long}/follow-ups")]
+    public async Task<IActionResult> RegistrarFollowUp(long id, [FromBody] RegistrarFollowUpOrcamentoRequest body)
+    {
+        try
+        {
+            var existente = await _service.ObterAsync(id);
+            LojaAcessoHelper.GarantirAcesso(User, existente.LojaOrigem, "este orçamento");
+            return Ok(await _service.RegistrarFollowUpAsync(id, body));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { erro = ex.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { erro = "Orçamento não encontrado." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
 }

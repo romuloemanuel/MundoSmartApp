@@ -41,17 +41,21 @@ import { BlingOrcamento } from '../../models/bling.models';
             <strong>{{ valor(o) | currency:'BRL' }}</strong>
           </div>
           <div class="resumo-linha" *ngIf="o.valorAVista != null">
-            <span>À vista</span>
+            <span>À vista (vai para a grid da OS)</span>
             <strong>{{ o.valorAVista | currency:'BRL' }}</strong>
           </div>
           <div class="resumo-linha" *ngIf="o.valorAPrazo != null">
-            <span>A prazo{{ o.parcelasPagamento && o.parcelasPagamento >= 2 ? ' (' + o.parcelasPagamento + 'x)' : '' }}</span>
+            <span>Parcelado{{ o.parcelasPagamento && o.parcelasPagamento >= 2 ? ' (' + o.parcelasPagamento + 'x)' : '' }}</span>
             <strong>{{ o.valorAPrazo | currency:'BRL' }}</strong>
+          </div>
+          <div class="resumo-linha" *ngIf="o.garantiaMeses">
+            <span>Garantia combinada</span>
+            <strong>{{ o.garantiaMeses }} meses</strong>
           </div>
         </section>
 
         <ul class="lista-efeitos">
-          <li>Cliente, modelo, relato e itens são copiados para adiantar o cadastro</li>
+          <li>Cliente, modelo, valores (à vista/parcelado), garantia e itens são copiados</li>
           <li>A OS só é criada quando você salvar na tela de inclusão</li>
           <li>Com peça em estoque no item, a baixa ocorre ao salvar a OS</li>
         </ul>

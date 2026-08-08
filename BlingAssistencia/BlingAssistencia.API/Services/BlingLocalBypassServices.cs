@@ -157,10 +157,23 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
     public async Task<OsListaPaginada<BlingOrdemServico>> ListarAsync(OsListarFiltros? filtros = null)
     {
         var paginado = await _localRepo.ListarParaListaAsync(filtros);
+        var itens = paginado.Itens.Select(BlingLocalMappings.ParaOrdemServicoLista).ToList();
+
+        var total = paginado.Total;
+        // Rede de segurança: filtro padrão nunca devolve Concluído/Cancelado.
+        if (OsSituacaoHelper.EhFiltroExcetoFinalizadas(filtros?.Situacao))
+        {
+            var antes = itens.Count;
+            itens = itens.Where(o => !OsSituacaoHelper.EhFinalizada(o.Situacao)).ToList();
+            var removidos = antes - itens.Count;
+            if (removidos > 0)
+                total = Math.Max(0, total - removidos);
+        }
+
         return new OsListaPaginada<BlingOrdemServico>
         {
-            Itens = paginado.Itens.Select(BlingLocalMappings.ParaOrdemServicoLista).ToList(),
-            Total = paginado.Total,
+            Itens = itens,
+            Total = total,
             Pagina = paginado.Pagina,
             TamanhoPagina = paginado.TamanhoPagina,
         };
@@ -325,6 +338,10 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
 
         if (local.ExcluidoEm.HasValue)
             throw new InvalidOperationException("Esta OS já está excluída.");
+
+        // Devolve peças baixadas antes de soft-delete (evita fantasma na reposição).
+        if (!OsSituacaoHelper.EhCancelada(local.Situacao))
+            await _osEstoque.EstornarBaixasAsync(local);
 
         local.ExcluidoEm = DateTime.UtcNow;
         local.ExcluidoPor = "usuario";
@@ -523,10 +540,12 @@ public class BlingOrcamentoServiceLocalBypass : IBlingOrcamentoService
         if (itens.Count == 0)
             throw new ArgumentException("Inclua ao menos um serviço/valor no orçamento antes de converter.");
 
-        var valorAcordado = local.ValorAVista
+        var valorAVista = local.ValorAVista
             ?? local.ValorTotalAcordado
             ?? local.ValorTotal
             ?? itens.Sum(i => (i.ValorAcontado ?? i.ValorUnitario) * i.Quantidade);
+        var valorAPrazo = local.ValorAPrazo ?? valorAVista;
+        var garantiaMeses = local.GarantiaMeses is > 0 ? local.GarantiaMeses : 3;
 
         var os = new BlingOrdemServico
         {
@@ -546,16 +565,16 @@ public class BlingOrcamentoServiceLocalBypass : IBlingOrcamentoService
             Defeito = string.IsNullOrWhiteSpace(local.Observacoes)
                 ? $"Serviço conforme orçamento {local.Numero}"
                 : local.Observacoes.Trim(),
-            Observacoes = $"Convertido do orçamento {local.Numero}"
-                + (local.ValorAVista is > 0 || local.ValorAPrazo is > 0
-                    ? $" · Opções: à vista {local.ValorAVista:C} / a prazo {local.ValorAPrazo:C}"
-                      + (local.ParcelasPagamento is > 1 ? $" em {local.ParcelasPagamento}x" : "")
-                    : ""),
+            Observacoes = $"Convertido do orçamento {local.Numero}",
             ObservacoesInternas = $"Origem: orçamento {local.Numero} (id {local.BlingId})",
-            ValorTotalAcordado = valorAcordado,
-            ValorTotal = valorAcordado,
+            ValorAVista = valorAVista,
+            ValorAPrazo = valorAPrazo,
+            ValorTotalAcordado = valorAVista,
+            ValorTotal = valorAVista,
             FormaPagamento = null,
-            ParcelasPagamento = local.ParcelasPagamento is >= 2 ? local.ParcelasPagamento : null,
+            ParcelasPagamento = local.ParcelasPagamento is >= 2 ? local.ParcelasPagamento : 2,
+            GarantiaMeses = garantiaMeses,
+            GarantiaDias = garantiaMeses * 30,
             Itens = itens,
             DataEntrada = HorarioBrasil.Agora,
             Data = HorarioBrasil.Agora,
@@ -592,6 +611,72 @@ public class BlingOrcamentoServiceLocalBypass : IBlingOrcamentoService
         await _localRepo.SalvarAsync(local);
     }
 
+    public async Task<BlingOrcamento> RegistrarFollowUpAsync(long id, RegistrarFollowUpOrcamentoRequest request)
+    {
+        if (request is null)
+            throw new ArgumentException("Dados do follow-up são obrigatórios.");
+
+        var anotacao = (request.Anotacao ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(anotacao))
+            throw new ArgumentException("Informe a anotação do follow-up.");
+
+        var local = await _localRepo.ObterPorBlingIdAsync(id)
+            ?? throw new KeyNotFoundException($"Orçamento {id} não encontrado.");
+
+        if (string.Equals(local.Situacao, "Convertido", StringComparison.OrdinalIgnoreCase)
+            || local.OsGeradaBlingId.HasValue)
+            throw new InvalidOperationException("Orçamento já convertido — follow-up não se aplica.");
+
+        if (string.Equals(local.Situacao, "Não realizado", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Orçamento já concluído como Não realizado.");
+
+        local.FollowUps ??= [];
+        if (local.FollowUps.Count >= 3)
+            throw new InvalidOperationException("Limite de 3 follow-ups atingido — orçamento deve ser Não realizado.");
+
+        var responsavel = string.IsNullOrWhiteSpace(request.Responsavel)
+            ? local.ResponsavelOrcamento
+            : request.Responsavel.Trim();
+
+        local.FollowUps.Add(new OrcamentoFollowUpItem
+        {
+            Data = HorarioBrasil.Agora.Date,
+            Anotacao = anotacao,
+            Responsavel = responsavel,
+            CriadoEm = HorarioBrasil.Agora,
+        });
+        local.VezesContato = local.FollowUps.Count;
+
+        // Ao completar o 3º follow-up, encerra como Não realizado (histórico preservado).
+        if (local.VezesContato >= 3)
+        {
+            local.Situacao = "Não realizado";
+            local.DataFollowUp = null;
+        }
+        else
+        {
+            var sugerida = SugerirDataFollowUp(local.VezesContato);
+            local.DataFollowUp = request.DataFollowUpProxima?.Date ?? sugerida;
+            if (string.IsNullOrWhiteSpace(local.Situacao)
+                || string.Equals(local.Situacao, "Não realizado", StringComparison.OrdinalIgnoreCase))
+                local.Situacao = "Em aberto";
+        }
+
+        local.AtualizadoEm = DateTime.UtcNow;
+
+        await _localRepo.SalvarAsync(local);
+        return BlingLocalMappings.ParaOrcamento(local);
+    }
+
+    /// <summary>1º → +3 úteis; 2º → +5; 3º+ → +7 (ciclo de 3 follow-ups).</summary>
+    private static DateTime SugerirDataFollowUp(int vezesAposRegistro)
+    {
+        var dias = vezesAposRegistro <= 1 ? 3
+            : vezesAposRegistro == 2 ? 5
+            : 7;
+        return HorarioBrasil.AdicionarDiasUteis(dias);
+    }
+
     private static void AplicarPadroes(BlingOrcamento orcamento)
     {
         if (orcamento.Contato is null || orcamento.Contato.Id <= 0)
@@ -619,6 +704,9 @@ public class BlingOrcamentoServiceLocalBypass : IBlingOrcamentoService
         if (orcamento.ParcelasPagamento is null or < 2)
             orcamento.ParcelasPagamento = 2;
 
+        if (orcamento.GarantiaMeses is null or <= 0)
+            orcamento.GarantiaMeses = 3;
+
         orcamento.TipoContato = string.IsNullOrWhiteSpace(orcamento.TipoContato)
             ? "whatsapp_internet"
             : orcamento.TipoContato.Trim().ToLowerInvariant() switch
@@ -636,5 +724,17 @@ public class BlingOrcamentoServiceLocalBypass : IBlingOrcamentoService
             orcamento.DataRetornoMensagem = null;
         else if (orcamento.DataRetornoMensagem is { } d)
             orcamento.DataRetornoMensagem = d.Date;
+
+        orcamento.ResponsavelOrcamento = string.IsNullOrWhiteSpace(orcamento.ResponsavelOrcamento)
+            ? null
+            : orcamento.ResponsavelOrcamento.Trim();
+        if (orcamento.DataFollowUp is { } df)
+            orcamento.DataFollowUp = df.Date;
+
+        orcamento.FollowUps ??= [];
+        orcamento.FollowUps = orcamento.FollowUps
+            .Where(f => !string.IsNullOrWhiteSpace(f.Anotacao))
+            .ToList();
+        orcamento.VezesContato = orcamento.FollowUps.Count;
     }
 }

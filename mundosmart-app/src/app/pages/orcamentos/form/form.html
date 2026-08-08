@@ -16,9 +16,14 @@
     (lista)="irParaListaAposSalvar()"
   />
 
-  <div class="orc-convertido" *ngIf="jaConvertido">
+  <div class="orc-convertido" *ngIf="orcamentoConvertidoOs">
     Orçamento convertido na OS #{{ orcamento.osGeradaNumero || orcamento.osGeradaBlingId }}.
     <button type="button" class="btn-link" (click)="abrirOsGerada()">Abrir OS</button>
+  </div>
+
+  <div class="orc-nao-realizado" *ngIf="orcamentoNaoRealizado">
+    Orçamento concluído como <strong>Não realizado</strong> após {{ followUpCiclo }} follow-ups.
+    As justificativas dos colaboradores ficam no histórico abaixo (somente visualização).
   </div>
 
   <p *ngIf="erro" class="erro">{{ erro }}</p>
@@ -76,6 +81,37 @@
           </select>
           <span class="campo-hint">Como o cliente chegou / fez este orçamento.</span>
         </div>
+        <div class="form-group">
+          <label>Quem fez o orçamento <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <select
+            [(ngModel)]="orcamento.responsavelOrcamento"
+            name="responsavelOrcamento"
+            [disabled]="jaConvertido"
+          >
+            <option [ngValue]="undefined">Selecione...</option>
+            <option *ngFor="let r of responsaveis" [ngValue]="r">{{ r }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Próximo follow-up</label>
+          <input
+            type="date"
+            [(ngModel)]="orcamento.dataFollowUp"
+            name="dataFollowUp"
+            [disabled]="jaConvertido"
+          />
+          <span class="campo-hint">
+            Data para mandar mensagem / revisitar (ex.: cliente disse que traz no dia 5).
+          </span>
+        </div>
+        <div class="form-group">
+          <label>Contatos feitos</label>
+          <div class="orc-contatos-view" title="Somente visualização — registre follow-ups pela lista">
+            <strong>{{ vezesContatoExibido }}</strong>
+            <span>/ {{ followUpCiclo }}</span>
+          </div>
+          <span class="campo-hint">Somente visualização. Novos contatos são registrados na lista de orçamentos.</span>
+        </div>
       </div>
 
       <div class="form-row orc-aguardo-row">
@@ -105,6 +141,22 @@
             Ex.: dia em que o cartão vira — para mandar mensagem depois. Aparece na lista.
           </span>
         </div>
+      </div>
+
+      <div class="orc-followup-box" *ngIf="!orcamentoConvertidoOs && historicoFollowUps.length">
+        <h4>Histórico de follow-ups</h4>
+        <p class="orc-followup-meta">{{ mensagemCicloFollowUp }}</p>
+        <p class="campo-hint" style="margin-top:0">
+          Somente visualização. Para registrar um novo contato, use o ícone de follow-up na lista.
+        </p>
+        <ul class="orc-followup-hist">
+          <li *ngFor="let f of historicoFollowUps">
+            <div class="fu-cabeca">
+              <span>{{ f.data | date:'dd/MM/yyyy' }} · {{ f.responsavel || '—' }}</span>
+            </div>
+            {{ f.anotacao }}
+          </li>
+        </ul>
       </div>
 
       <div class="form-row">
@@ -304,19 +356,23 @@
       </div>
 
       <div class="orc-pagamento">
+        <h4 class="orc-pagamento-titulo">Opções de pagamento combinadas</h4>
+        <p class="campo-hint" style="margin:0 0 10px">
+          Informe os <strong>dois</strong> valores oferecidos ao cliente: à vista e parcelado.
+        </p>
         <div class="form-row">
           <div class="form-group">
-            <label>Valor combinado</label>
+            <label>Soma dos itens</label>
             <input
               type="text"
               [value]="valorAcordadoExibido | currency:'BRL'"
               readonly
               tabindex="-1"
             />
-            <p class="campo-hint">Soma dos valores desejados de todos os itens inclusos.</p>
+            <p class="campo-hint">Referência (valores desejados dos serviços).</p>
           </div>
-          <div class="form-group">
-            <label>Valor à vista</label>
+          <div class="form-group orc-pag-avista">
+            <label>Valor à vista <span class="campo-obrigatorio">*</span></label>
             <input
               type="number"
               min="0"
@@ -326,10 +382,12 @@
               [disabled]="jaConvertido"
               (ngModelChange)="onOpcaoPagamentoChange()"
             />
-            <p class="campo-hint">Opção de pagamento imediato para o cliente.</p>
+            <p class="campo-hint">Valor combinado para pagamento imediato.</p>
           </div>
+        </div>
+        <div class="form-row orc-pag-prazo-row">
           <div class="form-group">
-            <label>Valor a prazo</label>
+            <label>Valor total parcelado <span class="campo-obrigatorio">*</span></label>
             <input
               type="number"
               min="0"
@@ -337,12 +395,12 @@
               [(ngModel)]="orcamento.valorAPrazo"
               name="valorAPrazo"
               [disabled]="jaConvertido"
-              (ngModelChange)="onOpcaoPagamentoChange()"
+              (ngModelChange)="onValorAPrazoChange()"
             />
-            <p class="campo-hint">Opção parcelada para o cliente escolher.</p>
+            <p class="campo-hint">Total a prazo combinado com o cliente.</p>
           </div>
           <div class="form-group">
-            <label>Parcelas</label>
+            <label>Qtd. de parcelas</label>
             <input
               type="number"
               min="2"
@@ -350,21 +408,52 @@
               [(ngModel)]="orcamento.parcelasPagamento"
               name="parcelasPagamento"
               [disabled]="jaConvertido"
+              (ngModelChange)="onParcelasChange()"
             />
-            <p class="campo-hint" *ngIf="valorParcela as parc">
-              {{ orcamento.parcelasPagamento }}x de {{ parc | currency:'BRL' }}
+          </div>
+          <div class="form-group">
+            <label>Valor de cada parcela</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              [(ngModel)]="valorParcelaEditavel"
+              name="valorParcela"
+              [disabled]="jaConvertido"
+              (ngModelChange)="onValorParcelaChange($event)"
+            />
+            <p class="campo-hint" *ngIf="resumoParcelado">
+              {{ resumoParcelado }}
             </p>
           </div>
         </div>
-        <div class="total-orcamento">
-          <strong>Combinado: {{ valorAcordadoExibido | currency:'BRL' }}</strong>
-          <span class="campo-hint" style="margin-left:12px">
-            À vista {{ (orcamento.valorAVista ?? valorAcordadoExibido) | currency:'BRL' }}
-            · A prazo {{ (orcamento.valorAPrazo ?? valorAcordadoExibido) | currency:'BRL' }}
-            <ng-container *ngIf="orcamento.parcelasPagamento && orcamento.parcelasPagamento >= 2">
-              ({{ orcamento.parcelasPagamento }}x)
-            </ng-container>
-          </span>
+        <div class="total-orcamento orc-pag-resumo">
+          <div class="orc-pag-chip avista">
+            <span>À vista</span>
+            <strong>{{ (orcamento.valorAVista ?? valorAcordadoExibido) | currency:'BRL' }}</strong>
+          </div>
+          <div class="orc-pag-chip prazo">
+            <span>Parcelado</span>
+            <strong>{{ resumoParcelado || ((orcamento.valorAPrazo ?? valorAcordadoExibido) | currency:'BRL') }}</strong>
+          </div>
+          <div class="orc-pag-chip garantia">
+            <span>Garantia</span>
+            <strong>{{ (orcamento.garantiaMeses || garantiaMesesPadrao) }} meses</strong>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:10px">
+          <div class="form-group">
+            <label>Prazo de garantia (meses)</label>
+            <input
+              type="number"
+              min="1"
+              max="36"
+              [(ngModel)]="orcamento.garantiaMeses"
+              name="garantiaMeses"
+              [disabled]="jaConvertido"
+            />
+            <p class="campo-hint">Sugestão: {{ garantiaMesesPadrao }} meses — ajuste se combinou outro prazo com o cliente.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -374,7 +463,7 @@
         {{ salvando ? 'Salvando...' : 'Salvar orçamento' }}
       </button>
       <button type="button" (click)="cancelar()">Voltar</button>
-      <a *ngIf="jaConvertido && orcamento.osGeradaBlingId" routerLink="/ordens-servico/{{ orcamento.osGeradaBlingId }}/editar">
+      <a *ngIf="orcamentoConvertidoOs && orcamento.osGeradaBlingId" routerLink="/ordens-servico/{{ orcamento.osGeradaBlingId }}/editar">
         Abrir OS
       </a>
     </div>

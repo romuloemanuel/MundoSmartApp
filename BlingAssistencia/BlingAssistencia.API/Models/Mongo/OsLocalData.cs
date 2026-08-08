@@ -171,6 +171,12 @@ public class OsLocalData
     [BsonElement("valorTotalAcordado")]
     public decimal? ValorTotalAcordado { get; set; }
 
+    [BsonElement("valorAVista")]
+    public decimal? ValorAVista { get; set; }
+
+    [BsonElement("valorAPrazo")]
+    public decimal? ValorAPrazo { get; set; }
+
     [BsonElement("formaPagamento")]
     public string? FormaPagamento { get; set; }
 
@@ -182,6 +188,9 @@ public class OsLocalData
 
     [BsonElement("garantiaDias")]
     public int? GarantiaDias { get; set; }
+
+    [BsonElement("garantiaMeses")]
+    public int? GarantiaMeses { get; set; }
 
     [BsonElement("itens")]
     public List<BlingOrdemServicoItem> Itens { get; set; } = [];

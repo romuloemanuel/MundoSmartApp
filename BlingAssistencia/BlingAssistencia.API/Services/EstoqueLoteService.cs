@@ -22,6 +22,8 @@ public interface IEstoqueLoteService
     Task ExcluirLoteAsync(string id);
     Task<List<MovimentacaoEstoque>> ListarMovimentacoesAsync(
         string? tipo = null, DateTime? inicio = null, DateTime? fim = null, int limite = 200);
+    Task<MovimentacoesPaginadasResponse> ListarMovimentacoesPaginadoAsync(
+        ListarMovimentacoesFiltros filtros);
     Task<List<MovimentacaoEstoque>> RegistrarSaidaAsync(RegistrarSaidaEstoqueRequest request);
     Task RegistrarEstornoOsAsync(RegistrarEstornoOsRequest request);
     Task<ReposicaoSemanalResponse> RelatorioReposicaoSemanalAsync(DateTime? fim = null);
@@ -593,22 +595,105 @@ public class EstoqueLoteService : IEstoqueLoteService
     public async Task<List<MovimentacaoEstoque>> ListarMovimentacoesAsync(
         string? tipo = null, DateTime? inicio = null, DateTime? fim = null, int limite = 200)
     {
-        var filtro = Builders<MovimentacaoEstoque>.Filter.Empty;
-        if (!string.IsNullOrWhiteSpace(tipo))
-            filtro &= Builders<MovimentacaoEstoque>.Filter.Eq(x => x.Tipo, tipo.Trim().ToLowerInvariant());
-        if (inicio.HasValue)
-            filtro &= Builders<MovimentacaoEstoque>.Filter.Gte(x => x.Data, inicio.Value);
-        if (fim.HasValue)
+        var paginado = await ListarMovimentacoesPaginadoAsync(new ListarMovimentacoesFiltros
         {
-            var fimDia = fim.Value.Date.AddDays(1).AddTicks(-1);
+            Tipo = tipo,
+            Inicio = inicio,
+            Fim = fim,
+            Pagina = 1,
+            TamanhoPagina = Math.Clamp(limite, 1, 500),
+        });
+        return paginado.Itens;
+    }
+
+    public async Task<MovimentacoesPaginadasResponse> ListarMovimentacoesPaginadoAsync(
+        ListarMovimentacoesFiltros filtros)
+    {
+        filtros ??= new ListarMovimentacoesFiltros();
+        var pagina = Math.Max(1, filtros.Pagina);
+        var tamanho = Math.Clamp(filtros.TamanhoPagina <= 0 ? 20 : filtros.TamanhoPagina, 1, 100);
+
+        // Compatibilidade: preenche quantidadeEstornada em saídas antigas a partir das
+        // entradas de estorno já gravadas — não mexe em quantidade, lote nem data.
+        var tipoNorm = (filtros.Tipo ?? "").Trim().ToLowerInvariant();
+        if (tipoNorm is "" or "saida"
+            || !string.IsNullOrWhiteSpace(filtros.StatusEstorno))
+        {
+            await SincronizarQuantidadeEstornadaLegadoAsync(filtros.Inicio, filtros.Fim);
+        }
+
+        var filtro = Builders<MovimentacaoEstoque>.Filter.Empty;
+        if (!string.IsNullOrWhiteSpace(filtros.Tipo))
+            filtro &= Builders<MovimentacaoEstoque>.Filter.Eq(x => x.Tipo, filtros.Tipo.Trim().ToLowerInvariant());
+
+        if (filtros.Inicio.HasValue)
+            filtro &= Builders<MovimentacaoEstoque>.Filter.Gte(x => x.Data, filtros.Inicio.Value.Date);
+
+        if (filtros.Fim.HasValue)
+        {
+            var fimDia = filtros.Fim.Value.Date.AddDays(1).AddTicks(-1);
             filtro &= Builders<MovimentacaoEstoque>.Filter.Lte(x => x.Data, fimDia);
         }
 
-        return await _movimentacoes.Find(filtro)
+        var origem = (filtros.Origem ?? "").Trim().ToLowerInvariant();
+        if (origem is "os" or "automatica" or "auto")
+        {
+            filtro &= Builders<MovimentacaoEstoque>.Filter.Ne(x => x.OsBlingId, null)
+                & Builders<MovimentacaoEstoque>.Filter.Gt(x => x.OsBlingId, 0);
+        }
+        else if (origem is "manual")
+        {
+            filtro &= Builders<MovimentacaoEstoque>.Filter.Or(
+                Builders<MovimentacaoEstoque>.Filter.Eq(x => x.OsBlingId, null),
+                Builders<MovimentacaoEstoque>.Filter.Lte(x => x.OsBlingId, 0));
+        }
+
+        var status = (filtros.StatusEstorno ?? "").Trim().ToLowerInvariant();
+        if (status is "ativas" or "ativa")
+        {
+            filtro &= Builders<MovimentacaoEstoque>.Filter.Or(
+                Builders<MovimentacaoEstoque>.Filter.Eq(x => x.QuantidadeEstornada, 0),
+                Builders<MovimentacaoEstoque>.Filter.Exists(x => x.QuantidadeEstornada, false));
+        }
+        else if (status is "estornadas" or "estornada")
+        {
+            filtro &= Builders<MovimentacaoEstoque>.Filter.Where(x =>
+                x.QuantidadeEstornada > 0 && x.QuantidadeEstornada >= x.Quantidade);
+        }
+        else if (status is "parciais" or "parcial")
+        {
+            filtro &= Builders<MovimentacaoEstoque>.Filter.Where(x =>
+                x.QuantidadeEstornada > 0 && x.QuantidadeEstornada < x.Quantidade);
+        }
+
+        var busca = (filtros.Busca ?? "").Trim();
+        if (!string.IsNullOrWhiteSpace(busca))
+        {
+            var rx = new BsonRegularExpression(Regex.Escape(busca), "i");
+            filtro &= Builders<MovimentacaoEstoque>.Filter.Or(
+                Builders<MovimentacaoEstoque>.Filter.Regex(x => x.PecaNome, rx),
+                Builders<MovimentacaoEstoque>.Filter.Regex(x => x.MarcaPeca, rx),
+                Builders<MovimentacaoEstoque>.Filter.Regex(x => x.ModeloNome, rx),
+                Builders<MovimentacaoEstoque>.Filter.Regex(x => x.OsNumero, rx),
+                Builders<MovimentacaoEstoque>.Filter.Regex(x => x.Observacao, rx),
+                Builders<MovimentacaoEstoque>.Filter.Regex(x => x.NumeroPedido, rx));
+        }
+
+        var total = await _movimentacoes.CountDocumentsAsync(filtro);
+        var itens = await _movimentacoes.Find(filtro)
             .SortByDescending(x => x.Data)
             .ThenByDescending(x => x.CriadoEm)
-            .Limit(limite)
+            .Skip((pagina - 1) * tamanho)
+            .Limit(tamanho)
             .ToListAsync();
+
+        return new MovimentacoesPaginadasResponse
+        {
+            Itens = itens,
+            Total = total,
+            Pagina = pagina,
+            TamanhoPagina = tamanho,
+        };
     }
 
     public async Task<List<MovimentacaoEstoque>> RegistrarSaidaAsync(RegistrarSaidaEstoqueRequest request)
@@ -762,7 +847,9 @@ public class EstoqueLoteService : IEstoqueLoteService
             {
                 if (restante <= 0) break;
 
-                var devolver = Math.Min(restante, saida.Quantidade);
+                var jaEstornada = Math.Max(0, saida.QuantidadeEstornada);
+                var disponivel = Math.Max(0, saida.Quantidade - jaEstornada);
+                var devolver = Math.Min(restante, disponivel);
                 if (devolver <= 0) continue;
 
                 if (!string.IsNullOrWhiteSpace(saida.LoteId))
@@ -782,6 +869,7 @@ public class EstoqueLoteService : IEstoqueLoteService
                             MarcaPeca = saida.MarcaPeca ?? lote.MarcaPeca,
                             ModeloId = saida.ModeloId,
                             ModeloNome = saida.ModeloNome,
+                            Cor = saida.Cor,
                             LoteId = lote.Id,
                             PedidoCompraId = lote.PedidoCompraId,
                             NumeroPedido = lote.NumeroPedido,
@@ -794,12 +882,23 @@ public class EstoqueLoteService : IEstoqueLoteService
                             CriadoEm = agora,
                         });
 
+                        await _movimentacoes.UpdateOneAsync(
+                            x => x.Id == saida.Id,
+                            Builders<MovimentacaoEstoque>.Update.Set(
+                                x => x.QuantidadeEstornada,
+                                jaEstornada + devolver));
+
                         restante -= devolver;
                         continue;
                     }
                 }
 
                 await CriarLoteEstornoAsync(peca, devolver, request, obsBase, agora, saida.MarcaPeca);
+                await _movimentacoes.UpdateOneAsync(
+                    x => x.Id == saida.Id,
+                    Builders<MovimentacaoEstoque>.Update.Set(
+                        x => x.QuantidadeEstornada,
+                        jaEstornada + devolver));
                 restante -= devolver;
             }
         }
@@ -885,11 +984,16 @@ public class EstoqueLoteService : IEstoqueLoteService
         if (modeloFiltro is not null)
             filtro &= Builders<MovimentacaoEstoque>.Filter.Eq(x => x.ModeloId, modeloFiltro);
 
+        // Alinha marcação auxiliar com estornos antigos antes de ler as saídas.
+        await SincronizarQuantidadeEstornadaLegadoAsync(inicioPeriodo.Date, fimDia.Date);
+
         var saidas = await _movimentacoes.Find(filtro).ToListAsync();
 
         // Reposição: só conta baixa de OS Concluída (+ saídas manuais).
         // OS aberta ainda não entra; Cancelada devolve estoque e fica de fora.
+        // Peças removidas/estornadas (mesmo em OS concluída) são abatidas.
         saidas = await FiltrarSaidasParaReposicaoAsync(saidas);
+        saidas = await AbaterEstornosNasSaidasAsync(saidas);
 
         // Garante nome do modelo quando a saída veio sem modeloNome preenchido.
         foreach (var s in saidas.Where(x => string.IsNullOrWhiteSpace(x.ModeloNome) && !string.IsNullOrWhiteSpace(x.ModeloId)))
@@ -994,6 +1098,95 @@ public class EstoqueLoteService : IEstoqueLoteService
     }
 
     /// <summary>
+    /// Compatibilidade com registros antigos: se já existir entrada de "Estorno OS"
+    /// e a saída correspondente ainda não tiver <see cref="MovimentacaoEstoque.QuantidadeEstornada"/>,
+    /// preenche só esse campo auxiliar.
+    /// Não altera Quantidade, Tipo, Data, LoteId nem cria/apaga movimentações.
+    /// Idempotente — pode rodar várias vezes sem duplicar efeito.
+    /// </summary>
+    private async Task SincronizarQuantidadeEstornadaLegadoAsync(
+        DateTime? inicio = null,
+        DateTime? fim = null)
+    {
+        var filtroEntrada = Builders<MovimentacaoEstoque>.Filter.Eq(x => x.Tipo, "entrada")
+            & (Builders<MovimentacaoEstoque>.Filter.Eq(x => x.PedidoCompraId, "estorno-os")
+               | Builders<MovimentacaoEstoque>.Filter.Regex(
+                   x => x.Observacao,
+                   new BsonRegularExpression("^Estorno OS", "i")));
+
+        if (inicio.HasValue || fim.HasValue)
+        {
+            // Inclui estornos do período e um pouco antes (saída pode ser anterior ao estorno).
+            var ini = (inicio ?? DateTime.MinValue).Date.AddDays(-90);
+            var fimDia = (fim ?? DateTime.UtcNow).Date.AddDays(1).AddTicks(-1);
+            filtroEntrada &= Builders<MovimentacaoEstoque>.Filter.Gte(x => x.Data, ini)
+                & Builders<MovimentacaoEstoque>.Filter.Lte(x => x.Data, fimDia);
+        }
+
+        var entradas = await _movimentacoes.Find(filtroEntrada)
+            .Limit(5000)
+            .ToListAsync();
+        if (entradas.Count == 0) return;
+
+        var poolPorChave = new Dictionary<(long OsId, string PecaId), int>();
+        foreach (var e in entradas)
+        {
+            if (e.OsBlingId is null or <= 0 || string.IsNullOrWhiteSpace(e.PecaId)) continue;
+            var key = (e.OsBlingId.Value, e.PecaId);
+            poolPorChave[key] = poolPorChave.GetValueOrDefault(key) + Math.Max(0, e.Quantidade);
+        }
+
+        foreach (var ((osId, pecaId), totalEstorno) in poolPorChave)
+        {
+            if (totalEstorno <= 0) continue;
+
+            var saidas = await _movimentacoes.Find(
+                    Builders<MovimentacaoEstoque>.Filter.Eq(x => x.Tipo, "saida")
+                    & Builders<MovimentacaoEstoque>.Filter.Eq(x => x.PecaId, pecaId)
+                    & Builders<MovimentacaoEstoque>.Filter.Eq(x => x.OsBlingId, osId))
+                .SortByDescending(x => x.Data)
+                .ThenByDescending(x => x.CriadoEm)
+                .ToListAsync();
+
+            if (saidas.Count == 0) continue;
+
+            var restante = totalEstorno;
+            foreach (var saida in saidas)
+            {
+                var ja = Math.Max(0, saida.QuantidadeEstornada);
+                restante -= ja;
+            }
+
+            if (restante <= 0) continue;
+
+            foreach (var saida in saidas)
+            {
+                if (restante <= 0) break;
+                if (string.IsNullOrWhiteSpace(saida.Id)) continue;
+
+                var ja = Math.Max(0, saida.QuantidadeEstornada);
+                var capacidade = Math.Max(0, saida.Quantidade - ja);
+                if (capacidade <= 0) continue;
+
+                var adicionar = Math.Min(capacidade, restante);
+                if (adicionar <= 0) continue;
+
+                var novo = ja + adicionar;
+                // Só aumenta o marcador; nunca reduz e nunca mexe na quantidade da saída.
+                await _movimentacoes.UpdateOneAsync(
+                    Builders<MovimentacaoEstoque>.Filter.And(
+                        Builders<MovimentacaoEstoque>.Filter.Eq(x => x.Id, saida.Id),
+                        Builders<MovimentacaoEstoque>.Filter.Or(
+                            Builders<MovimentacaoEstoque>.Filter.Exists(x => x.QuantidadeEstornada, false),
+                            Builders<MovimentacaoEstoque>.Filter.Lt(x => x.QuantidadeEstornada, novo))),
+                    Builders<MovimentacaoEstoque>.Update.Set(x => x.QuantidadeEstornada, novo));
+
+                restante -= adicionar;
+            }
+        }
+    }
+
+    /// <summary>
     /// Saídas manuais entram sempre.
     /// Baixas de OS só entram se a OS estiver Concluída.
     /// Cancelada / em andamento ficam de fora (cancelamento já estorna o estoque).
@@ -1013,6 +1206,7 @@ public class EstoqueLoteService : IEstoqueLoteService
 
         var ordens = await _osRepo.ObterPorBlingIdsAsync(idsOs);
         var situacaoPorId = ordens.ToDictionary(o => o.BlingId, o => o.Situacao);
+        var excluidaPorId = ordens.ToDictionary(o => o.BlingId, o => o.ExcluidoEm.HasValue);
 
         return saidas.Where(s =>
         {
@@ -1021,9 +1215,104 @@ public class EstoqueLoteService : IEstoqueLoteService
             if (!situacaoPorId.TryGetValue(s.OsBlingId.Value, out var situacao))
                 return false; // OS não encontrada — não contabiliza
 
+            if (excluidaPorId.TryGetValue(s.OsBlingId.Value, out var excluida) && excluida)
+                return false; // OS excluída — estoque já deve ter voltado
+
             // Só OS concluída gera necessidade de reposição.
             return OsSituacaoHelper.EhConcluida(situacao);
         }).ToList();
+    }
+
+    /// <summary>
+    /// Remove da reposição o que já voltou ao estoque (peça tirada da OS / cancelamento parcial).
+    /// Usa <see cref="MovimentacaoEstoque.QuantidadeEstornada"/> e, no legado, entradas de estorno.
+    /// </summary>
+    private async Task<List<MovimentacaoEstoque>> AbaterEstornosNasSaidasAsync(
+        List<MovimentacaoEstoque> saidas)
+    {
+        if (saidas.Count == 0) return saidas;
+
+        var idsOs = saidas
+            .Where(s => s.OsBlingId is > 0)
+            .Select(s => s.OsBlingId!.Value)
+            .Distinct()
+            .ToList();
+
+        // Pool de estornos legados (entrada) ainda não refletidos em QuantidadeEstornada.
+        var poolLegacy = new Dictionary<(long OsId, string PecaId), int>();
+        if (idsOs.Count > 0)
+        {
+            var filtroEstorno = Builders<MovimentacaoEstoque>.Filter.Eq(x => x.Tipo, "entrada")
+                & Builders<MovimentacaoEstoque>.Filter.In(x => x.OsBlingId, idsOs.Select(id => (long?)id))
+                & (Builders<MovimentacaoEstoque>.Filter.Eq(x => x.PedidoCompraId, "estorno-os")
+                   | Builders<MovimentacaoEstoque>.Filter.Regex(
+                       x => x.Observacao,
+                       new MongoDB.Bson.BsonRegularExpression("^Estorno OS", "i")));
+
+            var entradasEstorno = await _movimentacoes.Find(filtroEstorno).ToListAsync();
+            foreach (var e in entradasEstorno)
+            {
+                if (e.OsBlingId is null or <= 0 || string.IsNullOrWhiteSpace(e.PecaId)) continue;
+                var key = (e.OsBlingId.Value, e.PecaId);
+                poolLegacy[key] = poolLegacy.GetValueOrDefault(key) + Math.Max(0, e.Quantidade);
+            }
+
+            // O que já está marcado nas saídas não deve abater de novo via legado.
+            foreach (var s in saidas.Where(x => x.OsBlingId is > 0 && x.QuantidadeEstornada > 0))
+            {
+                var key = (s.OsBlingId!.Value, s.PecaId);
+                if (!poolLegacy.TryGetValue(key, out var pool) || pool <= 0) continue;
+                var consumir = Math.Min(pool, s.QuantidadeEstornada);
+                poolLegacy[key] = pool - consumir;
+            }
+        }
+
+        var efetivas = new List<MovimentacaoEstoque>(saidas.Count);
+        foreach (var s in saidas)
+        {
+            var marcada = Math.Max(0, s.QuantidadeEstornada);
+            var qtd = Math.Max(0, s.Quantidade - marcada);
+
+            if (qtd > 0 && s.OsBlingId is > 0 && !string.IsNullOrWhiteSpace(s.PecaId))
+            {
+                var key = (s.OsBlingId.Value, s.PecaId);
+                if (poolLegacy.TryGetValue(key, out var pool) && pool > 0)
+                {
+                    var abater = Math.Min(qtd, pool);
+                    qtd -= abater;
+                    poolLegacy[key] = pool - abater;
+                }
+            }
+
+            if (qtd <= 0) continue;
+
+            // Cópia com quantidade efetiva (não altera o documento original em memória compartilhada).
+            efetivas.Add(new MovimentacaoEstoque
+            {
+                Id = s.Id,
+                Tipo = s.Tipo,
+                PecaId = s.PecaId,
+                PecaNome = s.PecaNome,
+                MarcaPeca = s.MarcaPeca,
+                ModeloId = s.ModeloId,
+                ModeloNome = s.ModeloNome,
+                Cor = s.Cor,
+                EstoqueLocal = s.EstoqueLocal,
+                LoteId = s.LoteId,
+                PedidoCompraId = s.PedidoCompraId,
+                NumeroPedido = s.NumeroPedido,
+                Quantidade = qtd,
+                QuantidadeEstornada = marcada,
+                CustoUnitario = s.CustoUnitario,
+                OsBlingId = s.OsBlingId,
+                OsNumero = s.OsNumero,
+                Observacao = s.Observacao,
+                Data = s.Data,
+                CriadoEm = s.CriadoEm,
+            });
+        }
+
+        return efetivas;
     }
 
     private static (DateTime inicio, DateTime fimDia, string periodo) ResolverPeriodoReposicao(

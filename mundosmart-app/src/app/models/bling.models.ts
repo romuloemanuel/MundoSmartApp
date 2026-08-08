@@ -105,9 +105,13 @@ export interface BlingOrdemServico {
   riscoAcordado?: string;
   observacoes?: string;
   valorTotal?: number;
-  /** Valor total acordado com o cliente */
+  /** Valor à vista (exibido na grid). */
   valorTotalAcordado?: number;
-  /** dinheiro | pix | debito | credito_vista | credito_parcelado | na_retirada | a_combinar */
+  /** Valor à vista combinado (preferencial para a grid). */
+  valorAVista?: number;
+  /** Valor total parcelado (controle interno / combinado). */
+  valorAPrazo?: number;
+  /** dinheiro | pix | debito | credito_vista | credito_parcelado | na_retirada | a_combinar | avista | parcelado */
   formaPagamento?: string;
   parcelasPagamento?: number;
   /** Juros/taxas do pagamento — base de comissão: total − juros − custo peças */
@@ -153,8 +157,10 @@ export interface BlingOrdemServico {
   testeEntradaRealizado?: boolean;
   /** Técnico marcou teste de saída como realizado */
   testeSaidaRealizado?: boolean;
-  /** Prazo de garantia acordado com o cliente, em dias */
+  /** Prazo de garantia acordado com o cliente, em dias (legado / cupom térmico) */
   garantiaDias?: number;
+  /** Prazo de garantia combinado com o cliente, em meses */
+  garantiaMeses?: number | null;
   contatoPrincipalIndice?: number;
   preferenciaContatoSelecionado?: boolean;
   /** numerica | desenho | nao_deixou | sem_senha — senha para teste do aparelho */
@@ -402,6 +408,13 @@ export interface BlingOrcamentoItem {
   valorAcontado?: number;
 }
 
+export interface OrcamentoFollowUpItem {
+  data: string;
+  anotacao: string;
+  responsavel?: string;
+  criadoEm?: string;
+}
+
 export interface BlingOrcamento {
   id?: number;
   numero?: string;
@@ -417,6 +430,14 @@ export interface BlingOrcamento {
   justificativaAguardo?: string;
   /** Dia para retomar contato / mandar mensagem (yyyy-MM-dd). */
   dataRetornoMensagem?: string;
+  /** Quem fez o orçamento. */
+  responsavelOrcamento?: string;
+  /** Próxima data agendada de follow-up (yyyy-MM-dd). */
+  dataFollowUp?: string;
+  /** Quantidade de follow-ups já registrados. */
+  vezesContato?: number;
+  /** Histórico de follow-ups com anotação. */
+  followUps?: OrcamentoFollowUpItem[];
   observacoes?: string;
   valorTotal?: number;
   /** Soma dos valores desejados dos itens (sempre recalculada). */
@@ -428,6 +449,8 @@ export interface BlingOrcamento {
   formaPagamento?: string;
   /** Quantidade de parcelas da opção a prazo. */
   parcelasPagamento?: number | null;
+  /** Prazo de garantia acordado com o cliente (meses). Sugestão: 3. */
+  garantiaMeses?: number | null;
   marcaId?: string;
   marcaNome?: string;
   modeloId?: string;

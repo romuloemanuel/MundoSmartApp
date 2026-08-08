@@ -628,8 +628,74 @@
   </div>
 
   <!-- SAÍDAS -->
-  <div class="estoque-painel" *ngIf="aba === 'saidas' && !carregando">
-    <table *ngIf="movimentacoes.length > 0">
+  <div class="estoque-painel" *ngIf="aba === 'saidas'">
+    <p class="campo-hint" style="margin:0 0 12px">
+      Histórico de baixas (automáticas da OS e manuais). Peça removida ou OS cancelada
+      <strong>volta ao estoque</strong> e aparece como estornada — isso <strong>não</strong> entra na reposição.
+    </p>
+
+    <div class="saidas-filtros">
+      <div class="form-group busca">
+        <label>Buscar</label>
+        <input
+          type="search"
+          [(ngModel)]="saidaFiltroBusca"
+          name="saidaFiltroBusca"
+          placeholder="Peça, OS, modelo, obs..."
+          (keyup.enter)="aplicarFiltrosSaidas()"
+        />
+      </div>
+      <div class="form-group">
+        <label>De</label>
+        <input type="date" [(ngModel)]="saidaFiltroInicio" name="saidaFiltroInicio" />
+      </div>
+      <div class="form-group">
+        <label>Até</label>
+        <input type="date" [(ngModel)]="saidaFiltroFim" name="saidaFiltroFim" />
+      </div>
+      <div class="form-group">
+        <label>Origem</label>
+        <select [(ngModel)]="saidaFiltroOrigem" name="saidaFiltroOrigem">
+          <option value="">Todas</option>
+          <option value="os">Baixa de OS</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select [(ngModel)]="saidaFiltroStatus" name="saidaFiltroStatus">
+          <option value="">Todos</option>
+          <option value="ativas">Ativas (não estornadas)</option>
+          <option value="estornadas">Estornadas</option>
+          <option value="parciais">Parcialmente estornadas</option>
+        </select>
+      </div>
+      <button type="button" (click)="aplicarFiltrosSaidas()">Filtrar</button>
+      <button
+        type="button"
+        class="btn-limpar"
+        *ngIf="filtrosSaidasAtivos > 0"
+        (click)="limparFiltrosSaidas()"
+      >Limpar</button>
+    </div>
+
+    <p class="saidas-resumo" *ngIf="!carregando">
+      <strong>{{ movimentacoesTotal }}</strong> saída(s)
+      <span *ngIf="filtrosSaidasAtivos > 0"> · {{ filtrosSaidasAtivos }} filtro(s)</span>
+    </p>
+
+    <p *ngIf="carregando" class="campo-hint">Carregando saídas...</p>
+
+    <app-grid-paginator
+      *ngIf="!carregando && movimentacoesTotal > 0"
+      [total]="movimentacoesTotal"
+      [page]="gridSaidas.page"
+      [pageSize]="gridSaidas.pageSize"
+      (pageChange)="onSaidasPageChange($event)"
+      (pageSizeChange)="onSaidasPageSizeChange($event)"
+    />
+
+    <table *ngIf="!carregando && movimentacoes.length > 0">
       <thead>
         <tr>
           <th>Data</th>
@@ -637,25 +703,33 @@
           <th>Marca</th>
           <th>Modelo</th>
           <th>Qtd</th>
+          <th>Status</th>
           <th>Pedido / Lote</th>
           <th>OS</th>
           <th>Obs.</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let m of movimentacoes">
+        <tr *ngFor="let m of movimentacoes" [class.saida-estornada]="saidaTotalmenteEstornada(m)">
           <td>{{ formatarData(m.data) }}</td>
           <td>{{ m.pecaNome }}</td>
           <td>{{ m.marcaPeca || '—' }}</td>
           <td>{{ labelModeloMovimentacao(m.modeloNome, m.modeloId) }}</td>
           <td>{{ m.quantidade }}</td>
+          <td>
+            <span class="badge-estorno" *ngIf="saidaTotalmenteEstornada(m)">Estornada</span>
+            <span class="badge-estorno parcial" *ngIf="saidaParcialmenteEstornada(m)">
+              Estornada {{ m.quantidadeEstornada }}/{{ m.quantidade }}
+            </span>
+            <span *ngIf="!saidaTemEstorno(m)">—</span>
+          </td>
           <td>{{ m.numeroPedido || '—' }}</td>
           <td>{{ m.osNumero ? '#' + m.osNumero : '—' }}</td>
           <td>{{ m.observacao || '—' }}</td>
         </tr>
       </tbody>
     </table>
-    <p *ngIf="movimentacoes.length === 0">Nenhuma sa&iacute;da registrada.</p>
+    <p *ngIf="!carregando && movimentacoes.length === 0">Nenhuma sa&iacute;da encontrada.</p>
   </div>
 
   <!-- NOVA SAÍDA -->
@@ -805,8 +879,9 @@
   <div class="estoque-painel" *ngIf="aba === 'reposicao'">
     <h3 style="margin:0 0 12px">Controle de reposi&ccedil;&atilde;o</h3>
     <p class="campo-hint" style="margin:0 0 12px">
-      Conta pe&ccedil;as de OS <strong>Conclu&iacute;da</strong> e sa&iacute;das manuais no per&iacute;odo.
-      OS em andamento n&atilde;o entra; OS <strong>Cancelada</strong> devolve a pe&ccedil;a ao estoque (fora da reposi&ccedil;&atilde;o).
+      Conta pe&ccedil;as que <strong>ficaram usadas</strong> em OS <strong>Conclu&iacute;da</strong> e sa&iacute;das manuais no per&iacute;odo.
+      Pe&ccedil;a removida da OS, OS <strong>Cancelada</strong> ou exclu&iacute;da devolve o estoque e
+      <strong>não entra na reposi&ccedil;&atilde;o</strong> (mesmo que a baixa ainda apareça em Sa&iacute;das).
     </p>
 
     <div class="reposicao-filtros">

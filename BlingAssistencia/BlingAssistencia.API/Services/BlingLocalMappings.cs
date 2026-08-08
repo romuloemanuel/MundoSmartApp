@@ -77,8 +77,10 @@ internal static class BlingLocalMappings
             TemRisco = local.TemRisco,
             RiscoAcordado = local.RiscoAcordado,
             Observacoes = local.Observacoes,
-            ValorTotal = local.ValorTotalAcordado ?? local.ValorTotal,
-            ValorTotalAcordado = local.ValorTotalAcordado ?? local.ValorTotal,
+            ValorTotal = local.ValorAVista ?? local.ValorTotalAcordado ?? local.ValorTotal,
+            ValorTotalAcordado = local.ValorAVista ?? local.ValorTotalAcordado ?? local.ValorTotal,
+            ValorAVista = local.ValorAVista ?? local.ValorTotalAcordado ?? local.ValorTotal,
+            ValorAPrazo = local.ValorAPrazo,
             FormaPagamento = local.FormaPagamento,
             ParcelasPagamento = local.ParcelasPagamento,
             Juros = local.Juros,
@@ -117,6 +119,11 @@ internal static class BlingLocalMappings
             SenhaDispositivoTipo = local.SenhaDispositivoTipo,
             SenhaDispositivo = local.SenhaDispositivo,
             GarantiaDias = local.GarantiaDias,
+            GarantiaMeses = local.GarantiaMeses is > 0
+                ? local.GarantiaMeses
+                : local.GarantiaDias is > 0
+                    ? (int)Math.Round(local.GarantiaDias.Value / 30.0)
+                    : null,
             FotosAparelho = local.FotosAparelho?.Select(f => new OsFotoAparelhoInfo
             {
                 Id = f.Id,
@@ -174,8 +181,10 @@ internal static class BlingLocalMappings
             Equipamento = local.Equipamento,
             Imei = local.Imei,
             CpfCnpj = local.CpfCnpj,
-            ValorTotal = local.ValorTotalAcordado ?? local.ValorTotal,
-            ValorTotalAcordado = local.ValorTotalAcordado ?? local.ValorTotal,
+            ValorTotal = local.ValorAVista ?? local.ValorTotalAcordado ?? local.ValorTotal,
+            ValorTotalAcordado = local.ValorAVista ?? local.ValorTotalAcordado ?? local.ValorTotal,
+            ValorAVista = local.ValorAVista ?? local.ValorTotalAcordado ?? local.ValorTotal,
+            ValorAPrazo = local.ValorAPrazo,
             FormaPagamento = local.FormaPagamento,
             ParcelasPagamento = local.ParcelasPagamento,
             Juros = local.Juros,
@@ -314,12 +323,24 @@ internal static class BlingLocalMappings
         local.Descricao = os.Descricao;
         local.Equipamento = os.Equipamento;
         local.Observacoes = os.Observacoes;
-        local.ValorTotal = os.ValorTotalAcordado ?? os.ValorTotal;
-        local.ValorTotalAcordado = os.ValorTotalAcordado ?? os.ValorTotal;
+        local.ValorTotal = os.ValorAVista ?? os.ValorTotalAcordado ?? os.ValorTotal;
+        local.ValorTotalAcordado = os.ValorAVista ?? os.ValorTotalAcordado ?? os.ValorTotal;
+        local.ValorAVista = os.ValorAVista ?? os.ValorTotalAcordado ?? os.ValorTotal;
+        local.ValorAPrazo = os.ValorAPrazo;
         local.FormaPagamento = string.IsNullOrWhiteSpace(os.FormaPagamento) ? null : os.FormaPagamento.Trim();
         local.ParcelasPagamento = os.ParcelasPagamento;
         local.Juros = os.Juros is < 0 ? 0 : os.Juros;
-        local.GarantiaDias = os.GarantiaDias > 0 ? os.GarantiaDias : existente?.GarantiaDias;
+        var garantiaMeses = os.GarantiaMeses is > 0
+            ? os.GarantiaMeses
+            : os.GarantiaDias is > 0
+                ? (int)Math.Round(os.GarantiaDias.Value / 30.0)
+                : existente?.GarantiaMeses;
+        local.GarantiaMeses = garantiaMeses is > 0 ? garantiaMeses : null;
+        local.GarantiaDias = os.GarantiaDias > 0
+            ? os.GarantiaDias
+            : local.GarantiaMeses is > 0
+                ? local.GarantiaMeses * 30
+                : existente?.GarantiaDias;
         local.Itens = os.Itens ?? [];
         local.OsNumero = os.Numero ?? local.OsNumero;
         // Fotos / token de intake: só via endpoints dedicados — não apagar no PUT da OS.
@@ -344,6 +365,12 @@ internal static class BlingLocalMappings
         TipoContato = local.TipoContato,
         JustificativaAguardo = local.JustificativaAguardo,
         DataRetornoMensagem = local.DataRetornoMensagem,
+        ResponsavelOrcamento = local.ResponsavelOrcamento,
+        DataFollowUp = local.DataFollowUp,
+        VezesContato = local.VezesContato > 0
+            ? local.VezesContato
+            : local.FollowUps?.Count ?? 0,
+        FollowUps = local.FollowUps ?? [],
         Observacoes = local.Observacoes,
         ValorTotal = local.ValorTotal,
         ValorTotalAcordado = local.ValorTotalAcordado,
@@ -351,6 +378,7 @@ internal static class BlingLocalMappings
         ValorAPrazo = local.ValorAPrazo,
         FormaPagamento = local.FormaPagamento,
         ParcelasPagamento = local.ParcelasPagamento,
+        GarantiaMeses = local.GarantiaMeses is > 0 ? local.GarantiaMeses : 3,
         MarcaId = local.MarcaId,
         MarcaNome = local.MarcaNome,
         ModeloId = local.ModeloId,
@@ -375,6 +403,21 @@ internal static class BlingLocalMappings
             ? null
             : orcamento.JustificativaAguardo.Trim();
         local.DataRetornoMensagem = orcamento.DataRetornoMensagem?.Date;
+        local.ResponsavelOrcamento = string.IsNullOrWhiteSpace(orcamento.ResponsavelOrcamento)
+            ? null
+            : orcamento.ResponsavelOrcamento.Trim();
+        local.DataFollowUp = orcamento.DataFollowUp?.Date;
+        local.FollowUps = (orcamento.FollowUps ?? [])
+            .Where(f => !string.IsNullOrWhiteSpace(f.Anotacao))
+            .Select(f => new OrcamentoFollowUpItem
+            {
+                Data = f.Data == default ? HorarioBrasil.Agora.Date : f.Data.Date,
+                Anotacao = f.Anotacao.Trim(),
+                Responsavel = string.IsNullOrWhiteSpace(f.Responsavel) ? null : f.Responsavel.Trim(),
+                CriadoEm = f.CriadoEm == default ? HorarioBrasil.Agora : f.CriadoEm,
+            })
+            .ToList();
+        local.VezesContato = local.FollowUps.Count;
         local.Observacoes = orcamento.Observacoes;
         local.ValorTotal = orcamento.ValorTotal;
         local.ValorTotalAcordado = orcamento.ValorTotalAcordado;
@@ -382,6 +425,7 @@ internal static class BlingLocalMappings
         local.ValorAPrazo = orcamento.ValorAPrazo;
         local.FormaPagamento = orcamento.FormaPagamento;
         local.ParcelasPagamento = orcamento.ParcelasPagamento;
+        local.GarantiaMeses = orcamento.GarantiaMeses is > 0 ? orcamento.GarantiaMeses : 3;
         local.MarcaId = orcamento.MarcaId;
         local.MarcaNome = orcamento.MarcaNome;
         local.ModeloId = orcamento.ModeloId;
@@ -401,8 +445,15 @@ internal static class BlingLocalMappings
 
         if (!string.IsNullOrWhiteSpace(filtros.Situacao))
         {
-            var situacaoFiltro = OsSituacaoHelper.Normalizar(filtros.Situacao);
-            lista = lista.Where(o => string.Equals(OsSituacaoHelper.Normalizar(o.Situacao), situacaoFiltro, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (OsSituacaoHelper.EhFiltroExcetoConcluido(filtros.Situacao))
+            {
+                lista = lista.Where(o => !OsSituacaoHelper.EhFinalizada(o.Situacao)).ToList();
+            }
+            else
+            {
+                var situacaoFiltro = OsSituacaoHelper.Normalizar(filtros.Situacao);
+                lista = lista.Where(o => string.Equals(OsSituacaoHelper.Normalizar(o.Situacao), situacaoFiltro, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(filtros.Nome))

@@ -96,8 +96,26 @@ public class EstoqueController : ControllerBase
     public async Task<IActionResult> ListarMovimentacoes(
         [FromQuery] string? tipo,
         [FromQuery] DateTime? inicio,
-        [FromQuery] DateTime? fim) =>
-        Ok(await _estoque.ListarMovimentacoesAsync(tipo, inicio, fim));
+        [FromQuery] DateTime? fim,
+        [FromQuery] string? busca,
+        [FromQuery] string? origem,
+        [FromQuery] string? statusEstorno,
+        [FromQuery] int pagina = 1,
+        [FromQuery] int tamanhoPagina = 20)
+    {
+        var resultado = await _estoque.ListarMovimentacoesPaginadoAsync(new ListarMovimentacoesFiltros
+        {
+            Tipo = tipo,
+            Inicio = inicio,
+            Fim = fim,
+            Busca = busca,
+            Origem = origem,
+            StatusEstorno = statusEstorno,
+            Pagina = pagina,
+            TamanhoPagina = tamanhoPagina,
+        });
+        return Ok(resultado);
+    }
 
     [HttpPost("saidas")]
     public async Task<IActionResult> RegistrarSaida([FromBody] RegistrarSaidaEstoqueRequest request)

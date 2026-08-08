@@ -44,13 +44,17 @@ export function formaPagamentoPermiteParcelas(id?: string): boolean {
 export function labelPagamentoAcordadoOs(os: {
   formaPagamento?: string;
   parcelasPagamento?: number | null;
+  valorAVista?: number | null;
+  valorAPrazo?: number | null;
   valorTotalAcordado?: number | null;
   valorTotal?: number | null;
 }): string {
   const forma = normalizarFormaPagamentoOs(os.formaPagamento);
   if (!forma) return '—';
 
-  const total = os.valorTotalAcordado ?? os.valorTotal;
+  const aVista = os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal;
+  const aPrazo = os.valorAPrazo ?? os.valorTotalAcordado ?? os.valorTotal;
+  const total = forma === 'parcelado' ? aPrazo : aVista;
   const totalFmt = total != null
     ? total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
     : null;

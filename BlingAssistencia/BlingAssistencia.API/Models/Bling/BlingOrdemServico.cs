@@ -24,9 +24,13 @@ public class BlingOrdemServico
     public string? RiscoAcordado { get; set; }
     public string? Observacoes { get; set; }
     public decimal? ValorTotal { get; set; }
-    /// <summary>Valor total acordado com o cliente (pode diferir da soma dos itens).</summary>
+    /// <summary>Valor à vista (exibido na grid / operação).</summary>
     public decimal? ValorTotalAcordado { get; set; }
-  /// <summary>dinheiro | pix | debito | credito_vista | credito_parcelado | na_retirada | a_combinar</summary>
+    /// <summary>Valor à vista combinado (espelha ValorTotalAcordado quando preenchido).</summary>
+    public decimal? ValorAVista { get; set; }
+    /// <summary>Valor total parcelado (controle interno / combinado).</summary>
+    public decimal? ValorAPrazo { get; set; }
+  /// <summary>avista | parcelado — como o cliente vai pagar.</summary>
     public string? FormaPagamento { get; set; }
     public int? ParcelasPagamento { get; set; }
     /// <summary>Juros/taxas do pagamento (ex.: cartão). Usado na base de comissão.</summary>
@@ -75,8 +79,10 @@ public class BlingOrdemServico
     public string? SenhaDispositivoTipo { get; set; }
     /// <summary>PIN/senha alfanumérica, índices do desenho, ou marcadores sem_senha/nao_deixou.</summary>
     public string? SenhaDispositivo { get; set; }
-    /// <summary>Prazo de garantia acordado com o cliente, em dias.</summary>
+    /// <summary>Prazo de garantia acordado com o cliente, em dias (legado / cupom térmico).</summary>
     public int? GarantiaDias { get; set; }
+    /// <summary>Prazo de garantia combinado com o cliente, em meses (padrão do orçamento).</summary>
+    public int? GarantiaMeses { get; set; }
     public List<OsFotoAparelhoInfo>? FotosAparelho { get; set; }
 }
 

@@ -355,11 +355,6 @@
           <label>Data de Sa&iacute;da</label>
           <input type="datetime-local" [(ngModel)]="os.dataSaida" name="dataSaida" />
         </div>
-        <div class="form-group">
-          <label>Garantia acordada (dias)</label>
-          <input type="number" min="1" [(ngModel)]="os.garantiaDias" name="garantiaDias" placeholder="Ex: 90" />
-          <span class="campo-hint">Usado no cupom t&eacute;rmico de garantia. Vazio usa o padr&atilde;o da loja.</span>
-        </div>
       </div>
     </div>
 
@@ -631,7 +626,9 @@
       <div class="os-section-title">Pe&ccedil;as / Servi&ccedil;os</div>
       <p class="os-itens-hint" *ngIf="!somenteLeitura">
         <strong>Estoque local:</strong> pe&ccedil;a do cat&aacute;logo — ao salvar a OS o estoque &eacute; baixado automaticamente.
-        Em <strong>Conclu&iacute;do</strong> entra no relat&oacute;rio de reposi&ccedil;&atilde;o; em <strong>Cancelado</strong> (ou ao remover a pe&ccedil;a da OS) a pe&ccedil;a volta ao estoque.
+        Em <strong>Conclu&iacute;do</strong> a pe&ccedil;a que ficou na OS entra no relat&oacute;rio de reposi&ccedil;&atilde;o.
+        Em <strong>Cancelado</strong>, ao remover a pe&ccedil;a ou excluir a OS, a pe&ccedil;a volta ao estoque e
+        <strong>não</strong> entra na reposi&ccedil;&atilde;o (a baixa continua vis&iacute;vel em Sa&iacute;das como estornada).
         <strong>Fornecedor externo:</strong> nome manual, sem cadastro e sem baixa no estoque.
         Com o modelo selecionado, as pe&ccedil;as aparecem <strong>agrupadas por categoria</strong>
         (Bateria, Tela Incell com Aro, Tela OLED…).
@@ -851,30 +848,98 @@
     <!-- ═══ PAGAMENTO ═══════════════════════════════════════════════════════ -->
     <div class="os-section">
       <div class="os-section-title">Pagamento acordado</div>
+      <p class="campo-hint" style="margin:0 0 10px">
+        Informe os <strong>dois</strong> valores combinados: à vista (exibido na lista) e parcelado (controle interno).
+      </p>
       <div class="form-row">
         <div class="form-group">
           <label>Soma dos itens</label>
           <input [value]="formatarMoeda(totalOsItens)" readonly />
-          <button type="button" class="btn-link" *ngIf="!somenteLeitura" (click)="recalcularValorTotalAcordado()"
+          <button type="button" class="btn-link" *ngIf="!somenteLeitura" (click)="usarSomaItensNasOpcoesPagamento()"
             style="font-size:12px;margin-top:4px">
-            Usar soma dos itens
+            Usar soma nos dois valores
           </button>
         </div>
         <div class="form-group">
-          <label>Valor acordado</label>
-          <input type="number" min="0" step="0.01" [(ngModel)]="os.valorTotalAcordado"
-            name="valorTotalAcordado" [readonly]="somenteLeitura" />
+          <label>Valor à vista <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            [(ngModel)]="os.valorAVista"
+            name="valorAVista"
+            [readonly]="somenteLeitura"
+            (ngModelChange)="onValorAVistaChange()"
+          />
+          <span class="campo-hint">Valor exibido na grid da lista de OS.</span>
         </div>
         <div class="form-group">
           <label>Juros (R$)</label>
           <input type="number" min="0" step="0.01" [(ngModel)]="os.juros"
             name="juros" [readonly]="somenteLeitura" placeholder="0,00" />
-          <span class="campo-hint">Descontado na comissão (total − juros − custo das peças).</span>
+          <span class="campo-hint">Descontado na comissão (à vista − juros − custo das peças).</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Valor total parcelado</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            [(ngModel)]="os.valorAPrazo"
+            name="valorAPrazo"
+            [readonly]="somenteLeitura"
+            (ngModelChange)="onValorAPrazoChange()"
+          />
+          <span class="campo-hint">Controle interno / valor combinado a prazo.</span>
+        </div>
+        <div class="form-group">
+          <label>Qtd. de parcelas</label>
+          <input
+            type="number"
+            min="2"
+            max="24"
+            [(ngModel)]="os.parcelasPagamento"
+            name="parcelasPagamento"
+            [readonly]="somenteLeitura"
+            (ngModelChange)="onParcelasOsChange()"
+          />
+        </div>
+        <div class="form-group">
+          <label>Valor de cada parcela</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            [(ngModel)]="valorParcelaEditavel"
+            name="valorParcelaOs"
+            [readonly]="somenteLeitura"
+            (ngModelChange)="onValorParcelaOsChange($event)"
+          />
+          <span class="campo-hint" *ngIf="resumoParceladoOs">{{ resumoParceladoOs }}</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Garantia combinada (meses)</label>
+          <input
+            type="number"
+            min="1"
+            max="36"
+            [(ngModel)]="os.garantiaMeses"
+            name="garantiaMeses"
+            [readonly]="somenteLeitura"
+            (ngModelChange)="onGarantiaMesesChange()"
+          />
+          <span class="campo-hint">Sugestão: {{ garantiaMesesPadrao }} meses — usada no cupom de garantia.</span>
         </div>
       </div>
 
       <div class="form-group pagamento-acordado-opcoes" data-campo="formaPagamento" [class.campo-invalido]="temErroCampo('formaPagamento')">
-        <label class="pagamento-acordado-label">Forma de pagamento combinada <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
+        <label class="pagamento-acordado-label">Como o cliente vai pagar <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
         <div class="pagamento-acordado-radios">
           <label class="pagamento-acordado-opcao" *ngFor="let forma of formasPagamentoAcordado">
             <input
@@ -891,27 +956,12 @@
         <p class="campo-erro" *ngIf="temErroCampo('formaPagamento')">{{ mensagemErroCampo('formaPagamento') }}</p>
       </div>
 
-      <div class="form-row" *ngIf="exigeParcelasPagamento()">
-        <div class="form-group">
-          <label>Quantidade de parcelas</label>
-          <input
-            type="number"
-            min="2"
-            max="24"
-            [(ngModel)]="os.parcelasPagamento"
-            name="parcelasPagamento"
-            [readonly]="somenteLeitura"
-            placeholder="Ex: 3"
-          />
-        </div>
-      </div>
-
-      <p class="campo-hint" *ngIf="valorParcelaPagamento() as parc">
-        {{ os.parcelasPagamento }}x de {{ formatarMoeda(parc) }}
-        (total {{ formatarMoeda(os.valorTotalAcordado ?? totalOsItens) }})
+      <p class="campo-hint" *ngIf="os.formaPagamento === 'parcelado' && valorParcelaPagamento() as parc">
+        Cliente no parcelado: {{ os.parcelasPagamento }}x de {{ formatarMoeda(parc) }}
+        (total {{ formatarMoeda(os.valorAPrazo ?? os.valorTotalAcordado ?? totalOsItens) }})
       </p>
-      <p class="campo-hint" *ngIf="os.formaPagamento === 'avista' && (os.valorTotalAcordado ?? totalOsItens) != null">
-        Pagamento à vista de {{ formatarMoeda(os.valorTotalAcordado ?? totalOsItens) }}
+      <p class="campo-hint" *ngIf="os.formaPagamento === 'avista'">
+        Cliente à vista: {{ formatarMoeda(os.valorAVista ?? os.valorTotalAcordado ?? totalOsItens) }}
       </p>
     </div>
 

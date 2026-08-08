@@ -251,7 +251,16 @@ public class OsLocalRepository : IOsLocalRepository
 
         if (!string.IsNullOrWhiteSpace(filtros.Situacao))
         {
-            filtro &= Builders<OsLocalData>.Filter.Eq(x => x.Situacao, filtros.Situacao.Trim());
+            if (OsSituacaoHelper.EhFiltroExcetoConcluido(filtros.Situacao))
+            {
+                // Whitelist: só situações em andamento (nunca Concluído/Cancelado).
+                filtro &= Builders<OsLocalData>.Filter.Regex(
+                    x => x.Situacao, OsSituacaoHelper.SituacoesEmAndamentoRegex);
+            }
+            else
+            {
+                filtro &= Builders<OsLocalData>.Filter.Eq(x => x.Situacao, filtros.Situacao.Trim());
+            }
         }
 
         if (filtros.Retorno.HasValue)

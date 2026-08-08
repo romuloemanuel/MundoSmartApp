@@ -608,7 +608,7 @@ function templateComprovante(os: BlingOrdemServico): string {
 }
 
 function templateOs(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}): string {
-  const valor = os.valorTotalAcordado ?? os.valorTotal;
+  const valor = os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal;
   const numeroOs = os.numero || os.id;
   const textos = ctx.textos ?? getTextosImpressaoOs();
   const endereco = ctx.enderecoCliente?.trim() || '—';
@@ -668,7 +668,7 @@ function templateOs(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}): strin
 }
 
 function templateOsComTeste(os: BlingOrdemServico, ctx: OsImpressaoContexto = {}): string {
-  const valor = os.valorTotalAcordado ?? os.valorTotal;
+  const valor = os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal;
   const numeroOs = os.numero || os.id;
   const textos = ctx.textos ?? getTextosImpressaoOs();
   const endereco = ctx.enderecoCliente?.trim() || '—';
@@ -770,7 +770,7 @@ function templateGarantia(os: BlingOrdemServico): string {
         <div class="campo"><label>Peça / serviço</label><span>${esc(os.tipoPecaProblemaNome || labelTipoServicoOs(os.tipoServico) || '—')}</span></div>
         <div class="campo"><label>Conclusão</label><span>${esc(fmtDataCurta(conclusao))}</span></div>
         <div class="campo"><label>Pagamento</label><span>${esc(labelPagamentoAcordadoOs(os))}</span></div>
-        <div class="campo"><label>Valor</label><span>${esc(fmtMoeda(os.valorTotalAcordado ?? os.valorTotal))}</span></div>
+        <div class="campo"><label>Valor</label><span>${esc(fmtMoeda(os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal))}</span></div>
       </div>
     </div>
     <div class="secao">

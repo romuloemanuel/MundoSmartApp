@@ -38,6 +38,12 @@ import {
   ORCAMENTO_TIPOS_CONTATO,
   normalizarTipoContatoOrcamento,
 } from '../../../config/orcamento-contato.config';
+import {
+  ORCAMENTO_FOLLOWUP_CICLO,
+  ORCAMENTO_RESPONSAVEIS,
+  orcamentoConvertido,
+  orcamentoNaoRealizado,
+} from '../../../config/orcamento-followup.config';
 
 @Component({
   selector: 'app-orcamentos-form',
@@ -154,6 +160,7 @@ import {
     .orc-itens-wrap { overflow-x: auto; margin-bottom: 8px; }
     .orc-itens-grid input { max-width: 100%; box-sizing: border-box; }
     .orc-pagamento { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+    .orc-pagamento-titulo { margin: 0 0 4px; font-size: 14px; color: #0f172a; }
     .orc-pagamento-ops {
       display: flex;
       gap: 12px;
@@ -161,6 +168,28 @@ import {
       margin-top: 6px;
     }
     .orc-pagamento-ops label { display: flex; gap: 6px; align-items: center; }
+    .orc-pag-resumo {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 12px;
+    }
+    .orc-pag-chip {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 160px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+    }
+    .orc-pag-chip span { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; }
+    .orc-pag-chip strong { font-size: 15px; color: #0f172a; }
+    .orc-pag-chip.avista { border-color: #bbf7d0; background: #f0fdf4; }
+    .orc-pag-chip.prazo { border-color: #bfdbfe; background: #eff6ff; }
+    .orc-pag-chip.garantia { border-color: #fde68a; background: #fffbeb; }
     .orc-convertido {
       padding: 10px 12px;
       margin-bottom: 14px;
@@ -168,6 +197,15 @@ import {
       background: #ecfdf5;
       border: 1px solid #a7f3d0;
       color: #065f46;
+      font-size: 13px;
+    }
+    .orc-nao-realizado {
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      border-radius: 8px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
       font-size: 13px;
     }
     .badge-catalogo, .badge-livre {
@@ -198,10 +236,78 @@ import {
       color: #fff !important;
       border-color: #2563eb !important;
     }
+    .orc-followup-box {
+      margin: 12px 0 16px;
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .orc-followup-box h4 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: #0f172a;
+    }
+    .orc-followup-meta {
+      font-size: 12px;
+      color: #475569;
+      margin: 0 0 10px;
+    }
+    .orc-followup-meta strong { color: #0f172a; }
+    .orc-followup-hist {
+      list-style: none;
+      margin: 10px 0 0;
+      padding: 0;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .orc-followup-hist li {
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      background: #fff;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #334155;
+    }
+    .orc-followup-hist .fu-cabeca {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+    .orc-contatos-view {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      min-height: 36px;
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      background: #f1f5f9;
+      color: #64748b;
+      font-size: 14px;
+      box-sizing: border-box;
+      user-select: none;
+      pointer-events: none;
+    }
+    .orc-contatos-view strong {
+      color: #0f172a;
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+    }
   `,
 })
 export class OrcamentosForm implements OnInit {
-  orcamento: BlingOrcamento = { itens: [], parcelasPagamento: 2 };
+  orcamento: BlingOrcamento = {
+    itens: [],
+    parcelasPagamento: 2,
+    garantiaMeses: 3,
+    vezesContato: 0,
+    followUps: [],
+  };
   editando = false;
   salvando = false;
   erro = '';
@@ -212,12 +318,18 @@ export class OrcamentosForm implements OnInit {
   tipoDispositivo = 'Celular';
   readonly tiposDispositivo = TIPOS_DISPOSITIVO;
   readonly validadeDiasUteis = ORCAMENTO_VALIDADE_DIAS_UTEIS;
+  readonly garantiaMesesPadrao = 3;
   readonly lojasOs = LOJAS_OS;
   readonly tiposContato = ORCAMENTO_TIPOS_CONTATO;
+  readonly responsaveis = ORCAMENTO_RESPONSAVEIS;
+  readonly followUpCiclo = ORCAMENTO_FOLLOWUP_CICLO;
   pecasDisponiveis: PecaValorInfo[] = [];
   gruposServicos: { categoria: string; pecas: PecaValorInfo[] }[] = [];
   carregandoPecas = false;
   mostrarBuscaCatalogo = false;
+
+  /** Valor de cada parcela (espelha total ÷ qtd; editável). */
+  valorParcelaEditavel: number | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -239,19 +351,7 @@ export class OrcamentosForm implements OnInit {
       this.editando = true;
       this.service.obter(+id).subscribe({
         next: (o) => {
-          this.orcamento = {
-            ...o,
-            itens: o.itens ?? [],
-            lojaOrigem: normalizarLojaOs(o.lojaOrigem),
-            tipoContato: normalizarTipoContatoOrcamento(o.tipoContato),
-            justificativaAguardo: o.justificativaAguardo ?? '',
-            dataRetornoMensagem: o.dataRetornoMensagem?.slice(0, 10),
-            validade: o.validade?.slice(0, 10),
-            data: o.data?.slice(0, 10),
-            parcelasPagamento: o.parcelasPagamento && o.parcelasPagamento >= 2
-              ? o.parcelasPagamento
-              : 2,
-          };
+          this.aplicarOrcamentoCarregado(o);
           this.sincronizarValorAcordado(false);
           if (o.modeloId) this.carregarServicosModelo(o.modeloId);
         },
@@ -263,16 +363,70 @@ export class OrcamentosForm implements OnInit {
     this.orcamento = {
       itens: [],
       parcelasPagamento: 2,
+      garantiaMeses: this.garantiaMesesPadrao,
       lojaOrigem: this.appAuth.lojaPadraoCriacao(),
       tipoContato: 'whatsapp_internet',
       data: agoraDataBrasil(),
       validade: adicionarDiasUteisBrasil(ORCAMENTO_VALIDADE_DIAS_UTEIS),
       situacao: 'Em aberto',
+      vezesContato: 0,
+      followUps: [],
     };
   }
 
+  private aplicarOrcamentoCarregado(o: BlingOrcamento): void {
+    this.orcamento = {
+      ...o,
+      itens: o.itens ?? [],
+      followUps: o.followUps ?? [],
+      vezesContato: o.vezesContato ?? o.followUps?.length ?? 0,
+      lojaOrigem: normalizarLojaOs(o.lojaOrigem),
+      tipoContato: normalizarTipoContatoOrcamento(o.tipoContato),
+      justificativaAguardo: o.justificativaAguardo ?? '',
+      dataRetornoMensagem: o.dataRetornoMensagem?.slice(0, 10),
+      dataFollowUp: o.dataFollowUp?.slice(0, 10),
+      validade: o.validade?.slice(0, 10),
+      data: o.data?.slice(0, 10),
+      parcelasPagamento: o.parcelasPagamento && o.parcelasPagamento >= 2
+        ? o.parcelasPagamento
+        : 2,
+      garantiaMeses: o.garantiaMeses && o.garantiaMeses > 0
+        ? o.garantiaMeses
+        : this.garantiaMesesPadrao,
+    };
+    this.sincronizarValorParcelaEditavel();
+  }
+
+  get vezesContatoExibido(): number {
+    return this.orcamento.vezesContato ?? this.orcamento.followUps?.length ?? 0;
+  }
+
+  get historicoFollowUps(): NonNullable<BlingOrcamento['followUps']> {
+    return [...(this.orcamento.followUps ?? [])].sort((a, b) =>
+      (b.data ?? '').localeCompare(a.data ?? '') || (b.criadoEm ?? '').localeCompare(a.criadoEm ?? ''));
+  }
+
+  get mensagemCicloFollowUp(): string {
+    const n = this.vezesContatoExibido;
+    if (n < this.followUpCiclo - 1) {
+      return `Follow-ups feitos: ${n} de ${this.followUpCiclo}. No ${this.followUpCiclo}º o orçamento será Não realizado.`;
+    }
+    if (n === this.followUpCiclo - 1) {
+      return `Próximo follow-up (${this.followUpCiclo}º) encerra o orçamento como Não realizado.`;
+    }
+    return `Ciclo de ${this.followUpCiclo} follow-ups concluído — status Não realizado.`;
+  }
+
   get jaConvertido(): boolean {
-    return !!this.orcamento.osGeradaBlingId || this.orcamento.situacao === 'Convertido';
+    return orcamentoConvertido(this.orcamento) || orcamentoNaoRealizado(this.orcamento.situacao);
+  }
+
+  get orcamentoNaoRealizado(): boolean {
+    return orcamentoNaoRealizado(this.orcamento.situacao);
+  }
+
+  get orcamentoConvertidoOs(): boolean {
+    return orcamentoConvertido(this.orcamento);
   }
 
   get valorInicialModelo(): string {
@@ -304,7 +458,39 @@ export class OrcamentosForm implements OnInit {
     const n = this.orcamento.parcelasPagamento;
     if (!n || n < 2) return null;
     const base = Number(this.orcamento.valorAPrazo ?? this.valorAcordadoExibido) || 0;
-    return base / n;
+    return Math.round((base / n) * 100) / 100;
+  }
+
+  get resumoParcelado(): string {
+    const n = this.orcamento.parcelasPagamento;
+    const parc = this.valorParcela;
+    if (!n || n < 2 || parc == null) return '';
+    const total = Number(this.orcamento.valorAPrazo ?? this.valorAcordadoExibido) || 0;
+    return `${n}x de ${parc.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} (total ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`;
+  }
+
+  private sincronizarValorParcelaEditavel(): void {
+    this.valorParcelaEditavel = this.valorParcela;
+  }
+
+  onValorAPrazoChange(): void {
+    this.onOpcaoPagamentoChange();
+    this.sincronizarValorParcelaEditavel();
+  }
+
+  onParcelasChange(): void {
+    this.onOpcaoPagamentoChange();
+    this.sincronizarValorParcelaEditavel();
+  }
+
+  onValorParcelaChange(valor: number | string | null): void {
+    const n = Math.max(2, Number(this.orcamento.parcelasPagamento) || 2);
+    this.orcamento.parcelasPagamento = n;
+    const parcela = Number(valor);
+    if (!Number.isFinite(parcela) || parcela < 0) return;
+    this.valorParcelaEditavel = parcela;
+    this.orcamento.valorAPrazo = Math.round(parcela * n * 100) / 100;
+    this.onOpcaoPagamentoChange();
   }
 
   buscarModelosFn = (termo: string): Observable<AutocompleteItem[]> =>
@@ -550,6 +736,7 @@ export class OrcamentosForm implements OnInit {
     if (!this.orcamento.parcelasPagamento || this.orcamento.parcelasPagamento < 2) {
       this.orcamento.parcelasPagamento = 2;
     }
+    this.sincronizarValorParcelaEditavel();
   }
 
   onOpcaoPagamentoChange(): void {
@@ -577,11 +764,16 @@ export class OrcamentosForm implements OnInit {
       dataRetornoMensagem: (this.orcamento.justificativaAguardo ?? '').trim()
         ? (this.orcamento.dataRetornoMensagem || undefined)
         : undefined,
+      responsavelOrcamento: (this.orcamento.responsavelOrcamento ?? '').trim() || undefined,
+      dataFollowUp: this.orcamento.dataFollowUp || undefined,
+      vezesContato: this.orcamento.followUps?.length ?? this.orcamento.vezesContato ?? 0,
+      followUps: this.orcamento.followUps ?? [],
       valorTotalAcordado: valorAcordado,
       valorTotal: valorAcordado,
       valorAVista: aVista,
       valorAPrazo: aPrazo,
       parcelasPagamento: parcelas,
+      garantiaMeses: Math.max(1, Number(this.orcamento.garantiaMeses) || this.garantiaMesesPadrao),
       formaPagamento: undefined,
       validade: this.orcamento.validade || adicionarDiasUteisBrasil(ORCAMENTO_VALIDADE_DIAS_UTEIS),
       itens: (this.orcamento.itens ?? []).map(i => {
@@ -610,6 +802,18 @@ export class OrcamentosForm implements OnInit {
       this.erro = 'Informe o cliente.';
       return;
     }
+    if (!(this.orcamento.responsavelOrcamento ?? '').trim()) {
+      this.erro = 'Informe quem fez o orçamento.';
+      return;
+    }
+    if (!(Number(this.orcamento.valorAVista) > 0) && !(Number(this.valorAcordadoExibido) > 0)) {
+      this.erro = 'Informe o valor à vista.';
+      return;
+    }
+    if (!(Number(this.orcamento.valorAPrazo) > 0) && !(Number(this.valorAcordadoExibido) > 0)) {
+      this.erro = 'Informe o valor parcelado combinado.';
+      return;
+    }
     if (!(this.orcamento.itens?.length)) {
       this.erro = 'Inclua ao menos um serviço com valor.';
       return;
@@ -627,15 +831,8 @@ export class OrcamentosForm implements OnInit {
       next: (salvo) => {
         this.salvando = false;
         this.editando = true;
-        this.orcamento = {
-          ...salvo,
-          itens: salvo.itens ?? [],
-          validade: salvo.validade?.slice(0, 10),
-          data: salvo.data?.slice(0, 10),
-          parcelasPagamento: salvo.parcelasPagamento && salvo.parcelasPagamento >= 2
-            ? salvo.parcelasPagamento
-            : 2,
-        };
+        this.aplicarOrcamentoCarregado(salvo);
+        this.sincronizarValorAcordado(false);
         this.orcamentoSalvo = { ...this.orcamento };
         this.modalSalvoAberto = true;
         // Mantém a URL correta após o primeiro cadastro.
@@ -667,6 +864,11 @@ export class OrcamentosForm implements OnInit {
     this.orcamento = {
       itens: [],
       parcelasPagamento: 2,
+      garantiaMeses: this.garantiaMesesPadrao,
+      lojaOrigem: this.appAuth.lojaPadraoCriacao(),
+      tipoContato: 'whatsapp_internet',
+      vezesContato: 0,
+      followUps: [],
       data: agoraDataBrasil(),
       validade: adicionarDiasUteisBrasil(ORCAMENTO_VALIDADE_DIAS_UTEIS),
       situacao: 'Em aberto',

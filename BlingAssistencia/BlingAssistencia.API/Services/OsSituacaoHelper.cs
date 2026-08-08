@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using MongoDB.Bson;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
 using MundoSmart.BlingAssistencia.API.Config;
 
@@ -22,6 +24,9 @@ public static class OsSituacaoHelper
     public const string AguardandoCliente = "Aguardando Cliente Retirar";
     public const string Cancelado = "Cancelado";
     public const string Concluido = "Concluído";
+
+    /// <summary>Sentinela do filtro de lista: todas as situações, exceto Concluído e Cancelado.</summary>
+    public const string FiltroExcetoConcluido = "__exceto_concluido__";
 
     public const string AguardandoAprovacaoCliente = AguardandoAprovacao;
 
@@ -131,9 +136,44 @@ public static class OsSituacaoHelper
         Concluido,
         "Concluida",
         "Concluída",
+        "concluido",
+        "concluida",
+        "concluído",
+        "concluída",
         Cancelado,
         "Cancelada",
+        "cancelado",
+        "cancelada",
     ];
+
+    /// <summary>Regex: só situações em andamento (exclui Concluído/Cancelado e variantes).</summary>
+    public static BsonRegularExpression SituacoesEmAndamentoRegex { get; } = CriarRegexEmAndamento();
+
+    private static BsonRegularExpression CriarRegexEmAndamento()
+    {
+        var ativos = SituacoesValidas
+            .Where(s => !EhFinalizada(s))
+            .Append("Em andamento")
+            .Select(Regex.Escape)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        // ^...$ com flag i — Cancelado/Concluído não entram.
+        return new BsonRegularExpression($"^\\s*({string.Join("|", ativos)})\\s*$", "i");
+    }
+
+    /// <summary>Valores canônicos + legado para excluir Concluído no filtro da lista.</summary>
+    public static readonly string[] SituacoesConcluidasAliases =
+    [
+        Concluido,
+        "Concluida",
+        "Concluída",
+    ];
+
+    public static bool EhFiltroExcetoConcluido(string? situacao) =>
+        string.Equals(situacao?.Trim(), FiltroExcetoConcluido, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Filtro padrão da lista: em andamento (exclui Concluído e Cancelado).</summary>
+    public static bool EhFiltroExcetoFinalizadas(string? situacao) =>
+        EhFiltroExcetoConcluido(situacao);
 
     public static void ValidarMotivoCancelamento(string? situacao, string? motivoCancelamento)
     {

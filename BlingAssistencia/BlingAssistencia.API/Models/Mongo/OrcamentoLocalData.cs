@@ -41,6 +41,18 @@ public class OrcamentoLocalData
     [BsonElement("dataRetornoMensagem")]
     public DateTime? DataRetornoMensagem { get; set; }
 
+    [BsonElement("responsavelOrcamento")]
+    public string? ResponsavelOrcamento { get; set; }
+
+    [BsonElement("dataFollowUp")]
+    public DateTime? DataFollowUp { get; set; }
+
+    [BsonElement("vezesContato")]
+    public int VezesContato { get; set; }
+
+    [BsonElement("followUps")]
+    public List<OrcamentoFollowUpItem> FollowUps { get; set; } = [];
+
     [BsonElement("observacoes")]
     public string? Observacoes { get; set; }
 
@@ -61,6 +73,9 @@ public class OrcamentoLocalData
 
     [BsonElement("parcelasPagamento")]
     public int? ParcelasPagamento { get; set; }
+
+    [BsonElement("garantiaMeses")]
+    public int? GarantiaMeses { get; set; }
 
     [BsonElement("marcaId")]
     public string? MarcaId { get; set; }

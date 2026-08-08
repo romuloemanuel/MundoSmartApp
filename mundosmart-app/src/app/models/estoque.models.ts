@@ -47,11 +47,33 @@ export interface MovimentacaoEstoque {
   pedidoCompraId?: string;
   numeroPedido?: string;
   quantidade: number;
+  /** Unidades desta saída que já voltaram ao estoque (remoção/cancelamento). */
+  quantidadeEstornada?: number;
   custoUnitario?: number;
   osBlingId?: number;
   osNumero?: string;
   observacao?: string;
   data: string;
+}
+
+export interface ListarMovimentacoesParams {
+  tipo?: string;
+  inicio?: string;
+  fim?: string;
+  busca?: string;
+  /** os | manual */
+  origem?: string;
+  /** ativas | estornadas | parciais */
+  statusEstorno?: string;
+  pagina?: number;
+  tamanhoPagina?: number;
+}
+
+export interface MovimentacoesPaginadas {
+  itens: MovimentacaoEstoque[];
+  total: number;
+  pagina: number;
+  tamanhoPagina: number;
 }
 
 export interface ItemPedidoCompraRequest {

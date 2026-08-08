@@ -19,6 +19,7 @@ import {
 } from '../os-situacao.util';
 import {
   SITUACOES_OS_FILTRO,
+  SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
   situacaoPadraoPorLoja,
 } from '../../../config/os-situacao.config';
 import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
@@ -106,9 +107,9 @@ import { agoraDataBrasil } from '../../../utils/horario-brasil.util';
 
     .os-grid .col-urgencia { width: 36px; min-width: 36px; max-width: 36px; text-align: center; padding-left: 4px; padding-right: 4px; }
     .os-grid .col-num { width: 56px; min-width: 56px; max-width: 56px; }
-    .os-grid .col-cliente { width: 160px; min-width: 160px; max-width: 160px; }
+    .os-grid .col-cliente { width: 240px; min-width: 220px; max-width: 260px; }
     .os-grid .col-aviso { width: 72px; min-width: 72px; max-width: 72px; text-align: center; }
-    .os-grid .col-equip { width: 150px; min-width: 150px; max-width: 150px; }
+    .os-grid .col-equip { width: 130px; min-width: 120px; max-width: 140px; }
     .os-grid .col-imei { width: 140px; min-width: 140px; max-width: 140px; font-variant-numeric: tabular-nums; font-size: 12px; }
     .os-grid .col-sit { width: 132px; min-width: 132px; max-width: 132px; }
     .os-grid .col-tecnico {
@@ -432,7 +433,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   filtroUrgencia: '' | OsPainelTvNivel = '';
 
   filtros: OsFiltros = {
-    situacao: '',
+    situacao: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
     nome: '',
     telefone: '',
     imei: '',
@@ -625,6 +626,16 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   private aplicarResposta(dados: { itens?: BlingOrdemServico[]; total?: number }): void {
     let itens = Array.isArray(dados.itens) ? [...dados.itens] : [];
 
+    // Filtro padrão: não exibir Concluído/Cancelado (rede de segurança se a API atrasar).
+    if (this.filtros.situacao === SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO) {
+      const antes = itens.length;
+      itens = itens.filter(os => !osSituacaoFinalizada(os.situacao));
+      const removidos = antes - itens.length;
+      if (removidos > 0 && typeof dados.total === 'number') {
+        dados = { ...dados, total: Math.max(0, dados.total - removidos) };
+      }
+    }
+
     if (this.filtroUrgencia) {
       itens = itens.filter(os => this.nivelUrgencia(os) === this.filtroUrgencia);
     }
@@ -654,7 +665,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   limparFiltros(): void {
     this.filtros = {
-      situacao: '',
+      situacao: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
       nome: '',
       telefone: '',
       imei: '',
@@ -676,7 +687,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   get filtrosAtivos(): number {
     let count = 0;
-    if (this.filtros.situacao) count++;
+    if (this.filtros.situacao && this.filtros.situacao !== SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO) count++;
     if (this.filtros.nome) count++;
     if (this.filtros.telefone) count++;
     if (this.filtros.imei) count++;
@@ -693,7 +704,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   get totalValorPagina(): number {
     return this.ordens.reduce(
-      (acc, os) => acc + (os.valorTotalAcordado ?? os.valorTotal ?? 0),
+      (acc, os) => acc + (this.valorAVistaOs(os) ?? 0),
       0,
     );
   }
@@ -969,6 +980,10 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     this.avisoAbertoId = undefined;
     this.avisoAbertoOs = undefined;
     this.avisoPopAbreCima = false;
+  }
+
+  valorAVistaOs(os: BlingOrdemServico): number {
+    return Number(os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal ?? 0) || 0;
   }
 
   valorCompacto(valor?: number | null): string {

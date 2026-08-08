@@ -25,8 +25,33 @@
       [(ngModel)]="filtroValidade"
       name="filtroValidade"
       (ngModelChange)="aplicarFiltros()"
+      title="Validade do orçamento"
     >
       <option *ngFor="let v of validades" [value]="v.id">{{ v.label }}</option>
+    </select>
+    <select
+      [(ngModel)]="filtroFollowUpStatus"
+      name="filtroFollowUpStatus"
+      (ngModelChange)="aplicarFiltros()"
+      title="Status do follow-up"
+    >
+      <option *ngFor="let f of followUpStatusFiltro" [value]="f.id">{{ f.label }}</option>
+    </select>
+    <input
+      type="date"
+      [(ngModel)]="filtroFollowUpData"
+      name="filtroFollowUpData"
+      title="Data de revisita (follow-up)"
+      (ngModelChange)="aplicarFiltros()"
+    />
+    <select
+      [(ngModel)]="filtroResponsavel"
+      name="filtroResponsavel"
+      (ngModelChange)="aplicarFiltros()"
+      title="Quem fez o orçamento"
+    >
+      <option value="">Todo responsável</option>
+      <option *ngFor="let r of responsaveisFiltro" [value]="r">{{ r }}</option>
     </select>
     <select
       [(ngModel)]="filtroLoja"
@@ -37,7 +62,17 @@
     >
       <option *ngFor="let l of lojasFiltro" [value]="l.value">{{ l.label }}</option>
     </select>
-    <button type="button" (click)="filtrarVencidos()">Só vencidos</button>
+    <button type="button" (click)="filtrarVencidos()" [class.ativa]="filtroValidade === 'vencidos'">
+      Só vencidos
+    </button>
+    <button
+      type="button"
+      (click)="filtrarFollowUpAtrasado()"
+      [class.ativa]="filtroFollowUpStatus === 'atrasado'"
+      title="Follow-up no dia ou atrasado"
+    >
+      Follow-up atrasado
+    </button>
     <button
       type="button"
       class="btn-limpar"
@@ -53,10 +88,14 @@
     <span *ngIf="totalVencidos > 0">
       · <strong>{{ totalVencidos }}</strong> vencido(s) em aberto
     </span>
+    <span *ngIf="totalFollowUpAtrasado > 0" style="color:#b91c1c">
+      · <strong>{{ totalFollowUpAtrasado }}</strong> follow-up atrasado(s)
+    </span>
   </p>
 
   <p *ngIf="carregando">Carregando...</p>
   <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="sucesso" class="campo-hint" style="color:#166534;font-weight:600">{{ sucesso }}</p>
 
   <app-orcamento-converter-modal
     *ngIf="converterOrcamento as o"
@@ -65,6 +104,21 @@
     [erro]="erroConverter"
     (confirmar)="confirmarConversao()"
     (cancelar)="fecharConverter()"
+  />
+
+  <app-orcamento-followup-modal
+    *ngIf="followUpOrcamento as fo"
+    [orcamento]="fo"
+    [salvando]="salvandoFollowUp"
+    [erro]="erroFollowUp"
+    (confirmar)="confirmarFollowUp($event)"
+    (cancelar)="fecharFollowUp()"
+  />
+
+  <app-orcamento-historico-modal
+    *ngIf="historicoOrcamento as ho"
+    [orcamento]="ho"
+    (fechar)="fecharHistorico()"
   />
 
   <app-grid-paginator
@@ -79,86 +133,137 @@
   <table class="data-grid" *ngIf="!carregando && orcamentosFiltrados.length > 0">
     <thead>
       <tr>
+        <th class="col-urgencia" title="Urgência do follow-up"></th>
         <th>Número</th>
         <th>Loja</th>
-        <th>Cliente</th>
-        <th>Contato</th>
+        <th class="col-cliente">Cliente</th>
+        <th>Responsável</th>
         <th>Aparelho</th>
         <th>Situação</th>
-        <th>Data</th>
-        <th>Validade</th>
-        <th>Retorno / justificativa</th>
-        <th>Valor</th>
+        <th>Revisitar</th>
+        <th>Contatos</th>
+        <th class="col-hist" title="Histórico de follow-ups">Histórico</th>
+        <th>À vista</th>
+        <th>Parcelado</th>
         <th>Ações</th>
       </tr>
     </thead>
     <tbody>
-      <tr *ngFor="let o of orcamentosPaginados">
+      <tr *ngFor="let o of orcamentosPaginados" [ngClass]="classeLinhaOrcamento(o)">
+        <td class="col-urgencia">
+          <button
+            type="button"
+            class="urgencia-dot-btn"
+            [title]="tituloUrgenciaFollowUp(o)"
+            [attr.aria-label]="tituloUrgenciaFollowUp(o)"
+            (click)="podeRegistrarFollowUp(o) ? abrirFollowUp(o) : editar(o.id!)"
+            [disabled]="!o.id"
+          >
+            <span
+              class="urgencia-dot"
+              [ngClass]="[
+                'urgencia-dot--' + nivelUrgenciaFollowUp(o),
+                followUpAtrasado(o) ? 'urgencia-dot--pulse' : ''
+              ]"
+            ></span>
+          </button>
+        </td>
         <td>{{ o.numero }}</td>
         <td [title]="tituloLoja(o)">
           <span class="grid-loja-sigla">{{ siglaLoja(o) }}</span>
         </td>
-        <td>{{ o.contato?.nome || '-' }}</td>
+        <td class="col-cliente" [title]="o.contato?.nome || ''">
+          <span class="col-cliente-nome">{{ o.contato?.nome || '—' }}</span>
+        </td>
         <td>
-          <span class="orc-tipo-contato">{{ labelTipoContato(o) }}</span>
+          <span class="orc-resp">{{ o.responsavelOrcamento || '—' }}</span>
         </td>
         <td>{{ o.equipamento || ((o.marcaNome || '') + ' ' + (o.modeloNome || '')).trim() || '—' }}</td>
         <td>
-          <span class="badge" [class.orc-convertido-badge]="jaConvertido(o)">{{ o.situacao }}</span>
+          <span
+            class="badge"
+            [class.orc-convertido-badge]="jaConvertido(o)"
+            [class.orc-nao-realizado-badge]="naoRealizado(o)"
+          >{{ o.situacao }}</span>
           <span *ngIf="o.osGeradaNumero" class="campo-hint">OS #{{ o.osGeradaNumero }}</span>
         </td>
-        <td>{{ o.data | date:'dd/MM/yyyy' }}</td>
-        <td [class.orc-vencido]="vencido(o)">
-          {{ o.validade | date:'dd/MM/yyyy' }}
-          <span *ngIf="vencido(o)"> (vencido)</span>
-        </td>
-        <td class="orc-retorno-cell">
-          <ng-container *ngIf="temRetorno(o); else semRetorno">
-            <span
-              *ngIf="o.dataRetornoMensagem"
-              class="orc-retorno-data"
-              [ngClass]="classeDataRetorno(o)"
-              [title]="o.justificativaAguardo || ''"
-            >
-              {{ o.dataRetornoMensagem | date:'dd/MM/yyyy' }}
+        <td class="orc-followup-cell">
+          <ng-container *ngIf="emAberto(o); else revisitarFechado">
+            <span class="orc-revisitar-data" *ngIf="o.dataFollowUp; else semRevisita">
+              {{ o.dataFollowUp | date:'dd/MM/yyyy' }}
             </span>
+            <ng-template #semRevisita><span class="campo-hint">Sem data</span></ng-template>
             <span
-              class="orc-retorno-just"
-              *ngIf="o.justificativaAguardo"
-              [title]="o.justificativaAguardo"
+              class="orc-followup-badge"
+              [ngClass]="statusFollowUp(o)"
+              [title]="labelFollowUp(o)"
             >
-              {{ o.justificativaAguardo }}
+              {{ labelFollowUp(o) }}
             </span>
           </ng-container>
-          <ng-template #semRetorno>—</ng-template>
+          <ng-template #revisitarFechado>
+            <span class="campo-hint">—</span>
+          </ng-template>
         </td>
-        <td>{{ valorExibido(o) | currency:'BRL' }}</td>
+        <td>
+          <span class="orc-contatos">{{ vezesContato(o) }}/{{ followUpCiclo }}</span>
+        </td>
+        <td class="col-hist">
+          <button
+            type="button"
+            class="btn-hist-just"
+            *ngIf="temHistoricoFollowUp(o); else semJust"
+            [title]="tituloHistoricoFollowUp(o)"
+            [attr.aria-label]="tituloHistoricoFollowUp(o)"
+            (click)="abrirHistorico(o)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span class="btn-hist-count" *ngIf="vezesContato(o) > 0">{{ vezesContato(o) }}</span>
+          </button>
+          <ng-template #semJust><span class="campo-hint">—</span></ng-template>
+        </td>
+        <td>{{ valorAVista(o) | currency:'BRL' }}</td>
+        <td class="orc-valor-prazo">
+          <span>{{ labelParcelado(o) }}</span>
+        </td>
         <td class="grid-acoes-cell">
           <div class="grid-acoes orc-grid-acoes">
-            <app-grid-acao tipo="editar" [rotaNovaAba]="['/orcamentos', o.id!]" (acao)="editar(o.id!)" />
+            <app-grid-acao
+              *ngIf="podeRegistrarFollowUp(o)"
+              tipo="followup"
+              titulo="Registrar follow-up: anotar contato do colaborador e definir a próxima data de revisita"
+              [disabled]="salvandoFollowUp"
+              (acao)="abrirFollowUp(o)"
+            />
+            <app-grid-acao
+              tipo="editar"
+              titulo="Editar orçamento: alterar dados, valores, responsável e follow-ups"
+              [rotaNovaAba]="['/orcamentos', o.id!]"
+              (acao)="editar(o.id!)"
+            />
             <app-grid-acao
               tipo="imprimir"
-              titulo="Imprimir pré-orçamento"
+              titulo="Imprimir pré-orçamento para o cliente"
               (acao)="imprimir(o)"
             />
-            <button
-              type="button"
-              class="btn-transformar-os"
-              *ngIf="!jaConvertido(o)"
+            <app-grid-acao
+              *ngIf="emAberto(o)"
+              tipo="os"
               [disabled]="!!convertendoId || !!vencido(o)"
-              [title]="vencido(o) ? 'Orçamento vencido — renove a validade antes de transformar' : 'Transformar orçamento em Ordem de Serviço'"
-              (click)="abrirConverter(o)"
-            >
-              Transformar em OS
-            </button>
-            <button
-              type="button"
-              class="btn-abrir-os"
+              [titulo]="vencido(o)
+                ? 'Não é possível transformar: orçamento vencido — renove a validade no cadastro'
+                : 'Transformar em OS: abrir nova Ordem de Serviço já preenchida com este orçamento'"
+              (acao)="abrirConverter(o)"
+            />
+            <app-grid-acao
               *ngIf="jaConvertido(o)"
-              (click)="abrirOs(o)"
-            >
-              Abrir OS
-            </button>
+              tipo="abrir-os"
+              titulo="Abrir a Ordem de Serviço gerada a partir deste orçamento"
+              [rotaNovaAba]="o.osGeradaBlingId ? ['/ordens-servico', o.osGeradaBlingId, 'editar'] : null"
+              (acao)="abrirOs(o)"
+            />
           </div>
         </td>
       </tr>
