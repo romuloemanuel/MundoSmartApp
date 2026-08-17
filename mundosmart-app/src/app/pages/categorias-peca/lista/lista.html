@@ -1,0 +1,88 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Categorias de pe&ccedil;as</h2>
+  </div>
+
+  <nav class="breadcrumb" aria-label="Navega&ccedil;&atilde;o">
+    <a routerLink="/pecas">Pe&ccedil;as</a>
+    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+    <span class="breadcrumb-atual">Categorias</span>
+  </nav>
+
+  <p class="campo-hint" style="margin-bottom: 16px">
+    Estas categorias aparecem no cadastro de pe&ccedil;as, no pedido de estoque e no agrupamento da OS.
+    Marque <strong>estoque por cor</strong> para tampas e vidros traseiros (quantidade por modelo e cor).
+  </p>
+
+  <div class="cat-form">
+    <input
+      [(ngModel)]="novoNome"
+      name="novoNome"
+      class="filtro-busca-principal"
+      placeholder="Nome da nova categoria (ex: Alto-falante)"
+      (keyup.enter)="adicionar()"
+    />
+    <label class="cat-check">
+      <input type="checkbox" [(ngModel)]="novoUsaCores" name="novoUsaCores" />
+      Estoque por cor
+    </label>
+    <button type="button" (click)="adicionar()" [disabled]="salvando">+ Cadastrar</button>
+  </div>
+
+  <p *ngIf="carregando" class="campo-hint">Carregando...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <table class="data-grid" *ngIf="!carregando && categorias.length > 0">
+    <thead>
+      <tr>
+        <th style="width:72px">Ordem</th>
+        <th>Categoria</th>
+        <th>Estoque por cor</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let c of categorias; let i = index">
+        <td>
+          <ng-container *ngIf="editandoId !== c.id">
+            <button type="button" class="btn-link" (click)="mover(c, -1)" [disabled]="i === 0" title="Subir">↑</button>
+            <button type="button" class="btn-link" (click)="mover(c, 1)" [disabled]="i === categorias.length - 1" title="Descer">↓</button>
+          </ng-container>
+          <input
+            *ngIf="editandoId === c.id"
+            class="cat-ordem"
+            type="number"
+            [(ngModel)]="editOrdem"
+            name="editOrdem"
+          />
+        </td>
+        <td *ngIf="editandoId !== c.id">{{ c.nome }}</td>
+        <td *ngIf="editandoId === c.id">
+          <input [(ngModel)]="editNome" name="editNome" />
+        </td>
+        <td *ngIf="editandoId !== c.id">
+          <span *ngIf="c.usaCoresPorModelo" class="cat-cores">Sim</span>
+          <span *ngIf="!c.usaCoresPorModelo">—</span>
+        </td>
+        <td *ngIf="editandoId === c.id">
+          <label class="cat-check">
+            <input type="checkbox" [(ngModel)]="editUsaCores" name="editUsaCores" />
+            Estoque por cor
+          </label>
+        </td>
+        <td class="grid-acoes-cell">
+          <div class="grid-acoes" *ngIf="editandoId !== c.id">
+            <app-grid-acao tipo="editar" (acao)="iniciarEdicao(c)" />
+            <button type="button" class="btn-link" (click)="excluir(c)">Excluir</button>
+          </div>
+          <div class="grid-acoes" *ngIf="editandoId === c.id">
+            <button type="button" (click)="salvarEdicao()" [disabled]="salvando">Salvar</button>
+            <button type="button" class="btn-link" (click)="cancelarEdicao()">Cancelar</button>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p *ngIf="!carregando && categorias.length === 0 && !erro">Nenhuma categoria cadastrada.</p>
+</div>

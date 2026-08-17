@@ -386,6 +386,7 @@ internal static class BlingLocalMappings
         Equipamento = local.Equipamento,
         OsGeradaBlingId = local.OsGeradaBlingId,
         OsGeradaNumero = local.OsGeradaNumero,
+        MotivoDesistencia = local.MotivoDesistencia,
         Itens = local.Itens
     };
 
@@ -434,6 +435,9 @@ internal static class BlingLocalMappings
             ?? string.Join(' ', new[] { orcamento.MarcaNome, orcamento.ModeloNome }.Where(s => !string.IsNullOrWhiteSpace(s)));
         local.OsGeradaBlingId = orcamento.OsGeradaBlingId ?? local.OsGeradaBlingId;
         local.OsGeradaNumero = orcamento.OsGeradaNumero ?? local.OsGeradaNumero;
+        local.MotivoDesistencia = string.IsNullOrWhiteSpace(orcamento.MotivoDesistencia)
+            ? local.MotivoDesistencia
+            : orcamento.MotivoDesistencia.Trim();
         local.Itens = orcamento.Itens ?? [];
         local.AtualizadoEm = DateTime.UtcNow;
         return local;
@@ -456,17 +460,23 @@ internal static class BlingLocalMappings
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(filtros.Numero))
+        {
+            var numero = new string(filtros.Numero.Where(char.IsDigit).ToArray());
+            if (!string.IsNullOrEmpty(numero))
+            {
+                lista = lista.Where(o =>
+                    (o.Numero?.StartsWith(numero, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || o.Id.ToString().Equals(numero, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(filtros.Nome))
         {
             var termo = filtros.Nome.Trim().ToLower();
             lista = lista.Where(o =>
-                (o.Numero?.Contains(termo, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                o.Id.ToString().Contains(termo) ||
                 (o.Contato?.Nome?.ToLower().Contains(termo) ?? false) ||
-                (o.ContatoAviso?.Nome?.ToLower().Contains(termo) ?? false) ||
-                (o.Equipamento?.ToLower().Contains(termo) ?? false) ||
-                (o.MarcaNome?.ToLower().Contains(termo) ?? false) ||
-                (o.ModeloNome?.ToLower().Contains(termo) ?? false)).ToList();
+                (o.ContatoAviso?.Nome?.ToLower().Contains(termo) ?? false)).ToList();
         }
         if (!string.IsNullOrWhiteSpace(filtros.Telefone))
         {
@@ -525,6 +535,18 @@ internal static class BlingLocalMappings
             var tecnico = filtros.TecnicoNome.Trim();
             lista = lista.Where(o =>
                 string.Equals(o.TecnicoNome?.Trim(), tecnico, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtros.ModeloId) || !string.IsNullOrWhiteSpace(filtros.ModeloNome))
+        {
+            var modeloId = filtros.ModeloId?.Trim();
+            var modeloNome = filtros.ModeloNome?.Trim();
+            lista = lista.Where(o =>
+                (!string.IsNullOrEmpty(modeloId)
+                    && string.Equals(o.ModeloId?.Trim(), modeloId, StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrEmpty(modeloNome)
+                    && string.Equals(o.ModeloNome?.Trim(), modeloNome, StringComparison.OrdinalIgnoreCase))
+            ).ToList();
         }
 
         return lista;

@@ -121,6 +121,15 @@
     (fechar)="fecharHistorico()"
   />
 
+  <app-orcamento-desistencia-modal
+    *ngIf="desistenciaOrcamento as d"
+    [orcamento]="d"
+    [salvando]="salvandoDesistencia"
+    [erro]="erroDesistencia"
+    (confirmar)="confirmarDesistencia($event)"
+    (cancelar)="fecharDesistencia()"
+  />
+
   <app-grid-paginator
     *ngIf="!carregando && orcamentosFiltrados.length > 0"
     [total]="orcamentosFiltrados.length"
@@ -184,6 +193,7 @@
             class="badge"
             [class.orc-convertido-badge]="jaConvertido(o)"
             [class.orc-nao-realizado-badge]="naoRealizado(o)"
+            [class.orc-desistencia-badge]="desistencia(o)"
           >{{ o.situacao }}</span>
           <span *ngIf="o.osGeradaNumero" class="campo-hint">OS #{{ o.osGeradaNumero }}</span>
         </td>
@@ -256,6 +266,13 @@
                 ? 'Não é possível transformar: orçamento vencido — renove a validade no cadastro'
                 : 'Transformar em OS: abrir nova Ordem de Serviço já preenchida com este orçamento'"
               (acao)="abrirConverter(o)"
+            />
+            <app-grid-acao
+              *ngIf="emAberto(o)"
+              tipo="desistencia"
+              [disabled]="salvandoDesistencia"
+              titulo="Desistência: cliente recusou o orçamento"
+              (acao)="abrirDesistencia(o)"
             />
             <app-grid-acao
               *ngIf="jaConvertido(o)"

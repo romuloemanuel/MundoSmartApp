@@ -18,6 +18,29 @@ export const CATEGORIAS_PECA = [
 
 export type CategoriaPeca = (typeof CATEGORIAS_PECA)[number];
 
+const CATEGORIAS_COM_CORES_PADRAO = new Set<string>(['Tampa traseira', 'Vidro Traseiro']);
+
+let ordemCategorias: string[] = [...CATEGORIAS_PECA];
+let categoriasComCores = new Set<string>(CATEGORIAS_COM_CORES_PADRAO);
+
+/** Atualiza a ordem e as categorias com estoque por cor a partir do cadastro. */
+export function aplicarCategoriasPecaCadastro(
+  categorias: Array<{ nome: string; usaCoresPorModelo?: boolean }>,
+): void {
+  if (!categorias.length) return;
+  ordemCategorias = categorias.map(c => c.nome);
+  categoriasComCores = new Set(
+    categorias.filter(c => c.usaCoresPorModelo).map(c => c.nome),
+  );
+  if (categoriasComCores.size === 0) {
+    categoriasComCores = new Set(CATEGORIAS_COM_CORES_PADRAO);
+  }
+}
+
+export function nomesCategoriasPeca(): string[] {
+  return ordemCategorias.length ? [...ordemCategorias] : [...CATEGORIAS_PECA];
+}
+
 function normalizarTextoPeca(texto: string): string {
   return texto
     .toLowerCase()
@@ -65,13 +88,13 @@ export function inferirCategoriaPeca(nome: string, categoria?: string): string {
 /** Categorias que controlam estoque por cor dentro de cada modelo. */
 export function categoriaUsaCoresPorModelo(categoria?: string): boolean {
   const cat = (categoria ?? '').trim();
-  return cat === 'Tampa traseira' || cat === 'Vidro Traseiro';
+  return !!cat && categoriasComCores.has(cat);
 }
 
 export function indiceCategoriaPeca(categoria?: string): number {
   const cat = categoria?.trim();
   if (!cat) return 999;
-  const idx = CATEGORIAS_PECA.indexOf(cat as CategoriaPeca);
+  const idx = ordemCategorias.indexOf(cat);
   return idx >= 0 ? idx : 998;
 }
 

@@ -24,6 +24,7 @@ import { ComissoesPage } from './pages/comissoes/comissoes';
 import { LoginPage } from './pages/login/login';
 import { AlterarSenhaPage } from './pages/conta/alterar-senha';
 import { UsuariosLista } from './pages/usuarios/lista';
+import { CategoriasPecaLista } from './pages/categorias-peca/lista/lista';
 import { adminGuard, authGuard, guestGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
@@ -64,6 +65,7 @@ export const routes: Routes = [
       { path: 'pecas', component: PecasLista },
       { path: 'pecas/novo', component: PecasForm },
       { path: 'pecas/:id', component: PecasForm },
+      { path: 'categorias-peca', component: CategoriasPecaLista },
       /**
        * Rotas de OS aninhadas: evita que `ordens-servico` (prefix) ou `:id`
        * capturem `de-orcamento` / `nova`.
@@ -88,6 +90,11 @@ export const routes: Routes = [
       { path: 'orcamentos', component: OrcamentosLista },
       { path: 'orcamentos/novo', component: OrcamentosForm },
       { path: 'orcamentos/:id', component: OrcamentosForm },
+      {
+        path: 'consulta-produtos',
+        loadComponent: () =>
+          import('./pages/consulta-produtos/consulta-produtos').then(m => m.ConsultaProdutosPage),
+      },
       { path: 'estoque', component: EstoquePage },
       { path: 'estoque/lotes-retorno', component: LotesRetornoPage },
       { path: 'estoque/analise-retorno', component: AnaliseRetornoPage },

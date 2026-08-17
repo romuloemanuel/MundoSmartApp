@@ -3,6 +3,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { BlingAuthService } from '../../services/bling-auth';
 import { AppAuthService } from '../../services/app-auth';
+import { CategoriasPecaService } from '../../services/categorias-peca';
 import { TecnicoSelectModal } from '../../components/tecnico-select-modal/tecnico-select-modal';
 import { OsSituacaoModal } from '../../components/os-situacao-modal/os-situacao-modal';
 
@@ -28,10 +29,12 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <a routerLink="/painel-tv" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" (click)="fecharMenuSeEstreito()">Painel TV</a>
           <a routerLink="/estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Pe&ccedil;as &amp; Estoque</a>
           <a routerLink="/orcamentos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Or&ccedil;amentos</a>
+          <a routerLink="/consulta-produtos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Consulta estoque</a>
           <a routerLink="/clientes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Clientes</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/historico-alteracoes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Hist&oacute;rico de altera&ccedil;&otilde;es</a>
           <div class="nav-section-label">Cadastros</div>
           <a routerLink="/pecas" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Pe&ccedil;as</a>
+          <a routerLink="/categorias-peca" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Categorias de pe&ccedil;as</a>
           <a routerLink="/modelos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Modelos</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/tecnicos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">T&eacute;cnicos</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/usuarios" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Usu&aacute;rios</a>
@@ -142,10 +145,12 @@ export class AppShell implements OnInit {
   constructor(
     public blingAuth: BlingAuthService,
     public appAuth: AppAuthService,
+    private categoriasPeca: CategoriasPecaService,
   ) {}
 
   ngOnInit(): void {
     this.menuAberto = this.lerPreferenciaInicial();
+    this.categoriasPeca.listar().subscribe();
   }
 
   alternarMenu(): void {

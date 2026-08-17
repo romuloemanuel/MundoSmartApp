@@ -5,8 +5,19 @@
   </div>
 
   <div class="filtros-bar">
-    <input [(ngModel)]="filtros.nome" placeholder="Nome do cliente / contato de aviso..." (keyup.enter)="buscarComFiltros()" class="filtro-wide" />
-    <input [(ngModel)]="filtros.telefone" placeholder="Telefone / Celular..." (keyup.enter)="buscarComFiltros()" />
+    <input
+      [(ngModel)]="filtros.numero"
+      (ngModelChange)="onNumeroFiltroInput($event)"
+      placeholder="Nº OS"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      autocomplete="off"
+      (keyup.enter)="buscarComFiltros()"
+      class="filtro-numero"
+      title="Somente números"
+    />
+    <input [(ngModel)]="filtros.nome" placeholder="Nome" title="Cliente ou contato de aviso" (keyup.enter)="buscarComFiltros()" class="filtro-wide" />
+    <input [(ngModel)]="filtros.telefone" placeholder="Telefone" (keyup.enter)="buscarComFiltros()" />
     <select [(ngModel)]="filtros.situacao" (change)="buscarComFiltros()">
       <option *ngFor="let s of situacoesFiltro" [value]="s.value">{{ s.label }}</option>
     </select>
@@ -46,13 +57,26 @@
 
   <div class="filtros-avancados" *ngIf="filtrosAbertos">
     <div class="filtros-grid">
+      <div class="filtro-campo filtro-modelo">
+        <label>Modelo</label>
+        <ng-container *ngFor="let k of [modeloFiltroKey]">
+          <app-autocomplete-criavel
+            placeholder="Modelo"
+            [buscarFn]="buscarModelosFn"
+            [permitirCriar]="false"
+            [valorInicial]="filtros.modeloNome"
+            [valorInicialId]="filtros.modeloId"
+            (itemSelecionadoChange)="onModeloFiltroChange($event)"
+          />
+        </ng-container>
+      </div>
       <div class="filtro-campo">
         <label>IMEI</label>
-        <input [(ngModel)]="filtros.imei" placeholder="IMEI do equipamento..." (keyup.enter)="buscarComFiltros()" />
+        <input [(ngModel)]="filtros.imei" placeholder="IMEI" (keyup.enter)="buscarComFiltros()" />
       </div>
       <div class="filtro-campo">
         <label>CPF / CNPJ</label>
-        <input [(ngModel)]="filtros.cpfCnpj" placeholder="CPF ou CNPJ..." (keyup.enter)="buscarComFiltros()" />
+        <input [(ngModel)]="filtros.cpfCnpj" placeholder="CPF/CNPJ" (keyup.enter)="buscarComFiltros()" />
       </div>
       <div class="filtro-campo">
         <label>Retorno</label>

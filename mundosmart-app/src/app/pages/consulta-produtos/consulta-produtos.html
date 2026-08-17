@@ -1,0 +1,72 @@
+<div class="consulta-page">
+  <header class="consulta-head">
+    <p class="eyebrow">Consulta de estoque</p>
+    <h1>Capinhas, películas e térmicos</h1>
+    <p class="sub">Digite o modelo e veja o que tem em estoque — tela feita para o celular.</p>
+  </header>
+
+  <nav class="cats" aria-label="Categorias">
+    <button
+      type="button"
+      *ngFor="let c of categorias"
+      class="cat"
+      [class.ativa]="categoria === c.id"
+      (click)="selecionarCategoria(c.id)"
+    >
+      {{ c.label }}
+    </button>
+  </nav>
+
+  <form class="busca" (submit)="$event.preventDefault(); buscar()">
+    <label class="busca-label" for="consulta-modelo">{{ hintCategoria }}</label>
+    <div class="busca-row">
+      <input
+        id="consulta-modelo"
+        type="search"
+        enterkeyhint="search"
+        inputmode="search"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        [(ngModel)]="termo"
+        name="termo"
+        [placeholder]="placeholder"
+        (ngModelChange)="onTermoChange()"
+      />
+      <button type="submit" class="btn-buscar" [disabled]="carregando">
+        {{ carregando ? '…' : 'Buscar' }}
+      </button>
+    </div>
+    <label class="chk">
+      <input type="checkbox" [checked]="incluirZerados" (change)="toggleZerados()" />
+      Mostrar sem estoque
+    </label>
+  </form>
+
+  <p class="origem" *ngIf="tituloOrigem && buscou && !erro">{{ tituloOrigem }}</p>
+  <p class="aviso" *ngIf="aviso">{{ aviso }}</p>
+  <p class="erro" *ngIf="erro">{{ erro }}</p>
+  <p class="loading" *ngIf="carregando">Consultando estoque…</p>
+
+  <section class="resultados" *ngIf="!carregando && buscou && !erro">
+    <p class="vazio" *ngIf="grupos.length === 0">
+      Nada encontrado para <strong>{{ termo }}</strong> em {{ categorias.find(c => c.id === categoria)?.label }}.
+    </p>
+
+    <article class="card" *ngFor="let g of grupos">
+      <header class="card-head">
+        <h2>{{ g.nome }}</h2>
+        <span class="saldo-total" [ngClass]="saldoClass(g.saldoTotal)">
+          {{ g.saldoTotal }} un
+        </span>
+      </header>
+      <p class="modelo" *ngIf="g.modelo">Modelo: {{ g.modelo }}</p>
+      <ul class="cores">
+        <li *ngFor="let c of g.cores" [ngClass]="saldoClass(c.saldo)">
+          <span class="cor-nome">{{ c.cor }}</span>
+          <span class="cor-saldo">{{ c.saldo }}</span>
+        </li>
+      </ul>
+    </article>
+  </section>
+</div>

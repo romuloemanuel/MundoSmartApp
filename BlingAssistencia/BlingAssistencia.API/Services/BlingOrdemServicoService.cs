@@ -390,4 +390,10 @@ public class OsListarFiltros
     public string? LojaOrigem { get; set; }
     /// <summary>Nome do técnico responsável (ex.: comissão).</summary>
     public string? TecnicoNome { get; set; }
+    /// <summary>Número da OS (OsNumero ou BlingId).</summary>
+    public string? Numero { get; set; }
+    /// <summary>Id do modelo de aparelho cadastrado.</summary>
+    public string? ModeloId { get; set; }
+    /// <summary>Nome do modelo (OS antigas sem modeloId).</summary>
+    public string? ModeloNome { get; set; }
 }

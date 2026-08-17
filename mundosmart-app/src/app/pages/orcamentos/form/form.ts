@@ -42,8 +42,15 @@ import {
   ORCAMENTO_FOLLOWUP_CICLO,
   ORCAMENTO_RESPONSAVEIS,
   orcamentoConvertido,
+  orcamentoDesistencia,
+  orcamentoEmAberto,
+  orcamentoEncerrado,
   orcamentoNaoRealizado,
 } from '../../../config/orcamento-followup.config';
+import {
+  OrcamentoDesistenciaModal,
+  OrcamentoDesistenciaPayload,
+} from '../../../components/orcamento-desistencia-modal/orcamento-desistencia-modal';
 
 @Component({
   selector: 'app-orcamentos-form',
@@ -56,6 +63,7 @@ import {
     NovoClienteModal,
     AutocompleteCriavel,
     OrcamentoSalvoModal,
+    OrcamentoDesistenciaModal,
   ],
   templateUrl: './form.html',
   styles: `
@@ -208,6 +216,15 @@ import {
       color: #991b1b;
       font-size: 13px;
     }
+    .orc-desistencia {
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      border-radius: 8px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      font-size: 13px;
+    }
     .badge-catalogo, .badge-livre {
       display: inline-block;
       font-size: 10px;
@@ -310,6 +327,9 @@ export class OrcamentosForm implements OnInit {
   };
   editando = false;
   salvando = false;
+  salvandoDesistencia = false;
+  modalDesistenciaAberto = false;
+  erroDesistencia = '';
   erro = '';
   modalNovoClienteAberto = false;
   modalSalvoAberto = false;
@@ -418,11 +438,19 @@ export class OrcamentosForm implements OnInit {
   }
 
   get jaConvertido(): boolean {
-    return orcamentoConvertido(this.orcamento) || orcamentoNaoRealizado(this.orcamento.situacao);
+    return orcamentoEncerrado(this.orcamento);
   }
 
   get orcamentoNaoRealizado(): boolean {
     return orcamentoNaoRealizado(this.orcamento.situacao);
+  }
+
+  get orcamentoDesistencia(): boolean {
+    return orcamentoDesistencia(this.orcamento.situacao);
+  }
+
+  get podeDesistir(): boolean {
+    return !!this.orcamento.id && orcamentoEmAberto(this.orcamento);
   }
 
   get orcamentoConvertidoOs(): boolean {
@@ -889,6 +917,36 @@ export class OrcamentosForm implements OnInit {
 
   cancelar(): void {
     this.router.navigate(['/orcamentos']);
+  }
+
+  abrirDesistencia(): void {
+    if (!this.podeDesistir || this.salvandoDesistencia) return;
+    this.erro = '';
+    this.erroDesistencia = '';
+    this.modalDesistenciaAberto = true;
+  }
+
+  fecharDesistencia(): void {
+    if (this.salvandoDesistencia) return;
+    this.modalDesistenciaAberto = false;
+    this.erroDesistencia = '';
+  }
+
+  confirmarDesistencia(payload: OrcamentoDesistenciaPayload): void {
+    if (!this.orcamento.id || this.salvandoDesistencia) return;
+    this.salvandoDesistencia = true;
+    this.erroDesistencia = '';
+    this.service.registrarDesistencia(this.orcamento.id, { motivo: payload.motivo }).subscribe({
+      next: salvo => {
+        this.salvandoDesistencia = false;
+        this.modalDesistenciaAberto = false;
+        this.aplicarOrcamentoCarregado(salvo);
+      },
+      error: err => {
+        this.salvandoDesistencia = false;
+        this.erroDesistencia = err.error?.erro ?? 'Erro ao registrar desistência.';
+      },
+    });
   }
 
   abrirOsGerada(): void {

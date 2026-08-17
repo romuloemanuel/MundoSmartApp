@@ -20,6 +20,8 @@ public interface IPecaEstoqueRepository
     void InvalidarCacheReferencia();
     Task InvalidarCacheReferenciaAsync();
     Task GarantirCatalogoDemonstracaoAsync();
+    Task<long> ContarPorCategoriaAsync(string categoria);
+    Task RenomearCategoriaAsync(string nomeAnterior, string nomeNovo);
 }
 
 public class PecaEstoqueRepository : IPecaEstoqueRepository
@@ -180,6 +182,28 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
 
         await InvalidarCacheReferenciaAsync();
         return true;
+    }
+
+    public async Task<long> ContarPorCategoriaAsync(string categoria)
+    {
+        var nome = categoria.Trim();
+        if (string.IsNullOrEmpty(nome)) return 0;
+        return await _pecas.CountDocumentsAsync(
+            Builders<PecaEstoque>.Filter.Eq(x => x.Categoria, nome));
+    }
+
+    public async Task RenomearCategoriaAsync(string nomeAnterior, string nomeNovo)
+    {
+        var de = nomeAnterior.Trim();
+        var para = nomeNovo.Trim();
+        if (string.IsNullOrEmpty(de) || string.IsNullOrEmpty(para)
+            || string.Equals(de, para, StringComparison.Ordinal))
+            return;
+
+        await _pecas.UpdateManyAsync(
+            Builders<PecaEstoque>.Filter.Eq(x => x.Categoria, de),
+            Builders<PecaEstoque>.Update.Set(x => x.Categoria, para));
+        await InvalidarCacheReferenciaAsync();
     }
 
     public async Task<List<DisponibilidadePecaResponse>> ConsultarDisponibilidadeAsync(

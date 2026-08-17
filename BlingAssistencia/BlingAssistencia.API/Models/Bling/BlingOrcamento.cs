@@ -47,6 +47,8 @@ public class BlingOrcamento
     /// <summary>OS gerada a partir deste orçamento.</summary>
     public long? OsGeradaBlingId { get; set; }
     public string? OsGeradaNumero { get; set; }
+    /// <summary>Motivo informado ao marcar desistência do cliente.</summary>
+    public string? MotivoDesistencia { get; set; }
     public List<BlingOrcamentoItem>? Itens { get; set; }
 }
 
@@ -66,6 +68,12 @@ public class RegistrarFollowUpOrcamentoRequest
     public string? Responsavel { get; set; }
     /// <summary>Próxima data de follow-up (se omitida, a API sugere).</summary>
     public DateTime? DataFollowUpProxima { get; set; }
+}
+
+public class RegistrarDesistenciaOrcamentoRequest
+{
+    public string Motivo { get; set; } = string.Empty;
+    public string? Responsavel { get; set; }
 }
 
 public class BlingOrcamentoItem

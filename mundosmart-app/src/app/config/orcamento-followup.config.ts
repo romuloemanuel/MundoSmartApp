@@ -17,10 +17,16 @@ export const ORCAMENTO_FOLLOWUP_CICLO = 3;
 export const ORCAMENTO_SITUACAO_ABERTO = 'Em aberto';
 export const ORCAMENTO_SITUACAO_CONVERTIDO = 'Convertido';
 export const ORCAMENTO_SITUACAO_NAO_REALIZADO = 'Não realizado';
+export const ORCAMENTO_SITUACAO_DESISTENCIA = 'Desistência';
 
 export function orcamentoNaoRealizado(situacao?: string | null): boolean {
   const s = (situacao ?? '').trim().toLowerCase();
   return s === 'não realizado' || s === 'nao realizado';
+}
+
+export function orcamentoDesistencia(situacao?: string | null): boolean {
+  const s = (situacao ?? '').trim().toLowerCase();
+  return s === 'desistência' || s === 'desistencia';
 }
 
 export function orcamentoConvertido(o: {
@@ -30,11 +36,20 @@ export function orcamentoConvertido(o: {
   return !!o.osGeradaBlingId || (o.situacao ?? '').trim() === ORCAMENTO_SITUACAO_CONVERTIDO;
 }
 
+export function orcamentoEncerrado(o: {
+  situacao?: string | null;
+  osGeradaBlingId?: number | null;
+}): boolean {
+  return orcamentoConvertido(o)
+    || orcamentoNaoRealizado(o.situacao)
+    || orcamentoDesistencia(o.situacao);
+}
+
 export function orcamentoEmAberto(o: {
   situacao?: string | null;
   osGeradaBlingId?: number | null;
 }): boolean {
-  return !orcamentoConvertido(o) && !orcamentoNaoRealizado(o.situacao);
+  return !orcamentoEncerrado(o);
 }
 
 /** Dias úteis sugeridos para a próxima data após N follow-ups concluídos. */

@@ -30,6 +30,11 @@ import { BlingOrcamento, OrcamentoFollowUpItem } from '../../models/bling.models
           <p>{{ justificativaAguardo }}</p>
         </div>
 
+        <div class="aguardo desistencia" *ngIf="motivoDesistencia">
+          <span class="aguardo-label">Desistência do cliente</span>
+          <p>{{ motivoDesistencia }}</p>
+        </div>
+
         <ul class="hist" *ngIf="historico.length; else semHist">
           <li *ngFor="let f of historico; let i = index">
             <div class="fu-cabeca">
@@ -95,6 +100,12 @@ import { BlingOrcamento, OrcamentoFollowUpItem } from '../../models/bling.models
       margin-bottom: 4px;
     }
     .aguardo p { margin: 0; font-size: 13px; color: #78350f; line-height: 1.4; }
+    .aguardo.desistencia {
+      background: #fff7ed;
+      border-color: #fdba74;
+    }
+    .aguardo.desistencia .aguardo-label { color: #9a3412; }
+    .aguardo.desistencia p { color: #7c2d12; }
     .hist {
       list-style: none;
       margin: 0;
@@ -182,6 +193,10 @@ export class OrcamentoHistoricoModal {
 
   get justificativaAguardo(): string {
     return (this.orcamento.justificativaAguardo ?? '').trim();
+  }
+
+  get motivoDesistencia(): string {
+    return (this.orcamento.motivoDesistencia ?? '').trim();
   }
 
   get historico(): OrcamentoFollowUpItem[] {

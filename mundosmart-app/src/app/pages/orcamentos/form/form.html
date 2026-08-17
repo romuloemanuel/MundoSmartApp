@@ -16,6 +16,15 @@
     (lista)="irParaListaAposSalvar()"
   />
 
+  <app-orcamento-desistencia-modal
+    *ngIf="modalDesistenciaAberto"
+    [orcamento]="orcamento"
+    [salvando]="salvandoDesistencia"
+    [erro]="erroDesistencia"
+    (confirmar)="confirmarDesistencia($event)"
+    (cancelar)="fecharDesistencia()"
+  />
+
   <div class="orc-convertido" *ngIf="orcamentoConvertidoOs">
     Orçamento convertido na OS #{{ orcamento.osGeradaNumero || orcamento.osGeradaBlingId }}.
     <button type="button" class="btn-link" (click)="abrirOsGerada()">Abrir OS</button>
@@ -24,6 +33,11 @@
   <div class="orc-nao-realizado" *ngIf="orcamentoNaoRealizado">
     Orçamento concluído como <strong>Não realizado</strong> após {{ followUpCiclo }} follow-ups.
     As justificativas dos colaboradores ficam no histórico abaixo (somente visualização).
+  </div>
+
+  <div class="orc-desistencia" *ngIf="orcamentoDesistencia">
+    Orçamento encerrado por <strong>desistência do cliente</strong>.
+    <span *ngIf="orcamento.motivoDesistencia">Motivo: {{ orcamento.motivoDesistencia }}</span>
   </div>
 
   <p *ngIf="erro" class="erro">{{ erro }}</p>
@@ -463,6 +477,14 @@
         {{ salvando ? 'Salvando...' : 'Salvar orçamento' }}
       </button>
       <button type="button" (click)="cancelar()">Voltar</button>
+      <button
+        type="button"
+        *ngIf="podeDesistir"
+        (click)="abrirDesistencia()"
+        [disabled]="salvandoDesistencia"
+      >
+        Cliente desistiu
+      </button>
       <a *ngIf="orcamentoConvertidoOs && orcamento.osGeradaBlingId" routerLink="/ordens-servico/{{ orcamento.osGeradaBlingId }}/editar">
         Abrir OS
       </a>

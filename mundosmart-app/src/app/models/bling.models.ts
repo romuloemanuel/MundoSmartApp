@@ -458,5 +458,7 @@ export interface BlingOrcamento {
   equipamento?: string;
   osGeradaBlingId?: number;
   osGeradaNumero?: string;
+  /** Motivo informado ao marcar desistência do cliente. */
+  motivoDesistencia?: string;
   itens?: BlingOrcamentoItem[];
 }

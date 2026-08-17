@@ -8,6 +8,7 @@ import { OsOrdenacaoCampo, OsOrdenacaoDirecao } from '../config/os-lista.config'
 export interface OsFiltros {
   situacao?: string;
   nome?: string;
+  numero?: string;
   telefone?: string;
   imei?: string;
   cpfCnpj?: string;
@@ -20,6 +21,8 @@ export interface OsFiltros {
   retorno?: boolean | null;
   lojaOrigem?: string;
   tecnicoNome?: string;
+  modeloId?: string;
+  modeloNome?: string;
   pagina?: number;
   tamanhoPagina?: number;
   ordenarPor?: OsOrdenacaoCampo;
@@ -290,6 +293,7 @@ export class OrdensServicoService {
 
     if (filtros.situacao) params = params.set('situacao', filtros.situacao);
     if (filtros.nome) params = params.set('nome', filtros.nome);
+    if (filtros.numero) params = params.set('numero', filtros.numero);
     if (filtros.telefone) params = params.set('telefone', filtros.telefone);
     if (filtros.imei) params = params.set('imei', filtros.imei);
     if (filtros.cpfCnpj) params = params.set('cpfCnpj', filtros.cpfCnpj);
@@ -304,6 +308,8 @@ export class OrdensServicoService {
     }
     if (filtros.lojaOrigem) params = params.set('lojaOrigem', filtros.lojaOrigem);
     if (filtros.tecnicoNome) params = params.set('tecnicoNome', filtros.tecnicoNome);
+    if (filtros.modeloId) params = params.set('modeloId', filtros.modeloId);
+    if (filtros.modeloNome) params = params.set('modeloNome', filtros.modeloNome);
     if (filtros.pagina != null) params = params.set('pagina', String(filtros.pagina));
     if (filtros.tamanhoPagina != null) params = params.set('tamanhoPagina', String(filtros.tamanhoPagina));
     if (filtros.ordenarPor) params = params.set('ordenarPor', filtros.ordenarPor);

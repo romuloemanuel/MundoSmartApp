@@ -10,17 +10,17 @@
   </nav>
 
   <div class="estoque-abas">
-    <button type="button" [class.ativa]="aba === 'estoque'" (click)="irPara('estoque')">Estoque atual</button>
-    <button type="button" [class.ativa]="aba === 'pedidos'" (click)="irPara('pedidos')">Pedidos de compra</button>
-    <button type="button" [class.ativa]="aba === 'novo-pedido'" (click)="irPara('novo-pedido')">+ Novo pedido</button>
+    <button type="button" [class.ativa]="aba === 'estoque'" (click)="irPara('estoque')">Estoque</button>
+    <button type="button" [class.ativa]="aba === 'pedidos'" (click)="irPara('pedidos')">Pedidos</button>
+    <button type="button" [class.ativa]="aba === 'novo-pedido'" (click)="irPara('novo-pedido')">+ Pedido</button>
     <button type="button" [class.ativa]="aba === 'saidas'" (click)="irPara('saidas')">Sa&iacute;das</button>
-    <button type="button" [class.ativa]="aba === 'nova-saida'" (click)="irPara('nova-saida')">+ Registrar sa&iacute;da</button>
+    <button type="button" [class.ativa]="aba === 'nova-saida'" (click)="irPara('nova-saida')">+ Sa&iacute;da</button>
     <button type="button" [class.ativa]="aba === 'reposicao'" (click)="irPara('reposicao')">Reposi&ccedil;&atilde;o</button>
-    <button type="button" [class.ativa]="aba === 'financeiro'" (click)="irPara('financeiro')">Investimento R$</button>
-    <button type="button" [class.ativa]="aba === 'garantia'" (click)="irPara('garantia')">Retorno garantia</button>
-    <a class="estoque-aba-link" routerLink="/estoque/lotes-retorno">Lotes baixados</a>
-    <a class="estoque-aba-link" routerLink="/estoque/analise-retorno">An&aacute;lise retorno</a>
-    <a class="estoque-aba-link" routerLink="/estoque/lotes-vencendo">Lotes a vencer</a>
+    <button type="button" [class.ativa]="aba === 'financeiro'" (click)="irPara('financeiro')">Investimento</button>
+    <button type="button" [class.ativa]="aba === 'garantia'" (click)="irPara('garantia')">Garantia</button>
+    <a class="estoque-aba-link" routerLink="/estoque/lotes-retorno">Baixados</a>
+    <a class="estoque-aba-link" routerLink="/estoque/analise-retorno">An&aacute;lise</a>
+    <a class="estoque-aba-link" routerLink="/estoque/lotes-vencendo">A vencer</a>
   </div>
 
   <p *ngIf="erro" class="erro">{{ erro }}</p>
@@ -452,14 +452,14 @@
 
   <!-- NOVO PEDIDO -->
   <div class="estoque-painel" *ngIf="aba === 'novo-pedido'">
-    <h3 style="margin:0 0 12px">Registrar pedido de compra</h3>
+    <h3 style="margin:0 0 12px">Novo pedido</h3>
     <div class="estoque-form-grid">
       <div class="form-group">
-        <label>N&uacute;mero do pedido</label>
+        <label>N&ordm;</label>
         <input
           [(ngModel)]="pedidoNumero"
           name="pedidoNumero"
-          placeholder="Automático se vazio (PC-2026-001)"
+          placeholder="Automático (26-1)"
         />
       </div>
       <div class="form-group">

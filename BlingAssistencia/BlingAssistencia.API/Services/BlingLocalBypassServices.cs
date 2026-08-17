@@ -467,6 +467,12 @@ public class BlingOrcamentoServiceLocalBypass : IBlingOrcamentoService
             throw new InvalidOperationException(
                 $"Orçamento já convertido na OS #{local.OsGeradaNumero ?? local.OsGeradaBlingId.ToString()}.");
 
+        if (EhDesistencia(local.Situacao))
+            throw new InvalidOperationException("Orçamento encerrado por desistência do cliente.");
+
+        if (EhNaoRealizado(local.Situacao))
+            throw new InvalidOperationException("Orçamento já concluído como Não realizado.");
+
         if (local.Contato is null || local.Contato.Id <= 0)
             throw new ArgumentException("Orçamento sem cliente — informe o cliente antes de converter.");
 
@@ -627,8 +633,11 @@ public class BlingOrcamentoServiceLocalBypass : IBlingOrcamentoService
             || local.OsGeradaBlingId.HasValue)
             throw new InvalidOperationException("Orçamento já convertido — follow-up não se aplica.");
 
-        if (string.Equals(local.Situacao, "Não realizado", StringComparison.OrdinalIgnoreCase))
+        if (EhNaoRealizado(local.Situacao))
             throw new InvalidOperationException("Orçamento já concluído como Não realizado.");
+
+        if (EhDesistencia(local.Situacao))
+            throw new InvalidOperationException("Orçamento encerrado por desistência do cliente.");
 
         local.FollowUps ??= [];
         if (local.FollowUps.Count >= 3)
@@ -667,6 +676,43 @@ public class BlingOrcamentoServiceLocalBypass : IBlingOrcamentoService
         await _localRepo.SalvarAsync(local);
         return BlingLocalMappings.ParaOrcamento(local);
     }
+
+    public async Task<BlingOrcamento> RegistrarDesistenciaAsync(long id, RegistrarDesistenciaOrcamentoRequest request)
+    {
+        if (request is null)
+            throw new ArgumentException("Dados da desistência são obrigatórios.");
+
+        var motivo = (request.Motivo ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(motivo))
+            throw new ArgumentException("Informe o motivo da desistência do cliente.");
+
+        var local = await _localRepo.ObterPorBlingIdAsync(id)
+            ?? throw new KeyNotFoundException($"Orçamento {id} não encontrado.");
+
+        if (local.OsGeradaBlingId.HasValue
+            || string.Equals(local.Situacao, "Convertido", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Orçamento já convertido — desistência não se aplica.");
+
+        if (EhNaoRealizado(local.Situacao))
+            throw new InvalidOperationException("Orçamento já concluído como Não realizado.");
+
+        if (EhDesistencia(local.Situacao))
+            throw new InvalidOperationException("Orçamento já marcado como Desistência.");
+
+        local.Situacao = "Desistência";
+        local.MotivoDesistencia = motivo;
+        local.DataFollowUp = null;
+        local.AtualizadoEm = DateTime.UtcNow;
+
+        await _localRepo.SalvarAsync(local);
+        return BlingLocalMappings.ParaOrcamento(local);
+    }
+
+    private static bool EhNaoRealizado(string? situacao) =>
+        string.Equals(situacao, "Não realizado", StringComparison.OrdinalIgnoreCase);
+
+    private static bool EhDesistencia(string? situacao) =>
+        string.Equals(situacao, "Desistência", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>1º → +3 úteis; 2º → +5; 3º+ → +7 (ciclo de 3 follow-ups).</summary>
     private static DateTime SugerirDataFollowUp(int vezesAposRegistro)

@@ -290,24 +290,29 @@ public class OsLocalRepository : IOsLocalRepository
             filtro &= Builders<OsLocalData>.Filter.Regex(x => x.Imei, new BsonRegularExpression(imei, "i"));
         }
 
+        if (!string.IsNullOrWhiteSpace(filtros.Numero))
+        {
+            var numero = new string(filtros.Numero.Where(char.IsDigit).ToArray());
+            if (!string.IsNullOrEmpty(numero))
+            {
+                var termo = Regex.Escape(numero);
+                var filtrosNumero = new List<FilterDefinition<OsLocalData>>
+                {
+                    Builders<OsLocalData>.Filter.Regex(x => x.OsNumero, new BsonRegularExpression($"^{termo}", "i")),
+                };
+                if (long.TryParse(numero, out var blingId))
+                    filtrosNumero.Add(Builders<OsLocalData>.Filter.Eq(x => x.BlingId, blingId));
+                filtro &= Builders<OsLocalData>.Filter.Or(filtrosNumero);
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(filtros.Nome))
         {
             var termo = Regex.Escape(filtros.Nome.Trim());
             var regex = new BsonRegularExpression(termo, "i");
-            var filtrosNome = new List<FilterDefinition<OsLocalData>>
-            {
+            filtro &= Builders<OsLocalData>.Filter.Or(
                 Builders<OsLocalData>.Filter.Regex(x => x.ContatoNome, regex),
-                Builders<OsLocalData>.Filter.Regex("contatoAviso.nome", regex),
-                Builders<OsLocalData>.Filter.Regex(x => x.Equipamento, regex),
-                Builders<OsLocalData>.Filter.Regex(x => x.MarcaNome, regex),
-                Builders<OsLocalData>.Filter.Regex(x => x.ModeloNome, regex),
-                Builders<OsLocalData>.Filter.Regex(x => x.OsNumero, regex),
-            };
-
-            if (long.TryParse(filtros.Nome.Trim(), out var blingId))
-                filtrosNome.Add(Builders<OsLocalData>.Filter.Eq(x => x.BlingId, blingId));
-
-            filtro &= Builders<OsLocalData>.Filter.Or(filtrosNome);
+                Builders<OsLocalData>.Filter.Regex("contatoAviso.nome", regex));
         }
 
         if (!string.IsNullOrWhiteSpace(filtros.Telefone))
@@ -361,6 +366,20 @@ public class OsLocalRepository : IOsLocalRepository
             filtro &= Builders<OsLocalData>.Filter.Regex(
                 x => x.TecnicoNome,
                 new BsonRegularExpression($"^{nome}$", "i"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtros.ModeloId) || !string.IsNullOrWhiteSpace(filtros.ModeloNome))
+        {
+            var filtrosModelo = new List<FilterDefinition<OsLocalData>>();
+            if (!string.IsNullOrWhiteSpace(filtros.ModeloId))
+                filtrosModelo.Add(Builders<OsLocalData>.Filter.Eq(x => x.ModeloId, filtros.ModeloId.Trim()));
+            if (!string.IsNullOrWhiteSpace(filtros.ModeloNome))
+            {
+                var modelo = Regex.Escape(filtros.ModeloNome.Trim());
+                filtrosModelo.Add(Builders<OsLocalData>.Filter.Regex(
+                    x => x.ModeloNome, new BsonRegularExpression($"^{modelo}$", "i")));
+            }
+            filtro &= Builders<OsLocalData>.Filter.Or(filtrosModelo);
         }
 
         return filtro;

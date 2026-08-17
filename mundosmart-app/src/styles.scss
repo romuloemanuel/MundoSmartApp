@@ -1405,6 +1405,12 @@ h3 {
 }
 
 @media (max-width: 640px) {
+  main {
+    padding: 12px 10px 20px;
+  }
+  .topbar {
+    padding: 0 10px;
+  }
   .comunicacao-info-grid {
     grid-template-columns: 1fr;
   }

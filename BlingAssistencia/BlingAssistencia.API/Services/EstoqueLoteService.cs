@@ -89,15 +89,18 @@ public class EstoqueLoteService : IEstoqueLoteService
     private readonly IMongoCollection<LoteRetornoGarantiaHistorico> _lotesRetornoHistorico;
     private readonly IPecaEstoqueRepository _pecasRepo;
     private readonly IOsLocalRepository _osRepo;
+    private readonly ICategoriaPecaRepository _categoriasPeca;
     private const int DiasAntecedenciaPrazoEnvio = 7;
 
     public EstoqueLoteService(
         MongoDbService mongo,
         IPecaEstoqueRepository pecasRepo,
-        IOsLocalRepository osRepo)
+        IOsLocalRepository osRepo,
+        ICategoriaPecaRepository categoriasPeca)
     {
         _pecasRepo = pecasRepo;
         _osRepo = osRepo;
+        _categoriasPeca = categoriasPeca;
         _pedidos = mongo.GetCollection<PedidoCompraEstoque>("estoque_pedidos_compra");
         _lotes = mongo.GetCollection<LoteEstoque>("estoque_lotes");
         _movimentacoes = mongo.GetCollection<MovimentacaoEstoque>("estoque_movimentacoes");
@@ -214,7 +217,7 @@ public class EstoqueLoteService : IEstoqueLoteService
 
             var categoria = InferirCategoriaPeca(peca);
             var cor = string.IsNullOrWhiteSpace(item.Cor) ? null : item.Cor.Trim();
-            if (categoria == "Tampa traseira" || categoria == "Vidro Traseiro")
+            if (await _categoriasPeca.UsaCoresPorModeloAsync(categoria))
             {
                 if (string.IsNullOrWhiteSpace(item.ModeloId))
                     throw new ArgumentException($"Informe o modelo da {categoria} ({peca.Nome}).");
@@ -292,8 +295,8 @@ public class EstoqueLoteService : IEstoqueLoteService
                 Quantidade = lote.QuantidadeInicial,
                 CustoUnitario = lote.CustoUnitario,
                 Observacao = string.IsNullOrWhiteSpace(lote.Cor)
-                    ? $"Entrada pedido {pedido.NumeroPedido}"
-                    : $"Entrada pedido {pedido.NumeroPedido} — {lote.Cor}",
+                    ? $"Entrada {pedido.NumeroPedido}"
+                    : $"Entrada {pedido.NumeroPedido} — {lote.Cor}",
                 Data = dataPedido,
                 CriadoEm = DateTime.UtcNow,
             });
@@ -438,8 +441,8 @@ public class EstoqueLoteService : IEstoqueLoteService
                         Quantidade = Math.Abs(delta),
                         CustoUnitario = lote.CustoUnitario,
                         Observacao = delta > 0
-                            ? $"Ajuste (+) lote pedido {lote.NumeroPedido}"
-                            : $"Ajuste (−) lote pedido {lote.NumeroPedido}",
+                            ? $"Ajuste + {lote.NumeroPedido}"
+                            : $"Ajuste − {lote.NumeroPedido}",
                         Data = HorarioBrasil.Agora,
                         CriadoEm = HorarioBrasil.Agora,
                     });
@@ -478,7 +481,7 @@ public class EstoqueLoteService : IEstoqueLoteService
         var qtd = item.Quantidade;
         var categoria = InferirCategoriaPeca(peca);
         var cor = string.IsNullOrWhiteSpace(item.Cor) ? null : item.Cor.Trim();
-        if (categoria == "Tampa traseira" || categoria == "Vidro Traseiro")
+        if (await _categoriasPeca.UsaCoresPorModeloAsync(categoria))
         {
             if (string.IsNullOrWhiteSpace(item.ModeloId))
                 throw new ArgumentException($"Informe o modelo da {categoria} ({peca.Nome}).");
@@ -529,8 +532,8 @@ public class EstoqueLoteService : IEstoqueLoteService
             Quantidade = lote.QuantidadeInicial,
             CustoUnitario = lote.CustoUnitario,
             Observacao = string.IsNullOrWhiteSpace(lote.Cor)
-                ? $"Entrada pedido {pedido.NumeroPedido} (item incluído)"
-                : $"Entrada pedido {pedido.NumeroPedido} (item incluído) — {lote.Cor}",
+                ? $"Entrada {pedido.NumeroPedido} (+item)"
+                : $"Entrada {pedido.NumeroPedido} (+item) — {lote.Cor}",
             Data = dataPedido,
             CriadoEm = HorarioBrasil.Agora,
         });
@@ -1406,11 +1409,12 @@ public class EstoqueLoteService : IEstoqueLoteService
             throw new ArgumentException("Custo unitário não pode ser negativo.");
     }
 
+    /// <summary>Novos pedidos: AA-N (ex.: 26-1). Pedidos antigos (PC-2026-001) permanecem.</summary>
     private async Task<string> GerarNumeroPedidoAsync(DateTime dataPedido)
     {
-        var ano = dataPedido.Year;
-        var prefixo = $"PC-{ano}-";
-        var regex = new BsonRegularExpression($"^{System.Text.RegularExpressions.Regex.Escape(prefixo)}", "i");
+        var yy = dataPedido.Year % 100;
+        var prefixo = $"{yy}-";
+        var regex = new BsonRegularExpression($"^{yy}-\\d+$");
         var existentes = await _pedidos
             .Find(Builders<PedidoCompraEstoque>.Filter.Regex(x => x.NumeroPedido, regex))
             .Project(x => x.NumeroPedido)
@@ -1424,7 +1428,7 @@ public class EstoqueLoteService : IEstoqueLoteService
                 maxSeq = seq;
         }
 
-        return $"{prefixo}{(maxSeq + 1):D3}";
+        return $"{prefixo}{maxSeq + 1}";
     }
 
     public async Task GarantirLoteCatalogoAsync(string pecaId)

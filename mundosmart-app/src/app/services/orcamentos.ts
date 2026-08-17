@@ -57,6 +57,13 @@ export class OrcamentosService {
     return this.http.post<BlingOrcamento>(`${this.apiUrl}/${id}/follow-ups`, body);
   }
 
+  registrarDesistencia(
+    id: number,
+    body: { motivo: string; responsavel?: string },
+  ): Observable<BlingOrcamento> {
+    return this.http.post<BlingOrcamento>(`${this.apiUrl}/${id}/desistencia`, body);
+  }
+
   /** Imprime pré-orçamento (aviso especulativo incluso). Recarrega se só tiver id. */
   imprimir(orcamento: BlingOrcamento): void {
     if (orcamento.id == null) return;

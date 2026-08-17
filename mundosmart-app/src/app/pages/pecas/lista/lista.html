@@ -1,7 +1,10 @@
 <div class="page">
   <div class="page-header">
     <h2>Cadastro de Pe&ccedil;as</h2>
-    <button type="button" (click)="novo()">+ Nova pe&ccedil;a</button>
+    <div style="display:flex;gap:8px">
+      <a routerLink="/categorias-peca" class="btn-link">Categorias</a>
+      <button type="button" (click)="novo()">+ Nova pe&ccedil;a</button>
+    </div>
   </div>
 
   <nav class="breadcrumb" aria-label="Navegação">

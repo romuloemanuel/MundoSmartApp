@@ -2,7 +2,8 @@ import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription, finalize } from 'rxjs';
+import { Subscription, Observable, finalize } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { OrdensServicoService, OsFiltros } from '../../../services/ordens-servico';
 import { BlingOrdemServico } from '../../../models/bling.models';
 import {
@@ -25,6 +26,8 @@ import {
 import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
 import { GridAcoesOs } from '../../../components/grid-acoes-os/grid-acoes-os';
 import { JustificativaAtrasoModal } from '../../../components/justificativa-atraso-modal/justificativa-atraso-modal';
+import { AutocompleteCriavel, AutocompleteItem } from '../../../components/autocomplete-criavel/autocomplete-criavel';
+import { modeloParaAutocomplete } from '../../../utils/modelo-autocomplete.util';
 import { GridPaginationState } from '../../../utils/grid-pagination.state';
 import { posicionarPopoverFixo } from '../../../utils/popover-posicao.util';
 import {
@@ -60,7 +63,7 @@ import { agoraDataBrasil } from '../../../utils/horario-brasil.util';
 @Component({
   selector: 'app-ordens-servico-lista',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, GridPaginator, GridAcoesOs, JustificativaAtrasoModal],
+  imports: [CommonModule, FormsModule, RouterLink, GridPaginator, GridAcoesOs, JustificativaAtrasoModal, AutocompleteCriavel],
   templateUrl: './lista.html',
   styles: [`
     :host {
@@ -392,6 +395,16 @@ import { agoraDataBrasil } from '../../../utils/horario-brasil.util';
       min-width: 128px;
       max-width: 150px;
     }
+    .filtro-numero {
+      width: 110px;
+      min-width: 90px;
+      max-width: 130px;
+    }
+    .filtro-modelo {
+      position: relative;
+      z-index: 4;
+      min-width: 0;
+    }
     .filtro-loja {
       min-width: 110px;
       max-width: 140px;
@@ -435,6 +448,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   filtros: OsFiltros = {
     situacao: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
     nome: '',
+    numero: '',
     telefone: '',
     imei: '',
     cpfCnpj: '',
@@ -447,6 +461,8 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     retorno: null,
     lojaOrigem: '',
     tecnicoNome: '',
+    modeloId: '',
+    modeloNome: '',
   };
 
   readonly situacoesFiltro = SITUACOES_OS_FILTRO;
@@ -461,6 +477,18 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   private tecnicosAtivos: Tecnico[] = [];
   tecnicosFiltro: Tecnico[] = [];
+  modeloFiltroKey = 0;
+
+  buscarModelosFn = (termo: string): Observable<AutocompleteItem[]> =>
+    this.aparelhosService.buscarModelos(termo).pipe(
+      map(ms => ms.map(modeloParaAutocomplete)),
+    );
+
+  onModeloFiltroChange(item: AutocompleteItem | null): void {
+    this.filtros.modeloId = item?.id || '';
+    this.filtros.modeloNome = item?.nome || '';
+    this.buscarComFiltros();
+  }
 
   get ehRoot(): boolean {
     return this.appAuth.isRoot();
@@ -601,9 +629,15 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
     // Com filtro de urgência, busca um lote maior e filtra/pagina no cliente.
     const filtrandoUrgencia = !!this.filtroUrgencia;
+    const numero = this.somenteDigitos(this.filtros.numero) || undefined;
+    const situacaoPadraoExcetoConcluido =
+      this.filtros.situacao === SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
     return {
-      situacao: this.filtros.situacao || undefined,
+      situacao: numero && situacaoPadraoExcetoConcluido
+        ? undefined
+        : (this.filtros.situacao || undefined),
       nome: this.filtros.nome || undefined,
+      numero,
       telefone: this.filtros.telefone || undefined,
       imei: this.filtros.imei || undefined,
       cpfCnpj: this.filtros.cpfCnpj || undefined,
@@ -616,6 +650,8 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       retorno: this.filtros.retorno !== null && this.filtros.retorno !== undefined ? this.filtros.retorno : undefined,
       lojaOrigem: this.filtros.lojaOrigem || undefined,
       tecnicoNome: this.filtros.tecnicoNome || undefined,
+      modeloId: this.filtros.modeloId || undefined,
+      modeloNome: this.filtros.modeloNome || undefined,
       pagina: filtrandoUrgencia ? 1 : this.grid.page,
       tamanhoPagina: filtrandoUrgencia ? 100 : this.grid.pageSize,
       ordenarPor,
@@ -627,7 +663,8 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     let itens = Array.isArray(dados.itens) ? [...dados.itens] : [];
 
     // Filtro padrão: não exibir Concluído/Cancelado (rede de segurança se a API atrasar).
-    if (this.filtros.situacao === SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO) {
+    // Busca por número ignora esse recorte — a OS específica deve aparecer.
+    if (this.filtros.situacao === SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO && !this.filtros.numero?.trim()) {
       const antes = itens.length;
       itens = itens.filter(os => !osSituacaoFinalizada(os.situacao));
       const removidos = antes - itens.length;
@@ -663,10 +700,19 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     this.totalRegistros = dados.total ?? this.ordens.length;
   }
 
+  onNumeroFiltroInput(valor: string): void {
+    this.filtros.numero = this.somenteDigitos(valor);
+  }
+
+  private somenteDigitos(valor?: string | null): string {
+    return (valor ?? '').replace(/\D/g, '');
+  }
+
   limparFiltros(): void {
     this.filtros = {
       situacao: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
       nome: '',
+      numero: '',
       telefone: '',
       imei: '',
       cpfCnpj: '',
@@ -679,8 +725,11 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       retorno: null,
       lojaOrigem: '',
       tecnicoNome: '',
+      modeloId: '',
+      modeloNome: '',
     };
     this.filtroUrgencia = '';
+    this.modeloFiltroKey += 1;
     this.grid.reset();
     this.carregar();
   }
@@ -688,6 +737,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   get filtrosAtivos(): number {
     let count = 0;
     if (this.filtros.situacao && this.filtros.situacao !== SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO) count++;
+    if (this.filtros.numero) count++;
     if (this.filtros.nome) count++;
     if (this.filtros.telefone) count++;
     if (this.filtros.imei) count++;
@@ -698,6 +748,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     if (this.filtros.retorno !== null && this.filtros.retorno !== undefined) count++;
     if (this.filtros.lojaOrigem) count++;
     if (this.filtros.tecnicoNome) count++;
+    if (this.filtros.modeloId || this.filtros.modeloNome) count++;
     if (this.filtroUrgencia) count++;
     return count;
   }

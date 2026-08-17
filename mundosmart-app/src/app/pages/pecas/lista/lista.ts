@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { PecasService } from '../../../services/pecas';
 import { AparelhosService } from '../../../services/aparelhos';
+import { CategoriasPecaService } from '../../../services/categorias-peca';
 import { PecaEstoque } from '../../../models/bling.models';
 import {
   CATEGORIAS_PECA,
@@ -45,7 +46,7 @@ export class PecasLista implements OnInit {
     campo: 'categoria',
     direcao: 'asc',
   };
-  readonly categoriasFiltro = CATEGORIAS_PECA;
+  categoriasFiltro: string[] = [...CATEGORIAS_PECA];
   marcasCatalogo: string[] = [];
   carregando = false;
   erro = '';
@@ -56,10 +57,14 @@ export class PecasLista implements OnInit {
   constructor(
     private service: PecasService,
     private aparelhosService: AparelhosService,
+    private categoriasPecaService: CategoriasPecaService,
     private router: Router,
   ) {}
 
   ngOnInit(): void {
+    this.categoriasPecaService.nomes().subscribe(nomes => {
+      this.categoriasFiltro = nomes;
+    });
     this.carregarMarcasCatalogo();
     this.carregar();
   }

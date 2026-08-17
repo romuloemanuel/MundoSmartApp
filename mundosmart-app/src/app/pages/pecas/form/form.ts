@@ -6,6 +6,7 @@ import { Subject } from 'rxjs';
 import { debounceTime, takeUntil } from 'rxjs/operators';
 import { PecasService } from '../../../services/pecas';
 import { AparelhosService } from '../../../services/aparelhos';
+import { CategoriasPecaService } from '../../../services/categorias-peca';
 import { CATEGORIAS_PECA, categoriaUsaCoresPorModelo, inferirCategoriaPeca } from '../../../config/peca-categoria.config';
 import { formatarDataCadastroModelo } from '../../../utils/modelo-autocomplete.util';
 import { CorEstoqueModelo, ModeloAparelho, ModeloCompativel, PecaEstoque, VariacaoServico } from '../../../models/bling.models';
@@ -102,7 +103,7 @@ import { MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
   `,
 })
 export class PecasForm implements OnInit, OnDestroy {
-  readonly categoriasPeca = CATEGORIAS_PECA;
+  categoriasPeca: string[] = [...CATEGORIAS_PECA];
 
   peca: PecaEstoque = {
     nome: '',
@@ -133,6 +134,7 @@ export class PecasForm implements OnInit, OnDestroy {
     private router: Router,
     private pecasService: PecasService,
     private aparelhosService: AparelhosService,
+    private categoriasPecaService: CategoriasPecaService,
   ) {}
 
   ngOnInit(): void {
@@ -141,6 +143,9 @@ export class PecasForm implements OnInit, OnDestroy {
       takeUntil(this.destroy$),
     ).subscribe(() => this.buscarModelos());
 
+    this.categoriasPecaService.nomes().subscribe(nomes => {
+      this.categoriasPeca = nomes;
+    });
     this.carregarMarcasCatalogo();
 
     const id = this.route.snapshot.paramMap.get('id');

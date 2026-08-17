@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { PecasService } from '../../services/pecas';
 import { AparelhosService } from '../../services/aparelhos';
+import { CategoriasPecaService } from '../../services/categorias-peca';
 import { CATEGORIAS_PECA, categoriaUsaCoresPorModelo, inferirCategoriaPeca } from '../../config/peca-categoria.config';
 import { AutocompleteCriavel, AutocompleteItem } from '../autocomplete-criavel/autocomplete-criavel';
 import { modeloParaAutocomplete } from '../../utils/modelo-autocomplete.util';
@@ -148,7 +149,7 @@ export class NovaPecaPedidoModal implements OnInit {
   @Output() fechado = new EventEmitter<void>();
   @Output() pecaSalva = new EventEmitter<PecaEstoque>();
 
-  readonly categoriasPeca = CATEGORIAS_PECA.filter(c => c !== 'Outros');
+  categoriasPeca: string[] = CATEGORIAS_PECA.filter(c => c !== 'Outros');
 
   peca: PecaEstoque = {
     nome: '',
@@ -179,10 +180,14 @@ export class NovaPecaPedidoModal implements OnInit {
   constructor(
     private pecasService: PecasService,
     private aparelhosService: AparelhosService,
+    private categoriasPecaService: CategoriasPecaService,
   ) {}
 
   ngOnInit(): void {
     this.peca.categoria = this.categoriaInicial?.trim() || '';
+    this.categoriasPecaService.nomes().subscribe(nomes => {
+      this.categoriasPeca = nomes.filter(c => c !== 'Outros');
+    });
   }
 
   adicionarCor(): void {

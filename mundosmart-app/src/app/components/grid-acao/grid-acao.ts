@@ -9,7 +9,8 @@ export type GridAcaoTipo =
   | 'excluir'
   | 'os'
   | 'followup'
-  | 'abrir-os';
+  | 'abrir-os'
+  | 'desistencia';
 
 @Component({
   selector: 'app-grid-acao',
@@ -26,6 +27,7 @@ export type GridAcaoTipo =
       [class.grid-acao-os]="tipo === 'os'"
       [class.grid-acao-followup]="tipo === 'followup'"
       [class.grid-acao-abrir-os]="tipo === 'abrir-os'"
+      [class.grid-acao-desistencia]="tipo === 'desistencia'"
       [disabled]="disabled"
       [title]="tituloEfetivo"
       [attr.aria-label]="tituloEfetivo"
@@ -128,6 +130,20 @@ export type GridAcaoTipo =
         <polyline points="15 3 21 3 21 9" />
         <line x1="10" y1="14" x2="21" y2="3" />
       </svg>
+      <svg
+        *ngIf="tipo === 'desistencia'"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <line x1="15" y1="9" x2="9" y2="15" />
+        <line x1="9" y1="9" x2="15" y2="15" />
+      </svg>
     </button>
   `,
   styles: [`
@@ -150,6 +166,11 @@ export type GridAcaoTipo =
       background: #ecfdf5 !important;
       border-color: #6ee7b7 !important;
       color: #047857 !important;
+    }
+    :host .grid-acao-desistencia:hover:not(:disabled) {
+      background: #fffbeb !important;
+      border-color: #fcd34d !important;
+      color: #b45309 !important;
     }
   `],
 })
@@ -179,6 +200,8 @@ export class GridAcao {
         return 'Registrar follow-up';
       case 'abrir-os':
         return this.comDicaNovaAba('Abrir Ordem de Serviço');
+      case 'desistencia':
+        return 'Desistência do cliente';
       default:
         return this.comDicaNovaAba('Editar');
     }

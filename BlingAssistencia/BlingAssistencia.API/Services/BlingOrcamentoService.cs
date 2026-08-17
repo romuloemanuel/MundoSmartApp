@@ -15,6 +15,8 @@ public interface IBlingOrcamentoService
     Task VincularOsAsync(long id, long osBlingId, string? osNumero = null);
     /// <summary>Registra um follow-up com anotação (conta +1 contato) e agenda a próxima data.</summary>
     Task<BlingOrcamento> RegistrarFollowUpAsync(long id, RegistrarFollowUpOrcamentoRequest request);
+    /// <summary>Encerra o orçamento por desistência do cliente.</summary>
+    Task<BlingOrcamento> RegistrarDesistenciaAsync(long id, RegistrarDesistenciaOrcamentoRequest request);
 }
 
 public class BlingOrcamentoService : IBlingOrcamentoService
@@ -91,4 +93,7 @@ public class BlingOrcamentoService : IBlingOrcamentoService
 
     public Task<BlingOrcamento> RegistrarFollowUpAsync(long id, RegistrarFollowUpOrcamentoRequest request) =>
         throw new InvalidOperationException("Follow-up de orçamento disponível apenas no modo local.");
+
+    public Task<BlingOrcamento> RegistrarDesistenciaAsync(long id, RegistrarDesistenciaOrcamentoRequest request) =>
+        throw new InvalidOperationException("Desistência de orçamento disponível apenas no modo local.");
 }

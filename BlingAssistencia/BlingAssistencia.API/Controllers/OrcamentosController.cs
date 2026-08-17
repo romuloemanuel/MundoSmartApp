@@ -184,4 +184,32 @@ public class OrcamentosController : ControllerBase
             return BadRequest(new { erro = ex.Message });
         }
     }
+
+    /// <summary>Encerra o orçamento por desistência do cliente.</summary>
+    [HttpPost("{id:long}/desistencia")]
+    public async Task<IActionResult> RegistrarDesistencia(long id, [FromBody] RegistrarDesistenciaOrcamentoRequest body)
+    {
+        try
+        {
+            var existente = await _service.ObterAsync(id);
+            LojaAcessoHelper.GarantirAcesso(User, existente.LojaOrigem, "este orçamento");
+            return Ok(await _service.RegistrarDesistenciaAsync(id, body));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { erro = ex.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { erro = "Orçamento não encontrado." });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
 }

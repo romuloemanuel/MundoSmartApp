@@ -24,9 +24,11 @@ import { labelTipoContatoOrcamento } from '../../../config/orcamento-contato.con
 import {
   ORCAMENTO_FOLLOWUP_CICLO,
   ORCAMENTO_RESPONSAVEIS,
+  ORCAMENTO_SITUACAO_DESISTENCIA,
   ORCAMENTO_SITUACAO_NAO_REALIZADO,
   labelStatusFollowUp,
   orcamentoConvertido,
+  orcamentoDesistencia,
   orcamentoEmAberto,
   orcamentoNaoRealizado,
   statusFollowUpOrcamento,
@@ -37,9 +39,13 @@ import {
   OrcamentoFollowUpModalPayload,
 } from '../../../components/orcamento-followup-modal/orcamento-followup-modal';
 import { OrcamentoHistoricoModal } from '../../../components/orcamento-historico-modal/orcamento-historico-modal';
+import {
+  OrcamentoDesistenciaModal,
+  OrcamentoDesistenciaPayload,
+} from '../../../components/orcamento-desistencia-modal/orcamento-desistencia-modal';
 
 type FiltroValidade = '' | 'normal' | 'a-vencer' | 'vencidos';
-type FiltroSituacao = '' | 'Em aberto' | 'Convertido' | 'Não realizado';
+type FiltroSituacao = '' | 'Em aberto' | 'Convertido' | 'Não realizado' | 'Desistência';
 type FiltroFollowUpStatus = '' | StatusFollowUpOrcamento;
 
 @Component({
@@ -53,12 +59,14 @@ type FiltroFollowUpStatus = '' | StatusFollowUpOrcamento;
     OrcamentoConverterModal,
     OrcamentoFollowupModal,
     OrcamentoHistoricoModal,
+    OrcamentoDesistenciaModal,
   ],
   templateUrl: './lista.html',
   styles: `
     .orc-vencido { color: #b91c1c; font-weight: 600; }
     .orc-convertido-badge { background: #d1fae5; color: #065f46; }
     .orc-nao-realizado-badge { background: #fee2e2; color: #991b1b; }
+    .orc-desistencia-badge { background: #fef3c7; color: #92400e; }
     .orc-grid-acoes { gap: 6px; flex-wrap: nowrap; }
     .data-grid .col-cliente {
       width: 240px;
@@ -298,8 +306,11 @@ export class OrcamentosLista implements OnInit {
   converterOrcamento?: BlingOrcamento;
   followUpOrcamento?: BlingOrcamento;
   historicoOrcamento?: BlingOrcamento;
+  desistenciaOrcamento?: BlingOrcamento;
   salvandoFollowUp = false;
+  salvandoDesistencia = false;
   erroFollowUp = '';
+  erroDesistencia = '';
   sucesso = '';
   erro = '';
   erroConverter = '';
@@ -333,6 +344,7 @@ export class OrcamentosLista implements OnInit {
     { id: '', label: 'Todas as situações' },
     { id: 'Convertido', label: 'Convertido' },
     { id: 'Não realizado', label: 'Não realizado' },
+    { id: 'Desistência', label: 'Desistência' },
   ];
 
   readonly validades: Array<{ id: FiltroValidade; label: string }> = [
@@ -400,6 +412,7 @@ export class OrcamentosLista implements OnInit {
   }
 
   labelFollowUp(o: BlingOrcamento): string {
+    if (this.desistencia(o)) return ORCAMENTO_SITUACAO_DESISTENCIA;
     if (this.naoRealizado(o)) return ORCAMENTO_SITUACAO_NAO_REALIZADO;
     if (this.jaConvertido(o)) return 'Convertido';
     return labelStatusFollowUp(this.statusFollowUp(o));
@@ -421,6 +434,7 @@ export class OrcamentosLista implements OnInit {
   }
 
   tituloUrgenciaFollowUp(o: BlingOrcamento): string {
+    if (this.desistencia(o)) return 'Desistência do cliente';
     if (this.naoRealizado(o)) return 'Não realizado após ciclo de follow-ups';
     if (this.jaConvertido(o)) return 'Orçamento convertido em OS';
     const status = this.statusFollowUp(o);
@@ -466,7 +480,9 @@ export class OrcamentosLista implements OnInit {
   }
 
   temHistoricoFollowUp(o: BlingOrcamento): boolean {
-    return (o.followUps?.length ?? 0) > 0 || !!(o.justificativaAguardo ?? '').trim();
+    return (o.followUps?.length ?? 0) > 0
+      || !!(o.justificativaAguardo ?? '').trim()
+      || !!(o.motivoDesistencia ?? '').trim();
   }
 
   tituloHistoricoFollowUp(o: BlingOrcamento): string {
@@ -540,6 +556,8 @@ export class OrcamentosLista implements OnInit {
         if (!this.jaConvertido(o)) return false;
       } else if (this.filtroSituacao === 'Não realizado') {
         if (!this.naoRealizado(o)) return false;
+      } else if (this.filtroSituacao === 'Desistência') {
+        if (!this.desistencia(o)) return false;
       } else if (this.filtroSituacao === 'Em aberto') {
         if (!this.emAberto(o)) return false;
       }
@@ -648,6 +666,10 @@ export class OrcamentosLista implements OnInit {
     return orcamentoNaoRealizado(o.situacao);
   }
 
+  desistencia(o: BlingOrcamento): boolean {
+    return orcamentoDesistencia(o.situacao);
+  }
+
   emAberto(o: BlingOrcamento): boolean {
     return orcamentoEmAberto(o);
   }
@@ -709,6 +731,43 @@ export class OrcamentosLista implements OnInit {
     if (this.salvandoFollowUp) return;
     this.followUpOrcamento = undefined;
     this.erroFollowUp = '';
+  }
+
+  abrirDesistencia(o: BlingOrcamento): void {
+    if (!o.id || !this.emAberto(o) || this.salvandoDesistencia) return;
+    this.erro = '';
+    this.sucesso = '';
+    this.erroDesistencia = '';
+    this.desistenciaOrcamento = o;
+  }
+
+  fecharDesistencia(): void {
+    if (this.salvandoDesistencia) return;
+    this.desistenciaOrcamento = undefined;
+    this.erroDesistencia = '';
+  }
+
+  confirmarDesistencia(payload: OrcamentoDesistenciaPayload): void {
+    const o = this.desistenciaOrcamento;
+    if (!o?.id || this.salvandoDesistencia) return;
+
+    this.salvandoDesistencia = true;
+    this.erroDesistencia = '';
+    this.service.registrarDesistencia(o.id, { motivo: payload.motivo }).subscribe({
+      next: salvo => {
+        this.salvandoDesistencia = false;
+        const idx = this.orcamentos.findIndex(x => x.id === salvo.id);
+        if (idx >= 0) this.orcamentos[idx] = salvo;
+        else this.orcamentos = [salvo, ...this.orcamentos];
+        this.aplicarFiltros();
+        this.desistenciaOrcamento = undefined;
+        this.sucesso = `Orçamento #${salvo.numero ?? salvo.id} marcado como Desistência.`;
+      },
+      error: err => {
+        this.salvandoDesistencia = false;
+        this.erroDesistencia = err.error?.erro ?? 'Erro ao registrar desistência.';
+      },
+    });
   }
 
   confirmarFollowUp(payload: OrcamentoFollowUpModalPayload): void {

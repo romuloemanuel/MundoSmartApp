@@ -98,6 +98,9 @@ public class OrcamentoLocalData
     [BsonElement("osGeradaNumero")]
     public string? OsGeradaNumero { get; set; }
 
+    [BsonElement("motivoDesistencia")]
+    public string? MotivoDesistencia { get; set; }
+
     [BsonElement("itens")]
     public List<BlingOrcamentoItem> Itens { get; set; } = [];
 

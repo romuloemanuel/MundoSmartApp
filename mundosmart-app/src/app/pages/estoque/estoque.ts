@@ -7,6 +7,7 @@ import { map } from 'rxjs/operators';
 import { modeloParaAutocomplete } from '../../utils/modelo-autocomplete.util';
 import { EstoqueService } from '../../services/estoque';
 import { AparelhosService } from '../../services/aparelhos';
+import { CategoriasPecaService } from '../../services/categorias-peca';
 import {
   calcularNivelEstoque,
   ESTOQUE_NIVEL_CLASSES,
@@ -559,7 +560,7 @@ export class EstoquePage implements OnInit {
   carregandoCaixaRetorno = false;
   gerandoLoteFornecedor = '';
   removendoCaixaId = '';
-  readonly categoriasPecaPedido = CATEGORIAS_PECA.filter(c => c !== 'Outros');
+  categoriasPecaPedido: string[] = CATEGORIAS_PECA.filter(c => c !== 'Outros');
   readonly fornecedoresPedidoPrecadastro = [...FORNECEDORES_ESTOQUE_PRECADASTRO];
   readonly buscarOsGarantiaFn = (termo: string) =>
     this.service.sugerirOsGarantia(termo).pipe(
@@ -636,10 +637,14 @@ export class EstoquePage implements OnInit {
   constructor(
     private service: EstoqueService,
     private aparelhosService: AparelhosService,
+    private categoriasPecaService: CategoriasPecaService,
     private route: ActivatedRoute,
   ) {}
 
   ngOnInit(): void {
+    this.categoriasPecaService.nomes().subscribe(nomes => {
+      this.categoriasPecaPedido = nomes.filter(c => c !== 'Outros');
+    });
     this.carregarMarcasCatalogo();
     const abaQuery = this.route.snapshot.queryParamMap.get('aba') as AbaEstoque | null;
     const abasValidas: AbaEstoque[] = [
@@ -2275,21 +2280,20 @@ export class EstoquePage implements OnInit {
     });
   }
 
-  /** Formato PC-AAAA-NNN (ex.: PC-2026-001). */
+  /** Novos pedidos: AA-N (ex.: 26-1). Não reaproveita a sequência PC-AAAA-NNN. */
   private gerarNumeroPedido(lista: PedidoCompraEstoque[] = this.pedidos): string {
-    const ano = new Date().getFullYear();
-    const prefixo = `PC-${ano}-`;
+    const yy = new Date().getFullYear() % 100;
+    const re = new RegExp(`^${yy}-(\\d+)$`);
     let maxSeq = 0;
 
     for (const p of lista) {
-      const num = (p.numeroPedido ?? '').trim().toUpperCase();
-      if (!num.startsWith(prefixo.toUpperCase())) continue;
-      const sufixo = num.slice(prefixo.length);
-      const seq = Number.parseInt(sufixo, 10);
+      const m = re.exec((p.numeroPedido ?? '').trim());
+      if (!m) continue;
+      const seq = Number.parseInt(m[1], 10);
       if (!Number.isNaN(seq) && seq > maxSeq) maxSeq = seq;
     }
 
-    return `${prefixo}${String(maxSeq + 1).padStart(3, '0')}`;
+    return `${yy}-${maxSeq + 1}`;
   }
 
   salvarSaida(): void {
