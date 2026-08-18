@@ -87,30 +87,65 @@ type PecaOrdenacaoCampo = 'peca' | 'categoria' | 'modelo' | 'preco' | 'estoque';
       margin-bottom: 8px;
     }
     .cobertura-bloco {
-      margin-top: 16px;
+      margin-top: 12px;
     }
     .cobertura-bloco h4 {
-      margin: 0 0 6px;
-      font-size: 14px;
+      margin: 0 0 8px;
+      font-size: 13px;
       color: #1e3a8a;
+    }
+    .cobertura-cards {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .cobertura-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 6px 10px;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      background: #fff;
+      color: #1e3a8a;
+      cursor: pointer;
+      text-align: left;
+    }
+    .cobertura-card:hover {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+    .cobertura-card.ativa {
+      border-color: #2563eb;
+      background: #dbeafe;
+    }
+    .cobertura-card-num {
+      flex: 0 0 auto;
+      min-width: 2.2ch;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .cobertura-card-nome {
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .cobertura-count {
       margin: 0 0 10px;
-      font-size: 15px;
+      font-size: 14px;
       color: #1e3a8a;
     }
     .cobertura-count strong {
-      font-size: 22px;
+      font-size: 18px;
       font-weight: 800;
     }
-    .cobertura-grid-categorias tbody tr {
-      cursor: pointer;
-    }
-    .cobertura-grid-categorias tbody tr.cobertura-linha-ativa {
-      background: #dbeafe;
-    }
-    .cobertura-grid-categorias tbody tr.cobertura-linha-ativa td {
-      font-weight: 700;
+    @media (max-width: 900px) {
+      .cobertura-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   `],
 })

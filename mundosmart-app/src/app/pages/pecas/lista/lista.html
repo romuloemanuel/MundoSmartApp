@@ -158,9 +158,7 @@
     </div>
 
     <div class="cobertura-lista-topo">
-      <p class="campo-hint" *ngIf="coberturaCategoriaSelecionada">
-        Clique na categoria para ver o que falta cadastrar.
-      </p>
+      <p class="campo-hint">Clique na caixinha da categoria para ver os modelos.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" class="btn-limpar" *ngIf="coberturaBuscaModelo.trim()" (click)="limparFiltroCoberturaModelos()">Limpar busca</button>
         <button type="button" class="btn-limpar" (click)="limparFiltrosPendencias()">Limpar filtros</button>
@@ -169,24 +167,19 @@
 
     <div class="cobertura-bloco">
       <h4>Falta cadastrar por categoria</h4>
-      <table class="data-grid cobertura-grid-categorias" *ngIf="resumoPendenciasPorCategoria.length > 0">
-        <thead>
-          <tr>
-            <th>Categoria</th>
-            <th>Falta cadastrar</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            *ngFor="let item of resumoPendenciasPorCategoria"
-            [class.cobertura-linha-ativa]="item.categoria === coberturaCategoriaSelecionada"
-            (click)="selecionarCategoriaCobertura(item.categoria)"
-          >
-            <td>{{ item.categoria }}</td>
-            <td><strong>{{ item.pendentes }}</strong></td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="cobertura-cards" *ngIf="resumoPendenciasPorCategoria.length > 0">
+        <button
+          type="button"
+          class="cobertura-card"
+          *ngFor="let item of resumoPendenciasPorCategoria"
+          [class.ativa]="item.categoria === coberturaCategoriaSelecionada"
+          [title]="item.categoria"
+          (click)="selecionarCategoriaCobertura(item.categoria)"
+        >
+          <span class="cobertura-card-num">{{ item.pendentes }}</span>
+          <span class="cobertura-card-nome">{{ item.categoria }}</span>
+        </button>
+      </div>
     </div>
 
     <div class="cobertura-bloco" *ngIf="coberturaCategoriaSelecionada">
