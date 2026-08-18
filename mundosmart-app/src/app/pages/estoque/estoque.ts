@@ -47,7 +47,7 @@ import {
   ReposicaoSemanalResponse,
 } from '../../models/estoque.models';
 import { ModeloAparelho, ModeloCompativel, PecaEstoque } from '../../models/bling.models';
-import { MODELO_LIMITE_LISTA } from '../../config/aparelhos.config';
+import { MODELO_LIMITE_LISTA, TIPOS_TELA, mesmoTipoTelaArquitetura } from '../../config/aparelhos.config';
 import { NovaPecaPedidoModal } from '../../components/nova-peca-pedido-modal/nova-peca-pedido-modal';
 import { AutocompleteCriavel, AutocompleteItem } from '../../components/autocomplete-criavel/autocomplete-criavel';
 import { GridPaginator } from '../../components/grid-paginator/grid-paginator';
@@ -259,6 +259,31 @@ interface EstoqueGrupoMarca {
       margin: 4px 0 0;
     }
     .item-pedido-aviso.ok { color: #166534; }
+    .item-pedido-sugestao {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0 0;
+      padding: 8px 10px;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      background: #fffbeb;
+      font-size: 12px;
+      color: #92400e;
+    }
+    .btn-sugestao-cadastro {
+      border: 1px solid #2563eb;
+      background: #2563eb;
+      color: #fff;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-sugestao-cadastro:hover { background: #1d4ed8; }
     .item-pedido-remover {
       flex: 0 0 28px;
       width: 28px;
@@ -589,10 +614,15 @@ export class EstoquePage implements OnInit {
 
   pecas: PecaCatalogo[] = [];
   modelosPedido: ModeloAparelho[] = [];
+  filtrosEstoqueAbertos = false;
   filtroEstoque = '';
   filtroMarca = '';
   filtroModeloId = '';
   filtroModeloLabel = '';
+  filtroCategoriaEstoque = '';
+  filtroTipoTelaEstoque = '';
+  modeloFiltroEstoqueKey = 0;
+  categoriasFiltroEstoque: string[] = [...CATEGORIAS_PECA];
   /** '' | vermelho | laranja | amarelo | verde */
   filtroNivelEstoque: '' | NivelEstoque = '';
   modelos: ModeloAparelho[] = [];
@@ -603,6 +633,7 @@ export class EstoquePage implements OnInit {
   carregandoLotes = false;
 
   readonly periodosReposicao = PERIODOS_REPOSICAO;
+  readonly tiposTelaFiltro = TIPOS_TELA.filter(t => !!t.valor);
   periodoReposicao: PeriodoReposicao = carregarPeriodoReposicaoSalvo();
   reposicaoInicio = this.dataInputDiasAtras(6);
   reposicaoFim = this.hojeInput();
@@ -644,6 +675,7 @@ export class EstoquePage implements OnInit {
   ngOnInit(): void {
     this.categoriasPecaService.nomes().subscribe(nomes => {
       this.categoriasPecaPedido = nomes.filter(c => c !== 'Outros');
+      this.categoriasFiltroEstoque = nomes;
     });
     this.carregarMarcasCatalogo();
     const abaQuery = this.route.snapshot.queryParamMap.get('aba') as AbaEstoque | null;
@@ -737,12 +769,19 @@ export class EstoquePage implements OnInit {
     return this.modelos.filter(m => this.mesmaMarca(m.marcaNome, this.filtroMarca));
   }
 
-  get filtrosEstoqueAtivos(): number {
+  get filtrosEstoqueAvancadosAtivos(): number {
     let n = 0;
-    if (this.filtroEstoque.trim()) n++;
     if (this.filtroMarca) n++;
     if (this.filtroModeloId) n++;
     if (this.filtroNivelEstoque) n++;
+    if (this.filtroCategoriaEstoque) n++;
+    if (this.filtroTipoTelaEstoque) n++;
+    return n;
+  }
+
+  get filtrosEstoqueAtivos(): number {
+    let n = this.filtrosEstoqueAvancadosAtivos;
+    if (this.filtroEstoque.trim()) n++;
     return n;
   }
 
@@ -768,6 +807,14 @@ export class EstoquePage implements OnInit {
       }
 
       if (this.filtroMarca && !this.pecaCompativelComMarca(p, this.filtroMarca)) return false;
+
+      if (this.filtroCategoriaEstoque) {
+        const cat = inferirCategoriaPeca(p.nome, p.categoria);
+        if (cat !== this.filtroCategoriaEstoque) return false;
+      }
+      if (this.filtroTipoTelaEstoque && !this.pecaCompativelComTipoTela(p, this.filtroTipoTelaEstoque)) {
+        return false;
+      }
 
       if (this.filtroModeloId) {
         const temModelo = (p.modelosCompativeis ?? []).some(mc => mc.modeloId === this.filtroModeloId);
@@ -882,6 +929,7 @@ export class EstoquePage implements OnInit {
       if (modelo && this.filtroMarca && !this.mesmaMarca(modelo.marcaNome, this.filtroMarca)) {
         this.filtroModeloId = '';
         this.filtroModeloLabel = '';
+        this.modeloFiltroEstoqueKey++;
       }
     }
     this.carregarModelos();
@@ -903,7 +951,7 @@ export class EstoquePage implements OnInit {
       return;
     }
     this.filtroModeloId = String(item.id);
-    this.filtroModeloLabel = item.nome;
+    this.filtroModeloLabel = item.marcaNome ? `${item.marcaNome} · ${item.nome}` : item.nome;
     if (item.marcaNome && !this.filtroMarca) {
       this.filtroMarca = item.marcaNome;
       this.carregarModelos();
@@ -924,7 +972,10 @@ export class EstoquePage implements OnInit {
     this.filtroMarca = '';
     this.filtroModeloId = '';
     this.filtroModeloLabel = '';
+    this.filtroCategoriaEstoque = '';
+    this.filtroTipoTelaEstoque = '';
     this.filtroNivelEstoque = '';
+    this.modeloFiltroEstoqueKey++;
     this.carregarModelos();
   }
 
@@ -956,6 +1007,17 @@ export class EstoquePage implements OnInit {
     return this.mesmaMarca(this.marcaDaPeca(peca), marca);
   }
 
+  private pecaCompativelComTipoTela(peca: PecaCatalogo, tipoTela: string): boolean {
+    return (peca.modelosCompativeis ?? []).some(mc => {
+      const modelo = this.modelos.find(m => m.id === mc.modeloId);
+      return this.modeloBateTipoTela(modelo, tipoTela);
+    });
+  }
+
+  private modeloBateTipoTela(modelo: ModeloAparelho | undefined, filtro: string): boolean {
+    return mesmoTipoTelaArquitetura(modelo?.tipoTela, filtro);
+  }
+
   private mesmaMarca(a?: string, b?: string): boolean {
     return (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
   }
@@ -969,6 +1031,48 @@ export class EstoquePage implements OnInit {
       },
       error: () => { onLoaded?.(); },
     });
+  }
+
+  itemSemPecaCadastrada(item: ItemPedidoCompraUi): boolean {
+    return !!(item.categoria?.trim()
+      && item.modeloId?.trim()
+      && !item.pecaId
+      && (item.pecasCandidatas?.length ?? 0) === 0);
+  }
+
+  pecasReferenciaCadastro(item?: ItemPedidoCompraUi): PecaCatalogo[] {
+    if (!item?.categoria?.trim()) return [];
+    const cat = item.categoria.trim();
+    const modeloId = item.modeloId?.trim() ?? '';
+    const modeloAtual = this.modelosPedido.find(m => m.id === modeloId);
+    const marcaAtual = (modeloAtual?.marcaNome ?? '').trim().toLowerCase();
+
+    return this.pecasEstoqueLocal
+      .filter(p => {
+        if (inferirCategoriaPeca(p.nome, p.categoria) !== cat) return false;
+        if (!modeloId) return true;
+        return !(p.modelosCompativeis ?? []).some(mc => mc.modeloId === modeloId);
+      })
+      .sort((a, b) => {
+        const marcaA = this.marcaDaPeca(a).toLowerCase();
+        const marcaB = this.marcaDaPeca(b).toLowerCase();
+        const aMesmaMarca = marcaAtual && marcaA === marcaAtual ? 0 : 1;
+        const bMesmaMarca = marcaAtual && marcaB === marcaAtual ? 0 : 1;
+        if (aMesmaMarca !== bMesmaMarca) return aMesmaMarca - bMesmaMarca;
+        return labelPecaCatalogo(a.nome, a.categoria, a.marcaPeca)
+          .localeCompare(labelPecaCatalogo(b.nome, b.categoria, b.marcaPeca), 'pt-BR');
+      })
+      .slice(0, 6);
+  }
+
+  pecasReferenciaNovaPeca(): PecaCatalogo[] {
+    return this.pecasReferenciaCadastro(this.itemPedidoNovaPeca);
+  }
+
+  labelReferenciaPeca(p: PecaCatalogo): string {
+    const modelos = this.modelosDaPeca(p);
+    const modeloTxt = modelos.length ? modelos[0] : 'outro modelo';
+    return `${modeloTxt} · ${labelPecaCatalogo(p.nome, p.categoria, p.marcaPeca)}`;
   }
 
   abrirNovaPecaPedido(item: ItemPedidoCompraUi): void {
@@ -2006,7 +2110,7 @@ export class EstoquePage implements OnInit {
     item.pecasCandidatas = candidatas;
     if (candidatas.length === 0) {
       item.pecaId = '';
-      item.avisoResolucao = `Nenhuma peça "${item.categoria}" cadastrada para este modelo. Cadastre em Peças.`;
+      item.avisoResolucao = `Nenhuma peça "${item.categoria}" cadastrada para este modelo.`;
       return;
     }
 

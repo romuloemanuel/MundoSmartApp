@@ -1,7 +1,9 @@
 <div class="page">
   <div class="page-header">
     <h2>Modelos de Aparelhos</h2>
-    <button (click)="novo()">+ Novo Modelo</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button (click)="novo()">+ Novo Modelo</button>
+    </div>
   </div>
 
   <div class="marcas-chips" *ngIf="marcas.length > 0">
@@ -37,6 +39,25 @@
       <option value="">Todos os tipos</option>
       <option *ngFor="let t of tiposDispositivo" [value]="t">{{ t }}</option>
     </select>
+    <select [(ngModel)]="filtroTipoTela" (ngModelChange)="onFiltroChange()">
+      <option value="">Todas as telas</option>
+      <option value="__sem_tela__">Não classificado</option>
+      <option *ngFor="let t of tiposTela" [value]="t.valor">{{ t.label }}</option>
+    </select>
+    <input
+      type="date"
+      [(ngModel)]="lancamentoInicio"
+      (ngModelChange)="onFiltroChange()"
+      title="Lançamento de"
+      placeholder="Lançamento de"
+    />
+    <input
+      type="date"
+      [(ngModel)]="lancamentoFim"
+      (ngModelChange)="onFiltroChange()"
+      title="Lançamento até"
+      placeholder="Lançamento até"
+    />
   </div>
 
   <p *ngIf="carregando" class="campo-hint">Buscando modelos...</p>
@@ -59,11 +80,41 @@
   <table class="data-grid" *ngIf="!carregando && modelos.length > 0">
     <thead>
       <tr>
-        <th>Modelo</th>
-        <th>Marca</th>
-        <th>Tipo</th>
-        <th>Cadastro</th>
-        <th>Compatíveis</th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('modelo')" (click)="ordenar('modelo')">
+            Modelo <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('modelo') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('marca')" (click)="ordenar('marca')">
+            Marca <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('marca') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('tipo')" (click)="ordenar('tipo')">
+            Tipo <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('tipo') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('tela')" (click)="ordenar('tela')">
+            Tela <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('tela') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('lancamento')" (click)="ordenar('lancamento')">
+            Lançamento <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('lancamento') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('cadastro')" (click)="ordenar('cadastro')">
+            Cadastro <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('cadastro') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('compativeis')" (click)="ordenar('compativeis')">
+            Compatíveis <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('compativeis') }}</span>
+          </button>
+        </th>
         <th></th>
       </tr>
     </thead>
@@ -72,6 +123,8 @@
         <td>{{ m.nome }}</td>
         <td>{{ m.marcaNome || '-' }}</td>
         <td>{{ m.tipoDispositivo || 'Celular' }}</td>
+        <td>{{ m.tipoTela || '-' }}</td>
+        <td>{{ formatarLancamento(m) }}</td>
         <td>{{ formatarCadastro(m) }}</td>
         <td>{{ qtdCompativeis(m) }}</td>
         <td class="grid-acoes-cell">

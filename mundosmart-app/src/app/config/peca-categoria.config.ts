@@ -1,3 +1,5 @@
+import { familiaTipoTela } from './aparelhos.config';
+
 export const CATEGORIAS_PECA = [
   'Bateria',
   'Tela Incell com Aro',
@@ -83,6 +85,13 @@ export function inferirCategoriaPeca(nome: string, categoria?: string): string {
   if (n.includes('tela') || n.includes('display') || n.includes('lcd')) return 'Tela Incell';
 
   return 'Outros';
+}
+
+/** Tela OLED só cabe em aparelho OLED. Tela Incell/LCD cabe em LCD e também em OLED (opção mais barata). */
+export function modeloElegivelParaCategoriaPeca(tipoTela: string | undefined, categoria: string): boolean {
+  const n = normalizarTextoPeca(categoria);
+  if (!n.includes('oled')) return true;
+  return familiaTipoTela(tipoTela) === 'OLED';
 }
 
 /** Categorias que controlam estoque por cor dentro de cada modelo. */

@@ -20,6 +20,12 @@
           <option *ngFor="let t of tiposDispositivo" [value]="t">{{ t }}</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Tipo de tela</label>
+        <select [(ngModel)]="modelo.tipoTela" name="tipoTela">
+          <option *ngFor="let t of tiposTela" [value]="t.valor">{{ t.label }}</option>
+        </select>
+      </div>
     </div>
 
     <div class="form-group">

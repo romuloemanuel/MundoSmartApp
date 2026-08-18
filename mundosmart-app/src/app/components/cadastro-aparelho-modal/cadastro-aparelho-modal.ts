@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AparelhosService } from '../../services/aparelhos';
 import { ModeloAparelho } from '../../models/bling.models';
-import { TIPOS_DISPOSITIVO } from '../../config/aparelhos.config';
+import { TIPOS_DISPOSITIVO, TIPOS_TELA } from '../../config/aparelhos.config';
 
 @Component({
   selector: 'app-cadastro-aparelho-modal',
@@ -35,6 +35,13 @@ import { TIPOS_DISPOSITIVO } from '../../config/aparelhos.config';
             <label>Tipo de dispositivo <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
             <select [(ngModel)]="modelo.tipoDispositivo" name="tipoDispositivo">
               <option *ngFor="let t of tiposDispositivo" [value]="t">{{ t }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Tipo de tela</label>
+            <select [(ngModel)]="modelo.tipoTela" name="tipoTela">
+              <option *ngFor="let t of tiposTela" [value]="t.valor">{{ t.label }}</option>
             </select>
           </div>
 
@@ -178,6 +185,7 @@ export class CadastroAparelhoModal implements OnInit {
   salvando = false;
   erro = '';
   readonly tiposDispositivo = TIPOS_DISPOSITIVO;
+  readonly tiposTela = TIPOS_TELA;
 
   constructor(private service: AparelhosService) {}
 

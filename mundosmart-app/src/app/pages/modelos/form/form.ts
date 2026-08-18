@@ -6,7 +6,7 @@ import { Subject } from 'rxjs';
 import { debounceTime, takeUntil } from 'rxjs/operators';
 import { AparelhosService } from '../../../services/aparelhos';
 import { AparelhoCompativel, ModeloAparelho } from '../../../models/bling.models';
-import { TIPOS_COMPATIBILIDADE, TIPOS_DISPOSITIVO } from '../../../config/aparelhos.config';
+import { TIPOS_COMPATIBILIDADE, TIPOS_DISPOSITIVO, TIPOS_TELA } from '../../../config/aparelhos.config';
 import { formatarDataCadastroModelo } from '../../../utils/modelo-autocomplete.util';
 
 @Component({
@@ -41,6 +41,7 @@ export class ModelosForm implements OnInit, OnDestroy {
 
   readonly tiposDispositivo = TIPOS_DISPOSITIVO;
   readonly tiposCompatibilidade = TIPOS_COMPATIBILIDADE;
+  readonly tiposTela = TIPOS_TELA;
 
   private readonly buscaCompativel$ = new Subject<void>();
   private readonly destroy$ = new Subject<void>();

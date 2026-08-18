@@ -216,6 +216,7 @@ public class AparelhoRepository : IAparelhoRepository
         return result.DeletedCount > 0;
     }
 
+
     private async Task<List<MarcaAparelho>> BuscarMarcasInternal(string? termo, string? tipoDispositivo, int limite)
     {
         var filtros = new List<FilterDefinition<MarcaAparelho>>();
@@ -410,6 +411,7 @@ public class AparelhoRepository : IAparelhoRepository
     {
         modelo.Nome = Data.ModelosCatalogo.NormalizarNomeModelo(modelo.Nome);
         modelo.TipoDispositivo = NormalizarTipoDispositivo(modelo.TipoDispositivo);
+        modelo.TipoTela = NormalizarTipoTela(modelo.TipoTela);
         modelo.Observacoes = string.IsNullOrWhiteSpace(modelo.Observacoes) ? null : modelo.Observacoes.Trim();
     }
 
@@ -426,6 +428,21 @@ public class AparelhoRepository : IAparelhoRepository
         return AparelhoConstantes.TiposCompatibilidade
             .FirstOrDefault(t => t.Equals(tipo.Trim(), StringComparison.OrdinalIgnoreCase)) ?? tipo.Trim();
     }
+
+    private static string? NormalizarTipoTela(string? tipoTela)
+    {
+        if (string.IsNullOrWhiteSpace(tipoTela)) return null;
+        var valor = tipoTela.Trim();
+        if (valor.Equals("AMOLED", StringComparison.OrdinalIgnoreCase)
+            || valor.Equals("OLED", StringComparison.OrdinalIgnoreCase))
+            return "OLED";
+        if (valor.Equals("IPS", StringComparison.OrdinalIgnoreCase)
+            || valor.Equals("LCD", StringComparison.OrdinalIgnoreCase))
+            return "LCD";
+        return AparelhoConstantes.TiposTelaBase
+            .FirstOrDefault(t => t.Equals(valor, StringComparison.OrdinalIgnoreCase)) ?? valor;
+    }
+
 
     public async Task<(int Criados, int JaExistentes, int Renomeados)> GarantirModelosDoCatalogoAsync()
     {

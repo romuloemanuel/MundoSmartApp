@@ -95,30 +95,63 @@
       </button>
     </div>
 
-    <div class="filtros estoque-filtros">
+    <div class="filtros-bar estoque-filtros">
       <input
         [(ngModel)]="filtroEstoque"
         name="filtroEstoque"
-        class="filtro-busca-principal"
+        class="filtro-wide"
         placeholder="Buscar pe&ccedil;a, marca ou modelo..."
       />
-      <select [(ngModel)]="filtroMarca" name="filtroMarca" (ngModelChange)="onFiltroMarcaChange()">
-        <option value="">Todas as marcas</option>
-        <option *ngFor="let m of marcasDisponiveis" [value]="m">{{ m }}</option>
-      </select>
-      <div class="filtro-modelo-ac">
-        <app-autocomplete-criavel
-          placeholder="Modelo (ex.: G24)..."
-          [buscarFn]="buscarModelosFiltroFn"
-          [permitirCriar]="false"
-          [valorInicial]="filtroModeloLabel"
-          (itemSelecionadoChange)="onFiltroModeloSugestao($event)"
-        />
-      </div>
-      <select [(ngModel)]="filtroNivelEstoque" name="filtroNivelEstoque">
-        <option *ngFor="let o of opcoesFiltroNivelEstoque" [ngValue]="o.id">{{ o.label }}</option>
-      </select>
+      <button type="button" class="btn-filtros-avancados" (click)="filtrosEstoqueAbertos = !filtrosEstoqueAbertos">
+        Filtros avan&ccedil;ados
+        <span *ngIf="filtrosEstoqueAvancadosAtivos > 0" class="badge-count">{{ filtrosEstoqueAvancadosAtivos }}</span>
+      </button>
       <button *ngIf="filtrosEstoqueAtivos" type="button" class="btn-limpar" (click)="limparFiltrosEstoque()">Limpar</button>
+    </div>
+
+    <div class="filtros-avancados" *ngIf="filtrosEstoqueAbertos">
+      <div class="filtros-grid">
+        <div class="filtro-campo">
+          <label>Categoria</label>
+          <select [(ngModel)]="filtroCategoriaEstoque" name="filtroCategoriaEstoque">
+            <option value="">Todas</option>
+            <option *ngFor="let c of categoriasFiltroEstoque" [value]="c">{{ c }}</option>
+          </select>
+        </div>
+        <div class="filtro-campo">
+          <label>Marca do aparelho</label>
+          <select [(ngModel)]="filtroMarca" name="filtroMarca" (ngModelChange)="onFiltroMarcaChange()">
+            <option value="">Todas</option>
+            <option *ngFor="let m of marcasDisponiveis" [value]="m">{{ m }}</option>
+          </select>
+        </div>
+        <div class="filtro-campo">
+          <label>Tipo de tela</label>
+          <select [(ngModel)]="filtroTipoTelaEstoque" name="filtroTipoTelaEstoque">
+            <option value="">Todas</option>
+            <option *ngFor="let t of tiposTelaFiltro" [value]="t.valor">{{ t.label }}</option>
+          </select>
+        </div>
+        <div class="filtro-campo filtro-modelo">
+          <label>Modelo</label>
+          <ng-container *ngFor="let k of [modeloFiltroEstoqueKey]">
+            <app-autocomplete-criavel
+              placeholder="Modelo (ex.: G24)..."
+              [buscarFn]="buscarModelosFiltroFn"
+              [permitirCriar]="false"
+              [valorInicial]="filtroModeloLabel"
+              [valorInicialId]="filtroModeloId"
+              (itemSelecionadoChange)="onFiltroModeloSugestao($event)"
+            />
+          </ng-container>
+        </div>
+        <div class="filtro-campo">
+          <label>N&iacute;vel de estoque</label>
+          <select [(ngModel)]="filtroNivelEstoque" name="filtroNivelEstoque">
+            <option *ngFor="let o of opcoesFiltroNivelEstoque" [ngValue]="o.id">{{ o.label }}</option>
+          </select>
+        </div>
+      </div>
     </div>
     <p class="campo-hint" *ngIf="filtrosEstoqueAtivos">
       {{ pecasFiltradas.length }} pe&ccedil;a(s) compat&iacute;vel(is) com o filtro.
@@ -435,9 +468,23 @@
           <label>Garantia (meses)</label>
           <input type="number" min="1" [(ngModel)]="itemPedidoExtra.garantiaMeses" name="extraGarantia" />
         </div>
-        <p class="campo-hint" style="grid-column:1/-1;margin:0" *ngIf="itemPedidoExtra.avisoResolucao">
+        <p
+          class="campo-hint"
+          style="grid-column:1/-1;margin:0"
+          *ngIf="itemPedidoExtra.avisoResolucao && !itemSemPecaCadastrada(itemPedidoExtra)"
+        >
           {{ itemPedidoExtra.avisoResolucao }}
         </p>
+        <div
+          class="item-pedido-sugestao"
+          style="grid-column:1/-1"
+          *ngIf="itemSemPecaCadastrada(itemPedidoExtra)"
+        >
+          <span>{{ itemPedidoExtra.avisoResolucao }}</span>
+          <button type="button" class="btn-sugestao-cadastro" (click)="abrirNovaPecaPedido(itemPedidoExtra)">
+            Cadastrar pe&ccedil;a agora
+          </button>
+        </div>
         <div class="lote-edit-acoes" style="grid-column:1/-1">
           <button type="button" (click)="salvarIncluirItemPedido()" [disabled]="salvandoLote">
             {{ salvandoLote ? 'Incluindo…' : 'Salvar item' }}
@@ -598,10 +645,16 @@
       <p
         class="item-pedido-aviso"
         [class.ok]="!!item.pecaId"
-        *ngIf="item.avisoResolucao"
+        *ngIf="item.avisoResolucao && !itemSemPecaCadastrada(item)"
       >
         {{ item.avisoResolucao }}
       </p>
+      <div class="item-pedido-sugestao" *ngIf="itemSemPecaCadastrada(item)">
+        <span>{{ item.avisoResolucao }}</span>
+        <button type="button" class="btn-sugestao-cadastro" (click)="abrirNovaPecaPedido(item)">
+          Cadastrar pe&ccedil;a agora
+        </button>
+      </div>
     </div>
     </div>
     <div class="itens-pedido-acoes" style="margin:8px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
@@ -622,6 +675,7 @@
       *ngIf="modalNovaPecaAberto"
       [categoriaInicial]="itemPedidoNovaPeca?.categoria ?? ''"
       [modeloLinha]="modeloContextoNovaPeca()"
+      [pecasReferencia]="pecasReferenciaNovaPeca()"
       (fechado)="fecharModalNovaPeca()"
       (pecaSalva)="onPecaPedidoSalva($event)"
     />

@@ -13,48 +13,235 @@
     <span class="breadcrumb-atual">Pe&ccedil;as</span>
   </nav>
 
-  <div class="filtros">
+  <div class="pecas-abas">
+    <button type="button" [class.ativa]="abaPecas === 'cadastro'" (click)="abaPecas = 'cadastro'">
+      Cadastro de pe&ccedil;as
+    </button>
+    <button type="button" [class.ativa]="abaPecas === 'pendencias'" (click)="abaPecas = 'pendencias'">
+      Modelos sem cadastro por categoria
+    </button>
+  </div>
+
+  <section *ngIf="abaPecas === 'cadastro'">
+  <div class="filtros-bar">
     <input
       [(ngModel)]="busca"
-      class="filtro-busca-principal"
+      class="filtro-wide"
       placeholder="Buscar pe&ccedil;a ou modelo (ex: Tela, A54)..."
       (keyup.enter)="carregar()"
     />
-    <select
-      class="pecas-filtro-select"
-      [(ngModel)]="filtroCategoria"
-      name="filtroCategoria"
-      (ngModelChange)="onFiltroLocalChange()"
-    >
-      <option value="">Todas categorias</option>
-      <option *ngFor="let c of categoriasFiltro" [value]="c">{{ c }}</option>
-    </select>
-    <select
-      class="pecas-filtro-select"
-      [(ngModel)]="filtroMarca"
-      name="filtroMarca"
-      (ngModelChange)="onFiltroLocalChange()"
-    >
-      <option value="">Marca do aparelho</option>
-      <option *ngFor="let m of marcasDisponiveis" [value]="m">{{ m }}</option>
-    </select>
-    <select
-      class="pecas-filtro-nivel"
-      [(ngModel)]="filtroNivel"
-      name="filtroNivel"
-      (ngModelChange)="onFiltroNivelChange()"
-    >
-      <option *ngFor="let o of opcoesFiltroNivel" [ngValue]="o.id">{{ o.label }}</option>
-    </select>
-    <button type="button" (click)="carregar()">Buscar</button>
+    <button type="button" class="btn-buscar" (click)="carregar()">Buscar</button>
+    <button type="button" class="btn-filtros-avancados" (click)="filtrosAbertos = !filtrosAbertos">
+      Filtros avan&ccedil;ados
+      <span *ngIf="filtrosAvancadosAtivos > 0" class="badge-count">{{ filtrosAvancadosAtivos }}</span>
+    </button>
     <button *ngIf="filtrosAtivos" type="button" class="btn-limpar" (click)="limparFiltros()">Limpar</button>
   </div>
 
-  <p *ngIf="carregando" class="campo-hint">Carregando...</p>
-  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <div class="filtros-avancados" *ngIf="filtrosAbertos">
+    <div class="filtros-grid">
+      <div class="filtro-campo">
+        <label>Categoria</label>
+        <select [(ngModel)]="filtroCategoria" name="filtroCategoria" (ngModelChange)="onFiltroLocalChange()">
+          <option value="">Todas</option>
+          <option *ngFor="let c of categoriasFiltro" [value]="c">{{ c }}</option>
+        </select>
+      </div>
+      <div class="filtro-campo">
+        <label>Marca do aparelho</label>
+        <select [(ngModel)]="filtroMarca" name="filtroMarca" (ngModelChange)="onFiltroMarcaChange()">
+          <option value="">Todas</option>
+          <option *ngFor="let m of marcasDisponiveis" [value]="m">{{ m }}</option>
+        </select>
+      </div>
+      <div class="filtro-campo">
+        <label>Tipo de tela</label>
+        <select [(ngModel)]="filtroTipoTela" name="filtroTipoTela" (ngModelChange)="onFiltroLocalChange()">
+          <option value="">Todas</option>
+          <option *ngFor="let t of tiposTelaFiltro" [value]="t.valor">{{ t.label }}</option>
+        </select>
+      </div>
+      <div class="filtro-campo filtro-modelo">
+        <label>Modelo</label>
+        <ng-container *ngFor="let k of [modeloFiltroKey]">
+          <app-autocomplete-criavel
+            placeholder="Modelo (ex.: A54)..."
+            [buscarFn]="buscarModelosFiltroFn"
+            [permitirCriar]="false"
+            [valorInicial]="filtroModeloLabel"
+            [valorInicialId]="filtroModeloId"
+            (itemSelecionadoChange)="onFiltroModeloSugestao($event)"
+          />
+        </ng-container>
+      </div>
+      <div class="filtro-campo">
+        <label>N&iacute;vel de estoque</label>
+        <select [(ngModel)]="filtroNivel" name="filtroNivel" (ngModelChange)="onFiltroNivelChange()">
+          <option *ngFor="let o of opcoesFiltroNivel" [ngValue]="o.id">{{ o.label }}</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  </section>
+
+  <section class="cobertura-painel" *ngIf="abaPecas === 'pendencias' && !carregando && modelosCatalogo.length > 0">
+    <div class="cobertura-topo">
+      <div>
+        <h3>O que falta cadastrar</h3>
+        <p class="campo-hint">
+          Escolha a categoria e veja os modelos que ainda n&atilde;o t&ecirc;m essa pe&ccedil;a.
+          Tela OLED s&oacute; entra em celular OLED. Tela Incell/LCD entra em LCD e tamb&eacute;m em OLED (op&ccedil;&atilde;o mais barata).
+        </p>
+      </div>
+    </div>
+
+    <div class="filtros-grid">
+      <div class="filtro-campo">
+        <label>Categoria para detalhar</label>
+        <select
+          [(ngModel)]="coberturaCategoriaSelecionada"
+          name="coberturaCategoriaSelecionada"
+          (ngModelChange)="onFiltroPendenciasChange()"
+        >
+          <option *ngFor="let c of categoriasFiltro" [value]="c">{{ c }}</option>
+        </select>
+      </div>
+      <div class="filtro-campo">
+        <label>Marca (opcional)</label>
+        <select
+          [(ngModel)]="coberturaMarcaSelecionada"
+          name="coberturaMarcaSelecionada"
+          (ngModelChange)="onFiltroPendenciasChange()"
+        >
+          <option value="">Todas</option>
+          <option *ngFor="let m of marcasDisponiveis" [value]="m">{{ m }}</option>
+        </select>
+      </div>
+      <div class="filtro-campo">
+        <label>Tipo de tela</label>
+        <select
+          [(ngModel)]="coberturaTipoTela"
+          name="coberturaTipoTela"
+          (ngModelChange)="onFiltroPendenciasChange()"
+        >
+          <option value="">Todas</option>
+          <option *ngFor="let t of tiposTelaFiltro" [value]="t.valor">{{ t.label }}</option>
+        </select>
+      </div>
+      <div class="filtro-campo">
+        <label>Buscar modelo pendente</label>
+        <input
+          [(ngModel)]="coberturaBuscaModelo"
+          name="coberturaBuscaModelo"
+          placeholder="Ex.: A54, iPhone 13..."
+          (ngModelChange)="onFiltroPendenciasChange()"
+        />
+      </div>
+      <div class="filtro-campo">
+        <label>Lançamento/cadastro de</label>
+        <input
+          type="date"
+          [(ngModel)]="coberturaDataInicio"
+          name="coberturaDataInicio"
+          (ngModelChange)="onFiltroPendenciasChange()"
+        />
+      </div>
+      <div class="filtro-campo">
+        <label>Até</label>
+        <input
+          type="date"
+          [(ngModel)]="coberturaDataFim"
+          name="coberturaDataFim"
+          (ngModelChange)="onFiltroPendenciasChange()"
+        />
+      </div>
+    </div>
+
+    <div class="cobertura-lista-topo">
+      <p class="campo-hint" *ngIf="coberturaCategoriaSelecionada">
+        Clique na categoria para ver o que falta cadastrar.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn-limpar" *ngIf="coberturaBuscaModelo.trim()" (click)="limparFiltroCoberturaModelos()">Limpar busca</button>
+        <button type="button" class="btn-limpar" (click)="limparFiltrosPendencias()">Limpar filtros</button>
+      </div>
+    </div>
+
+    <div class="cobertura-bloco">
+      <h4>Falta cadastrar por categoria</h4>
+      <table class="data-grid cobertura-grid-categorias" *ngIf="resumoPendenciasPorCategoria.length > 0">
+        <thead>
+          <tr>
+            <th>Categoria</th>
+            <th>Falta cadastrar</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let item of resumoPendenciasPorCategoria"
+            [class.cobertura-linha-ativa]="item.categoria === coberturaCategoriaSelecionada"
+            (click)="selecionarCategoriaCobertura(item.categoria)"
+          >
+            <td>{{ item.categoria }}</td>
+            <td><strong>{{ item.pendentes }}</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cobertura-bloco" *ngIf="coberturaCategoriaSelecionada">
+      <p class="cobertura-count">
+        <strong>{{ modelosSemCadastroSelecionado.length }}</strong>
+        modelo(s) para cadastrar em {{ coberturaCategoriaSelecionada }}
+      </p>
+
+      <app-grid-paginator
+        *ngIf="modelosSemCadastroSelecionado.length > 0"
+        [total]="modelosSemCadastroSelecionado.length"
+        [page]="gridPendencias.page"
+        [pageSize]="gridPendencias.pageSize"
+        (pageChange)="gridPendencias.onPageChange($event)"
+        (pageSizeChange)="gridPendencias.onPageSizeChange($event)"
+      />
+
+      <table class="data-grid" *ngIf="modelosSemCadastroSelecionado.length > 0">
+        <thead>
+          <tr>
+            <th>Modelo</th>
+            <th>Marca</th>
+            <th>Tela</th>
+            <th>Lan&ccedil;amento</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let m of modelosPendenciasPaginados">
+            <td><strong>{{ m.nome }}</strong></td>
+            <td>{{ m.marcaNome || '—' }}</td>
+            <td>{{ m.tipoTela || '—' }}</td>
+            <td>{{ formatarDataCadastroModelo(m.criadoEm) }}</td>
+            <td class="grid-acoes-cell">
+              <button type="button" (click)="novo()">Cadastrar pe&ccedil;a</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="campo-hint" *ngIf="modelosSemCadastroSelecionado.length === 0">
+        Nenhuma pend&ecirc;ncia para esta categoria com os filtros atuais.
+      </p>
+    </div>
+  </section>
+
+  <p *ngIf="abaPecas === 'pendencias' && !carregando && modelosCatalogo.length === 0" class="campo-hint">
+    N&atilde;o foi poss&iacute;vel carregar os modelos para o radar de pend&ecirc;ncias.
+  </p>
+
+  <p *ngIf="abaPecas === 'cadastro' && carregando" class="campo-hint">Carregando...</p>
+  <p *ngIf="abaPecas === 'cadastro' && erro" class="erro">{{ erro }}</p>
 
   <app-grid-paginator
-    *ngIf="!carregando && pecasFiltradas.length > 0"
+    *ngIf="abaPecas === 'cadastro' && !carregando && pecasFiltradas.length > 0"
     [total]="pecasFiltradas.length"
     [page]="grid.page"
     [pageSize]="grid.pageSize"
@@ -62,7 +249,7 @@
     (pageSizeChange)="grid.onPageSizeChange($event)"
   />
 
-  <table class="data-grid" *ngIf="!carregando && pecasFiltradas.length > 0">
+  <table class="data-grid" *ngIf="abaPecas === 'cadastro' && !carregando && pecasFiltradas.length > 0">
     <thead>
       <tr>
         <th>
@@ -135,8 +322,8 @@
     </tbody>
   </table>
 
-  <p *ngIf="!carregando && pecas.length === 0 && !erro">Nenhuma pe&ccedil;a cadastrada.</p>
-  <p *ngIf="!carregando && pecas.length > 0 && pecasFiltradas.length === 0 && !erro">
+  <p *ngIf="abaPecas === 'cadastro' && !carregando && pecas.length === 0 && !erro">Nenhuma pe&ccedil;a cadastrada.</p>
+  <p *ngIf="abaPecas === 'cadastro' && !carregando && pecas.length > 0 && pecasFiltradas.length === 0 && !erro">
     Nenhuma pe&ccedil;a com os filtros selecionados.
   </p>
 </div>

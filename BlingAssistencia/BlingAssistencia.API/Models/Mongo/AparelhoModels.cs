@@ -10,6 +10,10 @@ public static class AparelhoConstantes
 
     public static readonly string[] TiposCompatibilidade =
         ["Exato", "Familia", "Compartilhado"];
+
+    /// <summary>Classificação base de tela para peças e filtros (AMOLED -> OLED, IPS -> LCD).</summary>
+    public static readonly string[] TiposTelaBase =
+        ["OLED", "LCD"];
 }
 
 public class MarcaAparelho
@@ -70,6 +74,9 @@ public class ModeloAparelho
 
     [BsonElement("tipoDispositivo")]
     public string TipoDispositivo { get; set; } = "Celular";
+
+    [BsonElement("tipoTela")]
+    public string? TipoTela { get; set; }
 
     [BsonElement("observacoes")]
     public string? Observacoes { get; set; }

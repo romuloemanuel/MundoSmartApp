@@ -154,6 +154,7 @@ public class AparelhosController : ControllerBase
         MarcaId = req.MarcaId,
         MarcaNome = req.MarcaNome,
         TipoDispositivo = req.TipoDispositivo ?? "Celular",
+        TipoTela = req.TipoTela,
         Observacoes = req.Observacoes,
         AparelhosCompativeis = req.AparelhosCompativeis ?? []
     };
@@ -166,5 +167,6 @@ public record ModeloRequest(
     string? MarcaId,
     string? MarcaNome,
     string? TipoDispositivo = "Celular",
+    string? TipoTela = null,
     string? Observacoes = null,
     List<AparelhoCompativel>? AparelhosCompativeis = null);

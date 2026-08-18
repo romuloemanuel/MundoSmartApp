@@ -6,10 +6,16 @@ import { map } from 'rxjs/operators';
 import { PecasService } from '../../services/pecas';
 import { AparelhosService } from '../../services/aparelhos';
 import { CategoriasPecaService } from '../../services/categorias-peca';
-import { CATEGORIAS_PECA, categoriaUsaCoresPorModelo, inferirCategoriaPeca } from '../../config/peca-categoria.config';
+import {
+  CATEGORIAS_PECA,
+  categoriaUsaCoresPorModelo,
+  inferirCategoriaPeca,
+  labelPecaCatalogo,
+} from '../../config/peca-categoria.config';
 import { AutocompleteCriavel, AutocompleteItem } from '../autocomplete-criavel/autocomplete-criavel';
 import { modeloParaAutocomplete } from '../../utils/modelo-autocomplete.util';
 import { CorEstoqueModelo, ModeloAparelho, ModeloCompativel, PecaEstoque } from '../../models/bling.models';
+import { PecaCatalogo } from '../../models/estoque.models';
 import { MODELO_LIMITE_LISTA } from '../../config/aparelhos.config';
 
 @Component({
@@ -28,6 +34,27 @@ import { MODELO_LIMITE_LISTA } from '../../config/aparelhos.config';
           <p class="modal-hint">
             Ao salvar, a pe&ccedil;a entra no cat&aacute;logo e j&aacute; &eacute; vinculada &agrave; linha do pedido.
           </p>
+
+          <div class="sugestao-cadastro" *ngIf="modeloLinha && peca.categoria">
+            <p class="sugestao-titulo">N&atilde;o h&aacute; pe&ccedil;a cadastrada para este modelo.</p>
+            <p class="modal-hint" style="margin-bottom:8px">
+              Preencha abaixo ou use uma refer&ecirc;ncia de outro aparelho da mesma categoria.
+            </p>
+            <div class="sugestao-chips" *ngIf="pecasReferencia.length > 0">
+              <button
+                type="button"
+                class="chip-referencia"
+                *ngFor="let p of pecasReferencia"
+                (click)="aplicarReferencia(p)"
+              >
+                {{ labelReferencia(p) }}
+              </button>
+            </div>
+            <p class="modal-hint" *ngIf="pecasReferencia.length === 0" style="margin:0">
+              Nenhuma refer&ecirc;ncia desta categoria no cat&aacute;logo — cadastre a primeira pe&ccedil;a.
+            </p>
+          </div>
+
           <p *ngIf="erro" class="erro">{{ erro }}</p>
 
           <div class="form-group">
@@ -140,11 +167,42 @@ import { MODELO_LIMITE_LISTA } from '../../config/aparelhos.config';
     .cor-linha button { width: 28px; height: 28px; padding: 0; }
     .btn-add-cor { font-size: 12px; padding: 4px 10px; }
     .erro { color: #b91c1c; font-size: 13px; }
+    .sugestao-cadastro {
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      background: #fffbeb;
+    }
+    .sugestao-titulo {
+      margin: 0 0 4px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #92400e;
+    }
+    .sugestao-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip-referencia {
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      color: #1e40af;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+    }
+    .chip-referencia:hover { background: #dbeafe; }
   `,
 })
 export class NovaPecaPedidoModal implements OnInit {
   @Input() categoriaInicial = '';
   @Input() modeloLinha?: ModeloAparelho | null;
+  @Input() pecasReferencia: PecaCatalogo[] = [];
 
   @Output() fechado = new EventEmitter<void>();
   @Output() pecaSalva = new EventEmitter<PecaEstoque>();
@@ -212,6 +270,34 @@ export class NovaPecaPedidoModal implements OnInit {
       marcaId: item.marcaId,
       marcaNome: item.marcaNome,
     };
+  }
+
+  labelReferencia(p: PecaCatalogo): string {
+    const modelo = (p.modelosCompativeis ?? [])
+      .map(mc => (mc.modeloNome ?? mc.modeloId ?? '').trim())
+      .find(Boolean);
+    const base = labelPecaCatalogo(p.nome, p.categoria, p.marcaPeca);
+    return modelo ? `${modelo} · ${base}` : base;
+  }
+
+  aplicarReferencia(p: PecaCatalogo): void {
+    if (p.categoria?.trim()) this.peca.categoria = p.categoria.trim();
+    if (p.marcaPeca?.trim()) this.peca.marcaPeca = p.marcaPeca.trim();
+    if (p.nome?.trim()) this.peca.nome = p.nome.trim();
+
+    if (!this.usaCoresPorModelo) return;
+
+    const compat = (p.modelosCompativeis ?? [])[0];
+    const cores = (compat?.cores ?? [])
+      .map(c => ({
+        cor: (c.cor ?? '').trim(),
+        quantidade: Math.max(0, Math.floor(Number(c.quantidade) || 0)),
+      }))
+      .filter(c => c.cor);
+
+    if (cores.length > 0) {
+      this.coresModelo = cores.map(c => ({ cor: c.cor, quantidade: 0 }));
+    }
   }
 
   salvar(): void {

@@ -301,11 +301,13 @@ export interface ModeloAparelho {
   marcaId?: string;
   marcaNome?: string;
   tipoDispositivo?: string;
+  tipoTela?: string;
   observacoes?: string;
   aparelhosCompativeis?: AparelhoCompativel[];
   criadoEm?: string;
   atualizadoEm?: string;
 }
+
 
 export interface OsEmAndamentoInfo {
   blingId: number;
