@@ -357,6 +357,19 @@ interface EstoqueGrupoMarca {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
+      overflow: visible;
+    }
+    .lote-item-novo {
+      margin-top: 14px;
+      padding: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: visible;
+    }
+    .lote-item-novo h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
     }
     .lote-edit-acoes {
       display: flex;
@@ -642,7 +655,6 @@ export class EstoquePage implements OnInit {
   // Novo pedido
   readonly limiteItensPedido = LIMITE_ITENS_PEDIDO_COMPRA;
   private proximoUidItemPedido = 1;
-  private modeloIdsPorCategoriaCache = new Map<string, Set<string>>();
   pedidoNumero = '';
   pedidoFornecedor = '';
   pedidoNf = '';
@@ -900,7 +912,6 @@ export class EstoquePage implements OnInit {
     this.service.listarPecas().subscribe({
       next: p => {
         this.pecas = p.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-        this.modeloIdsPorCategoriaCache.clear();
         this.carregando = false;
         this.carregarModelos();
       },
@@ -1026,7 +1037,6 @@ export class EstoquePage implements OnInit {
     this.service.listarPecas().subscribe({
       next: p => {
         this.pecas = p.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-        this.modeloIdsPorCategoriaCache.clear();
         onLoaded?.();
       },
       error: () => { onLoaded?.(); },
@@ -1088,7 +1098,15 @@ export class EstoquePage implements OnInit {
   modeloContextoNovaPeca(): ModeloAparelho | undefined {
     const item = this.itemPedidoNovaPeca;
     if (!item?.modeloId) return undefined;
-    return this.modelosPedido.find(m => m.id === item.modeloId);
+    const noCatalogo = this.modelosPedido.find(m => m.id === item.modeloId);
+    if (noCatalogo) return noCatalogo;
+    return {
+      id: item.modeloId,
+      nome: item.modeloNome ?? '',
+      marcaNome: item.buscaModelo?.includes(' · ')
+        ? item.buscaModelo.split(' · ')[0]
+        : undefined,
+    };
   }
 
   onPecaPedidoSalva(peca: PecaEstoque): void {
@@ -1963,43 +1981,8 @@ export class EstoquePage implements OnInit {
 
   private prepararItemPedido(item: ItemPedidoCompraUi): ItemPedidoCompraUi {
     if (!item.uid) item.uid = this.proximoUidItemPedido++;
-    item.buscarModelosFn = (termo: string) => this.buscarModelosParaItemPedido(termo, item);
+    item.buscarModelosFn = (termo: string) => this.buscarModelosPedidoFn(termo);
     return item;
-  }
-
-  private modeloIdsDaCategoria(categoria: string): Set<string> {
-    const cat = categoria.trim();
-    const cached = this.modeloIdsPorCategoriaCache.get(cat);
-    if (cached) return cached;
-
-    const ids = new Set<string>();
-    for (const p of this.pecasEstoqueLocal) {
-      if (inferirCategoriaPeca(p.nome, p.categoria) !== cat) continue;
-      for (const mc of p.modelosCompativeis ?? []) {
-        if (mc.modeloId) ids.add(mc.modeloId);
-      }
-    }
-    this.modeloIdsPorCategoriaCache.set(cat, ids);
-    return ids;
-  }
-
-  private buscarModelosParaItemPedido(termo: string, item: ItemPedidoCompraUi): Observable<AutocompleteItem[]> {
-    const categoria = item.categoria?.trim() ?? '';
-    const idsCompat = categoria ? this.modeloIdsDaCategoria(categoria) : null;
-
-    return this.aparelhosService.listarModelos({
-      termo: termo.trim() || undefined,
-      limite: MODELO_LIMITE_LISTA,
-    }).pipe(
-      map(ms => {
-        let lista = ms;
-        if (idsCompat && idsCompat.size > 0) {
-          const filtrados = ms.filter(m => m.id && idsCompat.has(m.id));
-          lista = filtrados.length > 0 ? filtrados : ms;
-        }
-        return lista.map(modeloParaAutocomplete);
-      }),
-    );
   }
 
   trackAutocompleteKey(_index: number, value: number): number {
