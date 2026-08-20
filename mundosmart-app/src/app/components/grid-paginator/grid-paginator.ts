@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { GRID_PAGE_SIZES } from '../../config/grid.config';
+import { DEFAULT_GRID_PAGE_SIZE, GRID_PAGE_SIZES } from '../../config/grid.config';
 import { intervaloPagina, totalPaginas } from '../../utils/grid-pagination.util';
 
 @Component({
@@ -42,7 +42,7 @@ import { intervaloPagina, totalPaginas } from '../../utils/grid-pagination.util'
 export class GridPaginator {
   @Input() total = 0;
   @Input() page = 1;
-  @Input() pageSize = 20;
+  @Input() pageSize = DEFAULT_GRID_PAGE_SIZE;
   @Output() pageChange = new EventEmitter<number>();
   @Output() pageSizeChange = new EventEmitter<number>();
 

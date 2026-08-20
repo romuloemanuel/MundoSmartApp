@@ -16,7 +16,12 @@
     <button type="button" [class.ativa]="aba === 'saidas'" (click)="irPara('saidas')">Sa&iacute;das</button>
     <button type="button" [class.ativa]="aba === 'nova-saida'" (click)="irPara('nova-saida')">+ Sa&iacute;da</button>
     <button type="button" [class.ativa]="aba === 'reposicao'" (click)="irPara('reposicao')">Reposi&ccedil;&atilde;o</button>
-    <button type="button" [class.ativa]="aba === 'financeiro'" (click)="irPara('financeiro')">Investimento</button>
+    <button
+      *ngIf="appAuth.isAdmin()"
+      type="button"
+      [class.ativa]="aba === 'financeiro'"
+      (click)="irPara('financeiro')"
+    >Investimento</button>
     <button type="button" [class.ativa]="aba === 'garantia'" (click)="irPara('garantia')">Garantia</button>
     <a class="estoque-aba-link" routerLink="/estoque/lotes-retorno">Baixados</a>
     <a class="estoque-aba-link" routerLink="/estoque/analise-retorno">An&aacute;lise</a>
@@ -847,7 +852,7 @@
   </div>
 
   <!-- INVESTIMENTO R$ -->
-  <div class="estoque-painel" *ngIf="aba === 'financeiro' && !carregando && financeiro">
+  <div class="estoque-painel" *ngIf="aba === 'financeiro' && appAuth.isAdmin() && !carregando && financeiro">
     <h3 style="margin:0 0 8px">Investimento em estoque</h3>
     <p class="campo-hint" style="margin:0 0 14px">
       Valores a <strong>custo de compra</strong> (n&atilde;o pre&ccedil;o de venda).

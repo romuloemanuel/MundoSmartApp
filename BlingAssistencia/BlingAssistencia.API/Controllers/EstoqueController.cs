@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MundoSmart.BlingAssistencia.API.Repositories;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
@@ -134,7 +135,8 @@ public class EstoqueController : ControllerBase
         }
     }
 
-    /// <summary>Valor em estoque hoje + investimento e giro (saídas a custo) por mês.</summary>
+    /// <summary>Valor em estoque hoje + investimento e giro (saídas a custo) por mês. Somente Admin/Root.</summary>
+    [Authorize(Roles = AppRoles.AdminOuRoot)]
     [HttpGet("relatorios/financeiro")]
     public async Task<IActionResult> RelatorioFinanceiro([FromQuery] int meses = 12) =>
         Ok(await _estoque.RelatorioFinanceiroAsync(meses));

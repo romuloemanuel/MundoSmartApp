@@ -65,6 +65,7 @@ import {
   montarHtmlLoteDevolucaoGarantia,
 } from '../../utils/garantia-devolucao-pdf.util';
 import { FORNECEDORES_ESTOQUE_PRECADASTRO } from '../../config/os-peca-origem.config';
+import { AppAuthService } from '../../services/app-auth';
 
 type AbaEstoque =
   | 'estoque'
@@ -682,6 +683,7 @@ export class EstoquePage implements OnInit {
     private aparelhosService: AparelhosService,
     private categoriasPecaService: CategoriasPecaService,
     private route: ActivatedRoute,
+    public appAuth: AppAuthService,
   ) {}
 
   ngOnInit(): void {
@@ -694,7 +696,9 @@ export class EstoquePage implements OnInit {
     const abasValidas: AbaEstoque[] = [
       'estoque', 'pedidos', 'saidas', 'reposicao', 'financeiro', 'garantia', 'novo-pedido', 'nova-saida',
     ];
-    this.irPara(abaQuery && abasValidas.includes(abaQuery) ? abaQuery : 'estoque');
+    let aba = abaQuery && abasValidas.includes(abaQuery) ? abaQuery : 'estoque';
+    if (aba === 'financeiro' && !this.appAuth.isAdmin()) aba = 'estoque';
+    this.irPara(aba);
   }
 
   carregarMarcasCatalogo(): void {
@@ -710,6 +714,9 @@ export class EstoquePage implements OnInit {
   }
 
   irPara(aba: AbaEstoque): void {
+    if (aba === 'financeiro' && !this.appAuth.isAdmin()) {
+      aba = 'estoque';
+    }
     this.aba = aba;
     this.erro = '';
     this.sucesso = '';
