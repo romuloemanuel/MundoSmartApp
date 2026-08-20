@@ -8,6 +8,7 @@
     <AssemblyName>MundoSmart.BlingAssistencia.API</AssemblyName>
     <Version>1.0.2</Version>
     <InformationalVersion>1.0.2-local-bypass</InformationalVersion>
+    <UserSecretsId>mundosmart-bling-api-dev</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

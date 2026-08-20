@@ -2,7 +2,7 @@
   <header class="consulta-head">
     <p class="eyebrow">Consulta de estoque</p>
     <h1>Capinhas, películas e térmicos</h1>
-    <p class="sub">Digite o modelo e veja o que tem em estoque — tela feita para o celular.</p>
+    <p class="sub">Consulte o estoque por categoria. O modelo &eacute; opcional — filtre se quiser.</p>
   </header>
 
   <nav class="cats" aria-label="Categorias">
@@ -43,14 +43,21 @@
     </label>
   </form>
 
-  <p class="origem" *ngIf="tituloOrigem && buscou && !erro">{{ tituloOrigem }}</p>
-  <p class="aviso" *ngIf="aviso">{{ aviso }}</p>
+  <p class="origem" *ngIf="tituloOrigem && buscou && !erro && !aviso">{{ tituloOrigem }}</p>
+  <div class="aviso-box" *ngIf="aviso">
+    <p class="aviso">{{ aviso }}</p>
+    <button type="button" class="btn-conectar" *ngIf="precisaConectarBling" (click)="conectarBling()">
+      Conectar Bling (capinhas)
+    </button>
+  </div>
   <p class="erro" *ngIf="erro">{{ erro }}</p>
-  <p class="loading" *ngIf="carregando">Consultando estoque…</p>
+  <p class="loading" *ngIf="carregando">Consultando estoque no Bling…</p>
 
-  <section class="resultados" *ngIf="!carregando && buscou && !erro">
-    <p class="vazio" *ngIf="grupos.length === 0">
-      Nada encontrado para <strong>{{ termo }}</strong> em {{ categorias.find(c => c.id === categoria)?.label }}.
+  <section class="resultados" *ngIf="!carregando && buscou && !erro && (!aviso || grupos.length > 0)">
+    <p class="vazio" *ngIf="grupos.length === 0 && !aviso">
+      Nada encontrado no Bling
+      <ng-container *ngIf="termo.trim()"> para <strong>{{ termo }}</strong></ng-container>
+      em {{ categorias.find(c => c.id === categoria)?.label }}.
     </p>
 
     <article class="card" *ngFor="let g of grupos">

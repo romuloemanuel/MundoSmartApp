@@ -31,9 +31,12 @@ public class BlingAuthService : IBlingAuthService
 
     public string GetAuthorizationUrl()
     {
+        var state = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
+            .ToLowerInvariant();
         return $"https://www.bling.com.br/Api/v3/oauth/authorize" +
                $"?response_type=code" +
-               $"&client_id={ClientId}" +
+               $"&client_id={Uri.EscapeDataString(ClientId)}" +
+               $"&state={state}" +
                $"&redirect_uri={Uri.EscapeDataString(RedirectUri)}";
     }
 
@@ -42,7 +45,7 @@ public class BlingAuthService : IBlingAuthService
         var credentials = Convert.ToBase64String(
             System.Text.Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"));
 
-        var request = new HttpRequestMessage(HttpMethod.Post, "https://www.bling.com.br/Api/v3/oauth/token");
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.bling.com.br/Api/v3/oauth/token");
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
         request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -52,10 +55,15 @@ public class BlingAuthService : IBlingAuthService
         });
 
         var response = await _http.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-
         var json = await response.Content.ReadAsStringAsync();
-        var result = JsonSerializer.Deserialize<BlingTokenRaw>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Bling token HTTP {(int)response.StatusCode}: {json}");
+        }
+
+        var result = JsonSerializer.Deserialize<BlingTokenRaw>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("Resposta de token Bling inválida.");
 
         _currentToken = MapToken(result);
         return _currentToken;
@@ -66,7 +74,7 @@ public class BlingAuthService : IBlingAuthService
         var credentials = Convert.ToBase64String(
             System.Text.Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"));
 
-        var request = new HttpRequestMessage(HttpMethod.Post, "https://www.bling.com.br/Api/v3/oauth/token");
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.bling.com.br/Api/v3/oauth/token");
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
         request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {

@@ -43,3 +43,7 @@ msbuild.wrn
 /Talkbot.Api/appsettings.Development.json
 /Talkbot.Api/appsettings.json
 /appsettings.Development.json
+
+# Segredos Bling locais
+**/BlingAssistencia.API/appsettings.Development.json
+

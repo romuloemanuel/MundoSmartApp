@@ -1,0 +1,211 @@
+<div class="juros-page">
+  <header class="juros-head">
+    <p class="eyebrow">Ferramenta da loja</p>
+    <h1>Cálculo de juros</h1>
+    <p class="sub">{{ subModo }}</p>
+  </header>
+
+  <nav class="modos" aria-label="Modo de cálculo">
+    <button
+      type="button"
+      class="modo"
+      [class.ativa]="modo === 'parcelas'"
+      (click)="selecionarModo('parcelas')"
+    >
+      Gerar parcelas
+    </button>
+    <button
+      type="button"
+      class="modo"
+      [class.ativa]="modo === 'liquido'"
+      (click)="selecionarModo('liquido')"
+    >
+      Valor líquido
+    </button>
+  </nav>
+
+  <button type="button" class="link-taxas" (click)="mostrarTaxas = !mostrarTaxas">
+    {{ mostrarTaxas ? 'Ocultar rótulos' : 'Rótulos de taxa (2,99% / 1,49%)' }}
+  </button>
+
+  <section class="taxas" *ngIf="mostrarTaxas">
+    <p class="hint" style="margin:0">
+      Os valores vêm da tabela calibrada (1 / 5 / 10 / 15 / 18x). Aqui só muda o texto «Taxa …» na grade.
+    </p>
+    <label class="campo">
+      <span>Rótulo 1x</span>
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        [(ngModel)]="cfg.taxa1xPct"
+        name="taxa1x"
+        (ngModelChange)="onConfigChange()"
+      />
+    </label>
+    <label class="campo">
+      <span>Rótulo 2x–18x</span>
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        [(ngModel)]="cfg.taxaMensalPct"
+        name="taxaMensal"
+        (ngModelChange)="onConfigChange()"
+      />
+    </label>
+    <button type="button" class="btn-sec" (click)="restaurarPadrao()">Restaurar 2,99 / 1,49</button>
+  </section>
+
+  <ng-container *ngIf="modo === 'parcelas'">
+    <div class="painel" *ngIf="!opcaoSelecionada; else detalheParcela">
+      <label class="campo valor-campo">
+        <span>Valor que quer receber (R$)</span>
+        <input
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          [(ngModel)]="valorBase"
+          name="valorBase"
+          placeholder="Ex: 1200"
+          (ngModelChange)="onValorChange()"
+        />
+      </label>
+
+      <p class="lista-titulo" *ngIf="opcoes.length">Passar para o cliente</p>
+
+      <div class="grade-parcelas" *ngIf="opcoes.length">
+        <button
+          type="button"
+          class="celula"
+          *ngFor="let op of opcoes"
+          (click)="selecionarOpcao(op)"
+        >
+          <span class="cel-nx">{{ op.parcelas }}x</span>
+          <strong class="cel-parc">
+            <ng-container *ngIf="op.parcelas === 1">{{ formatarMoeda(op.total) }}</ng-container>
+            <ng-container *ngIf="op.parcelas > 1">{{ formatarMoeda(op.valorParcela) }}</ng-container>
+          </strong>
+          <span class="cel-meta" *ngIf="op.parcelas > 1">total {{ formatarMoeda(op.total) }}</span>
+          <span class="cel-taxa">Taxa {{ formatarTaxa(op.taxaExibidaPct) }}</span>
+        </button>
+      </div>
+
+      <p class="vazio" *ngIf="!opcoes.length">Digite o valor para montar até 18x.</p>
+    </div>
+
+    <ng-template #detalheParcela>
+      <div class="painel detalhe" *ngIf="opcaoSelecionada as op">
+        <button type="button" class="btn-voltar" (click)="limparSelecao()" aria-label="Voltar">✕</button>
+        <h2>Passar para o cliente</h2>
+        <p class="destaque">
+          <ng-container *ngIf="op.parcelas === 1">{{ formatarMoeda(op.total) }} (1x)</ng-container>
+          <ng-container *ngIf="op.parcelas > 1">{{ op.parcelas }}x de {{ formatarMoeda(op.valorParcela) }}</ng-container>
+        </p>
+        <dl class="resumo">
+          <div>
+            <dt>Total cobrado</dt>
+            <dd>{{ formatarMoeda(op.total) }}</dd>
+          </div>
+          <div>
+            <dt>Acréscimo</dt>
+            <dd>{{ formatarMoeda(op.juros) }}</dd>
+          </div>
+          <div>
+            <dt>Taxa desta opção</dt>
+            <dd>{{ formatarTaxa(op.taxaExibidaPct) }}</dd>
+          </div>
+          <div>
+            <dt>Você recebe</dt>
+            <dd class="ok">{{ formatarMoeda(valorBaseNumerico()) }}</dd>
+          </div>
+        </dl>
+      </div>
+    </ng-template>
+  </ng-container>
+
+  <div class="painel" *ngIf="modo === 'liquido'">
+    <div class="toggle-entrada">
+      <button
+        type="button"
+        [class.ativa]="!entradaPorParcela"
+        (click)="entradaPorParcela = false; onValorChange()"
+      >
+        Valor da venda
+      </button>
+      <button
+        type="button"
+        [class.ativa]="entradaPorParcela"
+        (click)="entradaPorParcela = true; onValorChange()"
+      >
+        Valor da parcela
+      </button>
+    </div>
+
+    <label class="campo valor-campo" *ngIf="!entradaPorParcela">
+      <span>Valor cobrado (R$)</span>
+      <input
+        type="text"
+        inputmode="decimal"
+        autocomplete="off"
+        [(ngModel)]="valorVenda"
+        name="valorVenda"
+        placeholder="0,00"
+        (ngModelChange)="onValorChange()"
+      />
+    </label>
+
+    <label class="campo valor-campo" *ngIf="entradaPorParcela">
+      <span>Valor de cada parcela (R$)</span>
+      <input
+        type="text"
+        inputmode="decimal"
+        autocomplete="off"
+        [(ngModel)]="valorParcelaInput"
+        name="valorParcelaInput"
+        placeholder="0,00"
+        (ngModelChange)="onValorChange()"
+      />
+    </label>
+
+    <label class="campo">
+      <span>Parcelas</span>
+      <input
+        type="number"
+        min="1"
+        max="18"
+        [(ngModel)]="qtdParcelas"
+        name="qtdParcelas"
+        (ngModelChange)="onValorChange()"
+      />
+    </label>
+
+    <div class="resultado-liquido" *ngIf="resultadoLiquido as r; else liquidoVazio">
+      <dl class="resumo">
+        <div>
+          <dt>Valor da venda</dt>
+          <dd>{{ formatarMoeda(r.valorVenda) }}</dd>
+        </div>
+        <div>
+          <dt>Parcelas</dt>
+          <dd>
+            <ng-container *ngIf="r.parcelas === 1">{{ formatarMoeda(r.valorParcela) }}</ng-container>
+            <ng-container *ngIf="r.parcelas > 1">{{ r.parcelas }}x de {{ formatarMoeda(r.valorParcela) }}</ng-container>
+          </dd>
+        </div>
+        <div>
+          <dt>Taxas / juros</dt>
+          <dd class="neg">− {{ formatarMoeda(r.juros) }}</dd>
+        </div>
+        <div class="destaque-linha">
+          <dt>Valor líquido</dt>
+          <dd class="ok">{{ formatarMoeda(r.valorLiquido) }}</dd>
+        </div>
+      </dl>
+    </div>
+
+    <ng-template #liquidoVazio>
+      <p class="vazio">Informe o valor para ver o líquido.</p>
+    </ng-template>
+  </div>
+</div>

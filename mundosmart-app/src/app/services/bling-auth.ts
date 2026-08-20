@@ -39,12 +39,18 @@ export class BlingAuthService {
 
   syncTokenToApi(): Observable<{ message: string } | null> {
     const token = this.getToken();
-    if (!token || !this.isAuthenticated()) return of(null);
+    if (!token?.accessToken) return of(null);
+    if (!this.isAuthenticated()) return of(null);
+
+    const restanteSeg = Math.max(
+      30,
+      Math.floor((new Date(token.expiresAt).getTime() - Date.now()) / 1000),
+    );
 
     return this.http.post<{ message: string }>(`${this.apiUrl}/token`, {
       accessToken: token.accessToken,
       refreshToken: token.refreshToken,
-      expiresIn: token.expiresIn,
+      expiresIn: restanteSeg,
     }).pipe(catchError(() => of(null)));
   }
 
@@ -71,6 +77,21 @@ export class BlingAuthService {
 
 export function provideBlingAuthInitializer() {
   return provideAppInitializer(() => {
+    // Se o redirect URI no Bling estiver só em http://localhost:4200,
+    // o ?code= chega na home e some no redirect do Angular — reencaminha.
+    try {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
+      const path = url.pathname.replace(/\/+$/, '') || '/';
+      if (code && !path.endsWith('/auth/callback')) {
+        const qs = url.searchParams.toString();
+        window.location.replace(`${url.origin}/auth/callback?${qs}`);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+
     inject(BlingAuthService).syncTokenToApi().subscribe();
   });
 }

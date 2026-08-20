@@ -2,9 +2,11 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Options;
 using MundoSmart.BlingAssistencia.API.Models.Bling;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
 using MundoSmart.BlingAssistencia.API.Repositories;
+using MundoSmart.BlingAssistencia.API.Settings;
 
 namespace MundoSmart.BlingAssistencia.API.Services;
 
@@ -44,17 +46,20 @@ public class BlingProdutoConsultaService : IBlingProdutoConsultaService
     private readonly IBlingProdutoAcessorioRepository _repo;
     private readonly IBlingAuthService _auth;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly BlingSettings _bling;
     private readonly ILogger<BlingProdutoConsultaService> _log;
 
     public BlingProdutoConsultaService(
         IBlingProdutoAcessorioRepository repo,
         IBlingAuthService auth,
         IHttpClientFactory httpFactory,
+        IOptions<BlingSettings> bling,
         ILogger<BlingProdutoConsultaService> log)
     {
         _repo = repo;
         _auth = auth;
         _httpFactory = httpFactory;
+        _bling = bling.Value;
         _log = log;
     }
 
@@ -67,44 +72,45 @@ public class BlingProdutoConsultaService : IBlingProdutoConsultaService
         var t = (termo ?? "").Trim();
         if (t.Length > 80) t = t[..80];
 
-        var origem = "cache";
-        string? aviso = null;
-        List<BlingProdutoAcessorioCache> itens;
-
         var bling = await TentarBuscarBlingAsync(cat, t);
-        if (bling.Ok)
+        if (!bling.Ok)
         {
-            origem = "bling";
-            if (bling.Itens.Count > 0)
-                await _repo.UpsertMuitosAsync(bling.Itens);
-            itens = bling.Itens
-                .Where(x => incluirZerados || x.Saldo > 0)
-                .Where(x => TermoCombina(x, t))
-                .ToList();
-
-            if (itens.Count == 0)
+            return new ConsultaProdutosResponse
             {
-                var cache = await _repo.BuscarAsync(cat, t, incluirZerados);
-                if (cache.Count > 0)
-                {
-                    itens = cache;
-                    origem = "cache";
-                    aviso = "Bling não retornou estoque para este modelo; mostrando último cache.";
-                }
+                Categoria = cat,
+                Termo = t,
+                Origem = "bling",
+                Aviso = bling.Aviso ?? "Conecte o Bling para consultar o estoque real.",
+                Grupos = [],
+            };
+        }
+
+        if (bling.Itens.Count > 0)
+        {
+            try
+            {
+                await _repo.UpsertMuitosAsync(bling.Itens);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Falha ao cachear produtos Bling no Mongo (consulta segue normalmente)");
             }
         }
-        else
-        {
-            aviso = bling.Aviso;
-            itens = await _repo.BuscarAsync(cat, t, incluirZerados);
-        }
+
+        var itens = bling.Itens
+            .Where(x => incluirZerados || x.Saldo > 0)
+            .Where(x => TermoCombina(x, t))
+            .ToList();
 
         return new ConsultaProdutosResponse
         {
             Categoria = cat,
             Termo = t,
-            Origem = origem,
-            Aviso = aviso,
+            Origem = "bling",
+            Aviso = bling.Aviso
+                ?? (itens.Count == 0 && bling.Itens.Count > 0
+                    ? "Produtos encontrados no Bling, mas todos com saldo zero. Marque «incluir zerados» se quiser vê-los."
+                    : null),
             Grupos = Agrupar(itens),
         };
     }
@@ -137,51 +143,75 @@ public class BlingProdutoConsultaService : IBlingProdutoConsultaService
     private async Task<(bool Ok, List<BlingProdutoAcessorioCache> Itens, string? Aviso)> TentarBuscarBlingAsync(
         string categoria, string termo)
     {
-        var token = _auth.GetCurrentToken();
-        if (token is null
-            || string.IsNullOrWhiteSpace(token.AccessToken)
-            || token.AccessToken.StartsWith("local-bypass", StringComparison.OrdinalIgnoreCase)
-            || token.ExpiresAt <= DateTime.UtcNow)
+        if (!_bling.ConsultaProdutosHabilitada)
+            return (false, [], "Consulta Bling de produtos desabilitada. Ative Bling:ConsultaProdutosHabilitada.");
+
+        var token = await ObterTokenValidoAsync();
+        if (token is null)
         {
-            return (false, [], "Consulta no Bling indisponível no momento — usando catálogo local.");
+            return (false, [], "Bling não conectado. No topo do sistema, clique em «Conectar Bling (capinhas)» e autorize a conta.");
         }
 
         try
         {
             var http = _httpFactory.CreateClient("BlingProdutos");
-            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+            using var authScope = new AuthHeaderScope(http, token.AccessToken);
 
-            var nomesBusca = MontarBuscasBling(categoria, termo);
+            var idCategoria = await ResolverIdCategoriaAsync(http, categoria);
             var mapa = new Dictionary<long, BlingProdutoListaItem>();
 
-            foreach (var nome in nomesBusca)
+            if (idCategoria is > 0)
             {
-                var url = $"produtos?pagina=1&limite=100&criterio=2&tipo=P&nome={Uri.EscapeDataString(nome)}";
-                using var resp = await http.GetAsync(url);
-                if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                    return (false, [], "Token Bling expirado. Reconecte o Bling e tente de novo.");
-                if (!resp.IsSuccessStatusCode)
+                // Lista pela categoria do Bling (ex.: Capinha de Celular).
+                // criterio: 1=últimos incluídos, 2=ativos, 3=inativos (API v3).
+                for (var pagina = 1; pagina <= 5; pagina++)
                 {
-                    _log.LogWarning("Bling produtos {Status} para {Nome}", (int)resp.StatusCode, nome);
-                    continue;
-                }
+                    var url =
+                        $"produtos?pagina={pagina}&limite=100&criterio=2&tipo=P" +
+                        $"&idCategoria={idCategoria.Value}";
+                    if (termo.Length >= 2)
+                        url += $"&nome={Uri.EscapeDataString(termo)}";
 
-                var json = await resp.Content.ReadAsStringAsync();
-                var lista = JsonSerializer.Deserialize<BlingListaProdutos>(json, JsonOpts);
-                foreach (var p in lista?.Data ?? [])
+                    var lote = await BuscarPaginaProdutosAsync(http, url);
+                    if (lote.Count == 0) break;
+                    foreach (var p in lote)
+                    {
+                        if (p.Id > 0) mapa[p.Id] = p;
+                    }
+                    if (lote.Count < 100) break;
+                }
+            }
+            else
+            {
+                // Fallback por nome se a categoria não for encontrada no Bling.
+                foreach (var nome in MontarBuscasBling(categoria, termo))
                 {
-                    if (p.Id <= 0) continue;
-                    mapa[p.Id] = p;
+                    var url = $"produtos?pagina=1&limite=100&criterio=2&tipo=P&nome={Uri.EscapeDataString(nome)}";
+                    foreach (var p in await BuscarPaginaProdutosAsync(http, url))
+                    {
+                        if (p.Id > 0) mapa[p.Id] = p;
+                    }
                 }
             }
 
+            _log.LogInformation(
+                "Bling produtos: categoria={Cat} idCategoria={IdCat} termo={Termo} brutos={N}",
+                categoria, idCategoria, termo, mapa.Count);
+
             var filtrados = mapa.Values
-                .Where(p => EhDaCategoria(p.Nome, categoria))
-                .Take(80)
+                .Where(p => idCategoria is > 0 || EhDaCategoria(p.Nome, categoria))
+                .Take(120)
                 .ToList();
 
             if (filtrados.Count == 0)
-                return (true, [], null);
+            {
+                var msg = idCategoria is null
+                    ? $"Nenhum produto retornado. Categoria Bling não encontrada para «{categoria}». Confira o nome (ex.: Capinha de Celular)."
+                    : mapa.Count == 0
+                        ? "Nenhum produto ativo nessa categoria no Bling."
+                        : "Produtos encontrados, mas nenhum bateu com o filtro de nome.";
+                return (true, [], msg);
+            }
 
             var ids = filtrados.Select(p => p.Id).ToList();
             var saldos = await ObterSaldosAsync(http, ids);
@@ -209,10 +239,123 @@ public class BlingProdutoConsultaService : IBlingProdutoConsultaService
 
             return (true, itens, null);
         }
+        catch (UnauthorizedAccessException)
+        {
+            return (false, [], "Token Bling expirado. Clique em «Conectar Bling (capinhas)» e autorize de novo.");
+        }
+        catch (InvalidOperationException ex)
+        {
+            return (false, [], ex.Message);
+        }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Falha ao consultar produtos no Bling");
-            return (false, [], "Não foi possível falar com o Bling agora — usando catálogo local.");
+            return (false, [], "Não foi possível falar com o Bling agora. Verifique a conexão e tente de novo.");
+        }
+    }
+
+    private async Task<List<BlingProdutoListaItem>> BuscarPaginaProdutosAsync(HttpClient http, string url)
+    {
+        using var resp = await http.GetAsync(url);
+        if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            throw new UnauthorizedAccessException("Token Bling expirado.");
+        if (!resp.IsSuccessStatusCode)
+        {
+            var body = await resp.Content.ReadAsStringAsync();
+            _log.LogWarning("Bling produtos {Status} url={Url} body={Body}", (int)resp.StatusCode, url, body[..Math.Min(300, body.Length)]);
+            if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                throw new InvalidOperationException(
+                    "Bling recusou acesso aos produtos (403). Confira se o app tem permissão de Produtos/Estoque e reconecte.");
+            return [];
+        }
+
+        var json = await resp.Content.ReadAsStringAsync();
+        var lista = JsonSerializer.Deserialize<BlingListaProdutos>(json, JsonOpts);
+        return lista?.Data ?? [];
+    }
+
+    private async Task<long?> ResolverIdCategoriaAsync(HttpClient http, string categoriaApp)
+    {
+        var candidatos = NomesCategoriaBling(categoriaApp);
+        for (var pagina = 1; pagina <= 10; pagina++)
+        {
+            using var resp = await http.GetAsync($"categorias/produtos?pagina={pagina}&limite=100");
+            if (!resp.IsSuccessStatusCode)
+            {
+                _log.LogWarning("Bling categorias/produtos HTTP {Status}", (int)resp.StatusCode);
+                return null;
+            }
+
+            var json = await resp.Content.ReadAsStringAsync();
+            var lista = JsonSerializer.Deserialize<BlingListaCategorias>(json, JsonOpts);
+            var itens = lista?.Data ?? [];
+            if (itens.Count == 0) break;
+
+            foreach (var c in itens)
+            {
+                var nome = (c.Descricao ?? c.Nome ?? "").Trim();
+                if (string.IsNullOrEmpty(nome) || c.Id <= 0) continue;
+                foreach (var cand in candidatos)
+                {
+                    if (string.Equals(nome, cand, StringComparison.OrdinalIgnoreCase)
+                        || nome.Contains(cand, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _log.LogInformation("Categoria Bling resolvida: {Nome} -> {Id}", nome, c.Id);
+                        return c.Id;
+                    }
+                }
+            }
+
+            if (itens.Count < 100) break;
+        }
+
+        return null;
+    }
+
+    private static string[] NomesCategoriaBling(string categoriaApp) => categoriaApp switch
+    {
+        CatCapinhas => ["Capinha de Celular", "Capinhas", "Capinha"],
+        CatPeliculas => ["Película", "Peliculas", "Películas", "Película de Celular"],
+        CatTermicos => ["Térmico", "Termicos", "Garrafa", "Copo Térmico"],
+        _ => [categoriaApp],
+    };
+
+    /// <summary>Define Authorization no HttpClient e limpa ao sair (client compartilhado).</summary>
+    private sealed class AuthHeaderScope : IDisposable
+    {
+        private readonly HttpClient _http;
+        public AuthHeaderScope(HttpClient http, string accessToken)
+        {
+            _http = http;
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
+        public void Dispose() => _http.DefaultRequestHeaders.Authorization = null;
+    }
+
+    private async Task<BlingTokenResponse?> ObterTokenValidoAsync()
+    {
+        var token = _auth.GetCurrentToken();
+        if (token is null
+            || string.IsNullOrWhiteSpace(token.AccessToken)
+            || token.AccessToken.StartsWith("local-bypass", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (token.ExpiresAt > DateTime.UtcNow.AddMinutes(1))
+            return token;
+
+        if (string.IsNullOrWhiteSpace(token.RefreshToken))
+            return null;
+
+        try
+        {
+            return await _auth.RefreshTokenAsync(token.RefreshToken);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Falha ao renovar token Bling");
+            return null;
         }
     }
 
@@ -327,6 +470,18 @@ public class BlingProdutoConsultaService : IBlingProdutoConsultaService
             .OrderByDescending(g => g.SaldoTotal)
             .ThenBy(g => g.Nome, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private sealed class BlingListaCategorias
+    {
+        public List<BlingCategoriaItem>? Data { get; set; }
+    }
+
+    private sealed class BlingCategoriaItem
+    {
+        public long Id { get; set; }
+        public string? Descricao { get; set; }
+        public string? Nome { get; set; }
     }
 
     private sealed class BlingListaProdutos

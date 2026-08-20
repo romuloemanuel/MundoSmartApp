@@ -21,23 +21,38 @@ public class AuthController : ControllerBase
     }
 
     [HttpGet("login")]
+    [AllowAnonymous]
     public IActionResult Login()
     {
-        if (_bling.ModoLocal)
-            return Ok(new { authorizationUrl = _authService.GetAuthorizationUrl(), modoLocal = true });
+        // OAuth só para consulta de capinhas/estoque — não habilita sync de OS/clientes.
+        if (!_bling.ConsultaProdutosHabilitada)
+            return BadRequest(new { message = "Consulta de produtos Bling desabilitada." });
 
         var url = _authService.GetAuthorizationUrl();
-        return Ok(new { authorizationUrl = url });
+        return Ok(new
+        {
+            authorizationUrl = url,
+            modoLocal = _bling.ModoLocal,
+            escopo = "consulta-produtos",
+        });
     }
 
     [HttpGet("callback")]
+    [AllowAnonymous]
     public async Task<IActionResult> Callback([FromQuery] string code)
     {
         if (string.IsNullOrWhiteSpace(code))
             return BadRequest(new { message = "Parâmetro 'code' é obrigatório." });
 
-        var token = await _authService.ExchangeCodeAsync(code);
-        return Ok(token);
+        try
+        {
+            var token = await _authService.ExchangeCodeAsync(code);
+            return Ok(token);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("refresh")]
@@ -51,17 +66,26 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("token")]
+    [AllowAnonymous]
     public IActionResult SetToken([FromBody] TokenRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.AccessToken))
+            return BadRequest(new { message = "accessToken é obrigatório." });
+
         _authService.SetToken(new Models.Bling.BlingTokenResponse
         {
             AccessToken = request.AccessToken,
             RefreshToken = request.RefreshToken ?? string.Empty,
-            ExpiresIn = request.ExpiresIn,
+            ExpiresIn = request.ExpiresIn > 0 ? request.ExpiresIn : 3600,
             TokenType = "Bearer",
-            ExpiresAt = DateTime.UtcNow.AddSeconds(request.ExpiresIn)
+            ExpiresAt = DateTime.UtcNow.AddSeconds(request.ExpiresIn > 0 ? request.ExpiresIn : 3600)
         });
-        return Ok(new { message = "Token configurado com sucesso.", modoLocal = _bling.ModoLocal });
+        return Ok(new
+        {
+            message = "Token Bling configurado (consulta de produtos).",
+            modoLocal = _bling.ModoLocal,
+            consultaProdutos = _bling.ConsultaProdutosHabilitada,
+        });
     }
 }
 

@@ -20,19 +20,13 @@ builder.Services.Configure<BlingSettings>(builder.Configuration.GetSection("Blin
 builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection(AuthSettings.SectionName));
 var authSettings = builder.Configuration.GetSection(AuthSettings.SectionName).Get<AuthSettings>() ?? new AuthSettings();
 
-// ── INTEGRAÇÃO BLING REAL (comentada — não chama produção) ──
-// builder.Services.AddHttpClient("Bling");
-// builder.Services.AddHttpClient("BlingAuth");
-// builder.Services.AddSingleton<IBlingIntegrationGuard, BlingIntegrationGuard>();
-// builder.Services.AddSingleton<IBlingAuthService, BlingAuthService>();
-// builder.Services.AddSingleton<IBlingApiClientFactory, BlingApiClientFactory>();
-// builder.Services.AddScoped<IBlingClienteService, BlingClienteService>();
-// builder.Services.AddScoped<IBlingOrdemServicoService, BlingOrdemServicoService>();
-// builder.Services.AddScoped<IBlingOrcamentoService, BlingOrcamentoService>();
+// OAuth Bling só para consulta de produtos/capinhas.
+// Clientes, OS e orçamentos permanecem 100% no Mongo (LocalBypass) — sem sync com Bling.
+builder.Services.AddHttpClient("BlingAuth");
+builder.Services.AddSingleton<IBlingAuthService, BlingAuthService>();
 
-// Bypass local — persiste clientes/OS/orçamentos só no MongoDB
+// Domínio local — nunca chama API Bling de contatos/OS/orçamentos
 builder.Services.AddScoped<IClienteConsultaService, ClienteConsultaService>();
-builder.Services.AddSingleton<IBlingAuthService, BlingAuthServiceLocalBypass>();
 builder.Services.AddScoped<IBlingClienteService, BlingClienteServiceLocalBypass>();
 builder.Services.AddScoped<IBlingOrdemServicoService, BlingOrdemServicoServiceLocalBypass>();
 builder.Services.AddScoped<IBlingOrcamentoService, BlingOrcamentoServiceLocalBypass>();
@@ -62,7 +56,8 @@ builder.Services.AddSingleton<IEstoqueNivelService, EstoqueNivelService>();
 builder.Services.AddSingleton<IOsEstoqueBaixaService, OsEstoqueBaixaService>();
 builder.Services.AddHttpClient("BlingProdutos", client =>
 {
-    client.BaseAddress = new Uri("https://www.bling.com.br/Api/v3/");
+    // Host oficial da API v3 (www.bling.com.br retorna 403 em /produtos).
+    client.BaseAddress = new Uri("https://api.bling.com.br/Api/v3/");
     client.Timeout = TimeSpan.FromSeconds(20);
 });
 builder.Services.AddSingleton<IBlingProdutoAcessorioRepository, BlingProdutoAcessorioRepository>();
@@ -268,8 +263,7 @@ try
     Console.WriteLine("[MundoSmart API] Categorias de peça seedadas.");
     var acessoriosRepo = app.Services.GetRequiredService<IBlingProdutoAcessorioRepository>();
     await acessoriosRepo.EnsureIndexesAsync();
-    await acessoriosRepo.GarantirSeedAsync();
-    Console.WriteLine("[MundoSmart API] Consulta de acessórios (capinha/película/térmico) pronta.");
+    Console.WriteLine("[MundoSmart API] Consulta de acessórios: só Bling (sem catálogo local).");
     var estoqueLote = app.Services.GetRequiredService<IEstoqueLoteService>();
     await estoqueLote.EnsureIndexesAsync();
     if (app.Environment.IsDevelopment())

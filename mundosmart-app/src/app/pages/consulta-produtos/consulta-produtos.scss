@@ -128,7 +128,29 @@ h1 {
 }
 
 .origem { color: #64748b; font-weight: 600; }
-.aviso { color: #92400e; background: #fffbeb; border: 1px solid #fde68a; padding: 8px 10px; border-radius: 8px; }
+.aviso { color: #92400e; margin: 0; }
+.aviso-box {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.btn-conectar {
+  align-self: flex-start;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.btn-conectar:hover { background: #1d4ed8; }
 .erro { color: #b91c1c; }
 .loading { color: #2563eb; }
 .vazio { color: #64748b; }

@@ -12,6 +12,7 @@ import { OsImpressaoConfigService } from './services/os-impressao-config.service
 import { AcrescimoEstoqueConfigService } from './services/acrescimo-estoque-config.service';
 import { AppAuthService } from './services/app-auth';
 import { GlobalErrorHandler } from './services/global-error-handler';
+import { provideBlingAuthInitializer } from './services/bling-auth';
 
 function initSessaoTransferida(auth: AppAuthService) {
   return () => firstValueFrom(auth.inicializarSessaoDaUrl());
@@ -60,5 +61,6 @@ export const appConfig: ApplicationConfig = {
       deps: [AcrescimoEstoqueConfigService],
       multi: true,
     },
+    provideBlingAuthInitializer(),
   ]
 };

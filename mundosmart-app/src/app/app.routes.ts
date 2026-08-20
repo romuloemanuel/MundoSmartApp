@@ -95,6 +95,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/consulta-produtos/consulta-produtos').then(m => m.ConsultaProdutosPage),
       },
+      {
+        path: 'calculo-juros',
+        loadComponent: () =>
+          import('./pages/calculo-juros/calculo-juros').then(m => m.CalculoJurosPage),
+      },
       { path: 'estoque', component: EstoquePage },
       { path: 'estoque/lotes-retorno', component: LotesRetornoPage },
       { path: 'estoque/analise-retorno', component: AnaliseRetornoPage },

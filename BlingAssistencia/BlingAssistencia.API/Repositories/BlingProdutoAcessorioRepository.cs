@@ -67,11 +67,24 @@ public class BlingProdutoAcessorioRepository : IBlingProdutoAcessorioRepository
         foreach (var item in itens)
         {
             if (item.BlingId <= 0) continue;
-            item.AtualizadoEm = DateTime.UtcNow;
-            await _col.ReplaceOneAsync(
+            var agora = DateTime.UtcNow;
+            var update = Builders<BlingProdutoAcessorioCache>.Update
+                .Set(x => x.Categoria, item.Categoria)
+                .Set(x => x.Nome, item.Nome)
+                .Set(x => x.NomeBase, item.NomeBase)
+                .Set(x => x.Modelo, item.Modelo)
+                .Set(x => x.Cor, item.Cor)
+                .Set(x => x.Codigo, item.Codigo)
+                .Set(x => x.Saldo, item.Saldo)
+                .Set(x => x.Preco, item.Preco)
+                .Set(x => x.ImagemUrl, item.ImagemUrl)
+                .Set(x => x.AtualizadoEm, agora)
+                .SetOnInsert(x => x.BlingId, item.BlingId);
+
+            await _col.UpdateOneAsync(
                 x => x.BlingId == item.BlingId,
-                item,
-                new ReplaceOptions { IsUpsert = true });
+                update,
+                new UpdateOptions { IsUpsert = true });
         }
     }
 

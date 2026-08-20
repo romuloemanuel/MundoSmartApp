@@ -1,3 +1,8 @@
 <div class="auth-callback">
   <p [class.erro]="erro">{{ mensagem }}</p>
+  <p class="hint" *ngIf="detalhe">{{ detalhe }}</p>
+  <div class="acoes" *ngIf="erro">
+    <button type="button" (click)="reconectar()">Conectar Bling de novo</button>
+    <button type="button" (click)="voltar()" style="background:#64748b">Voltar</button>
+  </div>
 </div>

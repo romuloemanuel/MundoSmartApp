@@ -58,7 +58,9 @@ public class InfoController : ControllerBase
 
             modoLocal = _bling.ModoLocal,
 
-            blingIntegracao = _bling.Habilitado && !_bling.ModoLocal
+            blingIntegracao = false,
+
+            blingConsultaProdutos = _bling.ConsultaProdutosHabilitada
 
         });
 

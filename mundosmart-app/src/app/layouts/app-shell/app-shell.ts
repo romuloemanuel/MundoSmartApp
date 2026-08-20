@@ -30,6 +30,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <a routerLink="/estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Pe&ccedil;as &amp; Estoque</a>
           <a routerLink="/orcamentos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Or&ccedil;amentos</a>
           <a routerLink="/consulta-produtos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Consulta estoque</a>
+          <a routerLink="/calculo-juros" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Cálculo de juros</a>
           <a routerLink="/clientes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Clientes</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/historico-alteracoes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Hist&oacute;rico de altera&ccedil;&otilde;es</a>
           <div class="nav-section-label">Cadastros</div>
@@ -72,11 +73,11 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
             </span>
             <a routerLink="/conta/senha" class="btn-link">Senha</a>
             <ng-container *ngIf="blingAuth.isAuthenticated(); else blingOff">
-              <span class="auth-status">Bling OK</span>
+              <span class="auth-status">Bling capinhas OK</span>
             </ng-container>
             <ng-template #blingOff>
               <button type="button" (click)="conectarBling()" class="btn-login" *ngIf="appAuth.isAdmin()">
-                Conectar Bling
+                Conectar Bling (capinhas)
               </button>
             </ng-template>
             <button type="button" (click)="sair()" class="btn-logout">Sair</button>
