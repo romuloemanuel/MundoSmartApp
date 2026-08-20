@@ -7,10 +7,10 @@ import { debounceTime, takeUntil } from 'rxjs/operators';
 import { PecasService } from '../../../services/pecas';
 import { AparelhosService } from '../../../services/aparelhos';
 import { CategoriasPecaService } from '../../../services/categorias-peca';
-import { CATEGORIAS_PECA, categoriaUsaCoresPorModelo, inferirCategoriaPeca } from '../../../config/peca-categoria.config';
+import { CATEGORIAS_PECA, categoriaExpandeCoberturaPorCompatibilidade, categoriaUsaCoresPorModelo, inferirCategoriaPeca } from '../../../config/peca-categoria.config';
 import { formatarDataCadastroModelo } from '../../../utils/modelo-autocomplete.util';
 import { CorEstoqueModelo, ModeloAparelho, ModeloCompativel, PecaEstoque, VariacaoServico } from '../../../models/bling.models';
-import { MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
+import { expandirIdsPorCompatibilidadeDePeca, MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
 import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 @Component({
@@ -38,6 +38,7 @@ import { avisarErroUsuario } from '../../../services/user-feedback.service';
     .compat-hint { font-size: 12px; color: #64748b; margin: 8px 0; }
     .compat-aviso { font-size: 12px; color: #b45309; margin: 6px 0; }
     .compat-erro { font-size: 12px; color: #b91c1c; margin: 6px 0; }
+    .compat-ok { font-size: 12px; color: #047857; margin: 6px 0; }
     .secao-precos { margin-bottom: 20px; }
     .nome-exemplo { font-size: 12px; color: #475569; margin-top: 4px; }
     .resultados-modelos {
@@ -126,6 +127,7 @@ export class PecasForm implements OnInit, OnDestroy {
   marcasCatalogo: string[] = [];
   buscandoModelos = false;
   avisoModelo = '';
+  avisoGrupo = '';
 
   private readonly buscaModelo$ = new Subject<void>();
   private readonly destroy$ = new Subject<void>();
@@ -308,6 +310,7 @@ export class PecasForm implements OnInit, OnDestroy {
 
   adicionarModelo(ref?: ModeloAparelho): void {
     this.avisoModelo = '';
+    this.avisoGrupo = '';
     if (!ref?.id) {
       this.avisoModelo = 'Selecione um modelo na lista e clique em Adicionar.';
       return;
@@ -324,17 +327,50 @@ export class PecasForm implements OnInit, OnDestroy {
       return;
     }
 
+    this.vincularModeloNaPeca(ref);
+    if (!this.filtroMarcaModelo && marcaNova) {
+      this.filtroMarcaModelo = marcaNova;
+    }
+
+    const categoria = this.peca.categoria?.trim() || inferirCategoriaPeca(this.peca.nome);
+    if (categoriaExpandeCoberturaPorCompatibilidade(categoria)) {
+      this.incluirModelosCompativeisDoGrupo(ref);
+    }
+  }
+
+  /** Inclui G20/G30 etc. quando o modelo tem Família/Compartilhado (mesma peça do grupo). */
+  private incluirModelosCompativeisDoGrupo(ref: ModeloAparelho): void {
+    const marca = ref.marcaNome?.trim();
+    if (!marca || !ref.id) return;
+
+    this.aparelhosService.listarModelos({ marcaNome: marca, limite: MODELO_LIMITE_LISTA }).subscribe({
+      next: lista => {
+        const idsGrupo = expandirIdsPorCompatibilidadeDePeca([ref.id!], lista);
+        let incluidos = 0;
+        for (const id of idsGrupo) {
+          if (id === ref.id || this.modeloJaVinculado(id)) continue;
+          const modelo = lista.find(m => m.id === id);
+          if (!modelo?.id) continue;
+          this.vincularModeloNaPeca(modelo);
+          incluidos++;
+        }
+        if (incluidos > 0) {
+          this.avisoGrupo =
+            `Incluídos ${incluidos} modelo(s) do mesmo grupo (Família/Compartilhado — conector/bateria/tela).`;
+        }
+      },
+    });
+  }
+
+  private vincularModeloNaPeca(ref: ModeloAparelho): void {
+    if (!ref.id || this.modeloJaVinculado(ref.id)) return;
     const item: ModeloCompativel = {
       modeloId: ref.id,
       modeloNome: ref.nome,
       marcaNome: ref.marcaNome,
       cores: this.usaCoresPorModelo ? [{ cor: '', quantidade: 0 }] : undefined,
     };
-
     this.peca.modelosCompativeis = [...(this.peca.modelosCompativeis ?? []), item];
-    if (!this.filtroMarcaModelo && marcaNova) {
-      this.filtroMarcaModelo = marcaNova;
-    }
   }
 
   removerModelo(index: number): void {
@@ -343,6 +379,7 @@ export class PecasForm implements OnInit, OnDestroy {
       this.filtroMarcaModelo = '';
     }
     this.avisoModelo = '';
+    this.avisoGrupo = '';
   }
 
   adicionarVariacao(): void {

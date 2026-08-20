@@ -11,6 +11,7 @@ import { CategoriasPecaService } from '../../../services/categorias-peca';
 import { ModeloAparelho, PecaEstoque } from '../../../models/bling.models';
 import {
   CATEGORIAS_PECA,
+  categoriaExpandeCoberturaPorCompatibilidade,
   inferirCategoriaPeca,
   indiceCategoriaPeca,
   modeloElegivelParaCategoriaPeca,
@@ -27,7 +28,12 @@ import { GridAcao } from '../../../components/grid-acao/grid-acao';
 import { AutocompleteCriavel, AutocompleteItem } from '../../../components/autocomplete-criavel/autocomplete-criavel';
 import { GridPaginationState } from '../../../utils/grid-pagination.state';
 import { formatarDataCadastroModelo, modeloParaAutocomplete } from '../../../utils/modelo-autocomplete.util';
-import { MODELO_LIMITE_LISTA, TIPOS_TELA, mesmoTipoTelaArquitetura } from '../../../config/aparelhos.config';
+import {
+  expandirIdsPorCompatibilidadeDePeca,
+  MODELO_LIMITE_LISTA,
+  TIPOS_TELA,
+  mesmoTipoTelaArquitetura,
+} from '../../../config/aparelhos.config';
 
 type PecaOrdenacaoCampo = 'peca' | 'categoria' | 'modelo' | 'preco' | 'estoque';
 
@@ -622,14 +628,20 @@ export class PecasLista implements OnInit {
   }
 
   private idsModeloCobertosPorCategoria(categoria: string): Set<string> {
-    const ids = new Set<string>();
+    const idsDiretos = new Set<string>();
     for (const p of this.pecas) {
       if (inferirCategoriaPeca(p.nome, p.categoria) !== categoria) continue;
       for (const mc of p.modelosCompativeis ?? []) {
-        if (mc.modeloId?.trim()) ids.add(mc.modeloId.trim());
+        if (mc.modeloId?.trim()) idsDiretos.add(mc.modeloId.trim());
       }
     }
-    return ids;
+
+    // Conector, bateria, tela OLED/Incell (±aro): cadastro em um modelo
+    // cobre Família/Compartilhado (ex.: G10/G20/G30, A52/A53/A54).
+    if (!categoriaExpandeCoberturaPorCompatibilidade(categoria)) {
+      return idsDiretos;
+    }
+    return expandirIdsPorCompatibilidadeDePeca(idsDiretos, this.modelosCatalogo);
   }
 
   private chaveOrdenacaoModelo(p: PecaEstoque): string {

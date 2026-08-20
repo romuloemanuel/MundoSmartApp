@@ -94,6 +94,25 @@ export function modeloElegivelParaCategoriaPeca(tipoTela: string | undefined, ca
   return familiaTipoTela(tipoTela) === 'OLED';
 }
 
+/**
+ * Categorias em que um cadastro cobre modelos Família/Compartilhado no catálogo.
+ * Mesma lógica para: Conector, Bateria, Tela OLED (±aro), Tela Incell (±aro).
+ * Ex.: G10/G20/G30 ou A52/A53/A54 com a mesma peça.
+ */
+export function categoriaExpandeCoberturaPorCompatibilidade(categoria: string): boolean {
+  const n = normalizarTextoPeca(categoria);
+  if (!n) return false;
+  return (
+    n.includes('tela')
+    || n.includes('incell')
+    || n.includes('oled')
+    || n.includes('bateria')
+    || n.includes('conector')
+    || n.includes('vidro para display')
+    || n.includes('aro')
+  );
+}
+
 /** Categorias que controlam estoque por cor dentro de cada modelo. */
 export function categoriaUsaCoresPorModelo(categoria?: string): boolean {
   const cat = (categoria ?? '').trim();

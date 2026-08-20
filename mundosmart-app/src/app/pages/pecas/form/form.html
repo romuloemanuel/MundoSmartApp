@@ -172,7 +172,9 @@
     <h3>Modelos compat&iacute;veis</h3>
     <p class="compat-hint">
       Vincule aqui os aparelhos que usam <strong>esta mesma pe&ccedil;a</strong> (mesma marca).
-      Na OS e no estoque, a pe&ccedil;a aparece automaticamente ao selecionar qualquer um desses modelos.
+      Em conector, bateria, tela OLED e Incell (com ou sem aro), ao adicionar um modelo o sistema inclui
+      automaticamente os ligados por <strong>Fam&iacute;lia</strong> ou <strong>Compartilhado</strong>
+      (ex.: G10/G20/G30 ou A52/A53/A54).
     </p>
     <p class="compat-hint" *ngIf="usaCoresPorModelo">
       Em <strong>Tampa traseira</strong> e <strong>Vidro Traseiro</strong>, informe as <strong>cores</strong> e a <strong>quantidade</strong> de cada cor dentro do modelo.
@@ -202,6 +204,7 @@
 
     <p *ngIf="buscandoModelos" class="compat-hint">Buscando modelos...</p>
     <p *ngIf="avisoModelo" class="compat-erro">{{ avisoModelo }}</p>
+    <p *ngIf="avisoGrupo" class="compat-ok">{{ avisoGrupo }}</p>
 
     <div class="resultados-modelos" *ngIf="!buscandoModelos && modelosBusca.length > 0">
       <div class="resultado-modelo"
