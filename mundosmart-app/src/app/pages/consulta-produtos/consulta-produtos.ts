@@ -8,6 +8,7 @@ import {
   ConsultaProdutoGrupo,
   ConsultaProdutosService,
 } from '../../services/consulta-produtos';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-consulta-produtos',
@@ -115,6 +116,7 @@ export class ConsultaProdutosPage implements OnInit, OnDestroy {
   buscar(): void {
     if (this.termo.trim().length < 2) {
       this.erro = 'Digite pelo menos 2 caracteres do modelo.';
+      avisarErroUsuario(this.erro);
       return;
     }
     this.dispararBusca();

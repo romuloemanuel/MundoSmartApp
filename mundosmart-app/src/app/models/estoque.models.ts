@@ -13,6 +13,7 @@ export interface PedidoCompraEstoque {
   totalUnidades: number;
   valorTotal: number;
   criadoEm?: string;
+  atualizadoEm?: string;
 }
 
 export interface LoteEstoque {
@@ -134,6 +135,10 @@ export interface AtualizarLoteEstoqueRequest {
   custoUnitario?: number;
   garantiaMeses?: number;
   quantidadeInicial?: number;
+  pecaId?: string;
+  modeloId?: string;
+  modeloNome?: string;
+  cor?: string;
 }
 
 export interface PedidoCompraDetalhe {

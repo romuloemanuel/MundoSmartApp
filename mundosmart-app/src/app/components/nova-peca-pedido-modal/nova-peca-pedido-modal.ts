@@ -17,6 +17,7 @@ import { modeloParaAutocomplete } from '../../utils/modelo-autocomplete.util';
 import { CorEstoqueModelo, ModeloAparelho, ModeloCompativel, PecaEstoque } from '../../models/bling.models';
 import { PecaCatalogo } from '../../models/estoque.models';
 import { MODELO_LIMITE_LISTA } from '../../config/aparelhos.config';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-nova-peca-pedido-modal',
@@ -305,12 +306,14 @@ export class NovaPecaPedidoModal implements OnInit {
     const categoria = this.peca.categoria?.trim();
     if (!categoria) {
       this.erro = 'Selecione a categoria.';
+      avisarErroUsuario(this.erro);
       return;
     }
 
     const modelo = this.modeloLinha ?? this.modeloEscolhido;
     if (!modelo?.id) {
       this.erro = 'Selecione o modelo compatível.';
+      avisarErroUsuario(this.erro);
       return;
     }
 
@@ -325,6 +328,7 @@ export class NovaPecaPedidoModal implements OnInit {
 
     if (this.usaCoresPorModelo && (!cores || cores.length === 0)) {
       this.erro = 'Informe ao menos uma cor para a Tampa traseira / Vidro Traseiro.';
+      avisarErroUsuario(this.erro);
       return;
     }
 

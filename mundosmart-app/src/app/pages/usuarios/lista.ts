@@ -5,6 +5,7 @@ import { UsuariosService } from '../../services/usuarios';
 import { AppUsuario } from '../../services/app-auth';
 import { TecnicosService, Tecnico } from '../../services/tecnicos';
 import { LOJAS_OS, labelLojaOs } from '../../config/os-loja.config';
+import { avisarErroUsuario, avisarSucessoUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-usuarios-lista',
@@ -201,6 +202,7 @@ export class UsuariosLista implements OnInit {
     const loja = this.form.role === 'Admin' || this.editandoRoot ? null : this.form.lojaOrigem;
     if (this.form.role === 'Operador' && !loja) {
       this.formErro = 'Operador precisa de uma loja vinculada.';
+      avisarErroUsuario(this.formErro);
       return;
     }
 
@@ -235,8 +237,8 @@ export class UsuariosLista implements OnInit {
     const senha = prompt(`Nova senha temporária para ${u.usuario} (mín. 8, com letras e números):`);
     if (!senha) return;
     this.service.resetSenha(u.id, senha).subscribe({
-      next: () => alert('Senha redefinida. O usuário deverá trocar no próximo acesso.'),
-      error: err => alert(err?.error?.erro || 'Erro ao resetar senha.'),
+      next: () => avisarSucessoUsuario('Senha redefinida. O usuário deverá trocar no próximo acesso.'),
+      error: err => avisarErroUsuario(err?.error?.erro || 'Erro ao resetar senha.'),
     });
   }
 
@@ -245,7 +247,7 @@ export class UsuariosLista implements OnInit {
     if (!confirm(`Excluir o usuário ${u.usuario}?`)) return;
     this.service.excluir(u.id).subscribe({
       next: () => this.carregar(),
-      error: err => alert(err?.error?.erro || 'Erro ao excluir.'),
+      error: err => avisarErroUsuario(err?.error?.erro || 'Erro ao excluir.'),
     });
   }
 }

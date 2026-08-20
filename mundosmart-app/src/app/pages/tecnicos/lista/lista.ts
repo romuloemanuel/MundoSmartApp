@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TecnicosService, Tecnico } from '../../../services/tecnicos';
 import { GridAcao } from '../../../components/grid-acao/grid-acao';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 @Component({
   selector: 'app-tecnicos-lista',
@@ -45,6 +46,7 @@ export class TecnicosLista implements OnInit {
     const nome = this.novoNome.trim();
     if (!nome) {
       this.erro = 'Informe o nome do técnico.';
+      avisarErroUsuario(this.erro);
       return;
     }
     this.salvando = true;
@@ -77,6 +79,7 @@ export class TecnicosLista implements OnInit {
     const nome = this.editNome.trim();
     if (!nome) {
       this.erro = 'Informe o nome do técnico.';
+      avisarErroUsuario(this.erro);
       return;
     }
     this.salvando = true;

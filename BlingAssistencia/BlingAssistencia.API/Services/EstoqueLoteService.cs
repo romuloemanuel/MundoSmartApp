@@ -149,12 +149,16 @@ public class EstoqueLoteService : IEstoqueLoteService
             cancellationToken: cancellationToken);
     }
 
-    public async Task<List<PedidoCompraEstoque>> ListarPedidosAsync(int limite = 100) =>
-        await _pedidos.Find(_ => true)
-            .SortByDescending(x => x.DataPedido)
+    public async Task<List<PedidoCompraEstoque>> ListarPedidosAsync(int limite = 100)
+    {
+        var pedidos = await _pedidos.Find(_ => true).ToListAsync();
+        return pedidos
+            .OrderByDescending(x => x.AtualizadoEm != default ? x.AtualizadoEm : x.CriadoEm)
+            .ThenByDescending(x => x.DataPedido)
             .ThenByDescending(x => x.CriadoEm)
-            .Limit(limite)
-            .ToListAsync();
+            .Take(Math.Clamp(limite, 1, 500))
+            .ToList();
+    }
 
     public async Task<PedidoCompraDetalheResponse?> ObterPedidoAsync(string id)
     {
@@ -162,8 +166,8 @@ public class EstoqueLoteService : IEstoqueLoteService
         if (pedido is null) return null;
 
         var lotes = await _lotes.Find(x => x.PedidoCompraId == id)
-            .SortBy(x => x.PecaNome)
-            .ThenBy(x => x.MarcaPeca)
+            .SortByDescending(x => x.CriadoEm)
+            .ThenBy(x => x.PecaNome)
             .ToListAsync();
 
         return new PedidoCompraDetalheResponse { Pedido = pedido, Lotes = lotes };
@@ -199,6 +203,7 @@ public class EstoqueLoteService : IEstoqueLoteService
             DataPedido = dataPedido,
             Observacoes = request.Observacoes?.Trim(),
             CriadoEm = DateTime.UtcNow,
+            AtualizadoEm = DateTime.UtcNow,
         };
 
         var lotes = new List<LoteEstoque>();
@@ -344,8 +349,13 @@ public class EstoqueLoteService : IEstoqueLoteService
         var qtdRestanteAnterior = lote.QuantidadeRestante;
         var consumido = Math.Max(0, qtdInicialAnterior - qtdRestanteAnterior);
         var custoAnterior = lote.CustoUnitario;
+        var pecaIdAnterior = lote.PecaId;
+        var modeloIdAnterior = lote.ModeloId;
+        var modeloNomeAnterior = lote.ModeloNome;
+        var corAnterior = lote.Cor;
         var alterouQtd = false;
         var alterouCusto = false;
+        var alterouIdentidade = false;
 
         if (request.Fornecedor != null)
         {
@@ -390,26 +400,83 @@ public class EstoqueLoteService : IEstoqueLoteService
                 lote.QuantidadeInicial = novaInicial;
                 lote.QuantidadeRestante = qtdRestanteAnterior + delta;
                 alterouQtd = true;
+            }
+        }
 
-                if (!string.IsNullOrWhiteSpace(lote.Cor) && !string.IsNullOrWhiteSpace(lote.ModeloId))
-                {
-                    if (delta > 0)
-                    {
-                        await IncrementarEstoqueCorModeloAsync(
-                            lote.PecaId, lote.ModeloId, lote.ModeloNome, lote.Cor, delta);
-                    }
-                    else
-                    {
-                        await DecrementarEstoqueCorModeloAsync(
-                            lote.PecaId, lote.ModeloId, lote.ModeloNome, lote.Cor, -delta);
-                    }
-                }
+        // Identidade (peça/modelo/cor) — mesmo preenchimento do incluir item.
+        if (request.PecaId != null
+            || request.ModeloId != null
+            || request.ModeloNome != null
+            || request.Cor != null)
+        {
+            var novaPecaId = !string.IsNullOrWhiteSpace(request.PecaId)
+                ? request.PecaId.Trim()
+                : lote.PecaId;
+            if (string.IsNullOrWhiteSpace(novaPecaId))
+                throw new ArgumentException("Peça do lote é obrigatória.");
+
+            var peca = await _pecasRepo.ObterPorIdAsync(novaPecaId)
+                ?? throw new ArgumentException($"Peça {novaPecaId} não encontrada.");
+
+            var novoModeloId = request.ModeloId != null
+                ? (string.IsNullOrWhiteSpace(request.ModeloId) ? null : request.ModeloId.Trim())
+                : lote.ModeloId;
+            var novoModeloNome = request.ModeloNome != null
+                ? (string.IsNullOrWhiteSpace(request.ModeloNome) ? null : request.ModeloNome.Trim())
+                : lote.ModeloNome;
+            var novaCor = request.Cor != null
+                ? (string.IsNullOrWhiteSpace(request.Cor) ? null : request.Cor.Trim())
+                : lote.Cor;
+
+            var categoria = InferirCategoriaPeca(peca);
+            if (await _categoriasPeca.UsaCoresPorModeloAsync(categoria))
+            {
+                if (string.IsNullOrWhiteSpace(novoModeloId))
+                    throw new ArgumentException($"Informe o modelo da {categoria} ({peca.Nome}).");
+                if (string.IsNullOrWhiteSpace(novaCor))
+                    throw new ArgumentException($"Informe a cor da {categoria} para o modelo ({peca.Nome}).");
+            }
+
+            novoModeloNome = ResolverModeloNome(peca, novoModeloId, novoModeloNome);
+
+            alterouIdentidade =
+                !string.Equals(lote.PecaId, novaPecaId, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(lote.ModeloId ?? "", novoModeloId ?? "", StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(lote.Cor ?? "", novaCor ?? "", StringComparison.OrdinalIgnoreCase);
+
+            lote.PecaId = peca.Id!;
+            lote.PecaNome = peca.Nome;
+            lote.ModeloId = novoModeloId;
+            lote.ModeloNome = novoModeloNome;
+            lote.Cor = novaCor;
+            if (request.MarcaPeca == null && string.IsNullOrWhiteSpace(lote.MarcaPeca))
+                lote.MarcaPeca = peca.MarcaPeca;
+        }
+
+        // Estoque por cor: remove saldo antigo e reaplica o restante na identidade final.
+        var identidadeCorMudou = alterouIdentidade
+            || !string.Equals(modeloIdAnterior ?? "", lote.ModeloId ?? "", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(corAnterior ?? "", lote.Cor ?? "", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(pecaIdAnterior, lote.PecaId, StringComparison.OrdinalIgnoreCase);
+
+        if (identidadeCorMudou || alterouQtd)
+        {
+            if (!string.IsNullOrWhiteSpace(corAnterior) && !string.IsNullOrWhiteSpace(modeloIdAnterior))
+            {
+                await DecrementarEstoqueCorModeloAsync(
+                    pecaIdAnterior, modeloIdAnterior, modeloNomeAnterior, corAnterior, qtdRestanteAnterior);
+            }
+
+            if (!string.IsNullOrWhiteSpace(lote.Cor) && !string.IsNullOrWhiteSpace(lote.ModeloId))
+            {
+                await IncrementarEstoqueCorModeloAsync(
+                    lote.PecaId, lote.ModeloId, lote.ModeloNome, lote.Cor, lote.QuantidadeRestante);
             }
         }
 
         await _lotes.ReplaceOneAsync(x => x.Id == lote.Id, lote);
 
-        if (alterouQtd || alterouCusto)
+        if (alterouQtd || alterouCusto || alterouIdentidade)
         {
             var filtroEntrada = Builders<MovimentacaoEstoque>.Filter.Eq(x => x.LoteId, lote.Id)
                 & Builders<MovimentacaoEstoque>.Filter.Eq(x => x.Tipo, "entrada");
@@ -419,6 +486,11 @@ public class EstoqueLoteService : IEstoqueLoteService
                 entrada.Quantidade = lote.QuantidadeInicial;
                 entrada.CustoUnitario = lote.CustoUnitario;
                 entrada.MarcaPeca = lote.MarcaPeca;
+                entrada.PecaId = lote.PecaId;
+                entrada.PecaNome = lote.PecaNome;
+                entrada.ModeloId = lote.ModeloId;
+                entrada.ModeloNome = lote.ModeloNome;
+                entrada.Cor = lote.Cor;
                 await _movimentacoes.ReplaceOneAsync(x => x.Id == entrada.Id, entrada);
             }
             else if (alterouQtd)
@@ -454,6 +526,8 @@ public class EstoqueLoteService : IEstoqueLoteService
             await RecalcularTotaisPedidoAsync(lote.PedidoCompraId);
 
         await SincronizarQuantidadePecaAsync(lote.PecaId);
+        if (!string.Equals(pecaIdAnterior, lote.PecaId, StringComparison.OrdinalIgnoreCase))
+            await SincronizarQuantidadePecaAsync(pecaIdAnterior);
         await _pecasRepo.InvalidarCacheReferenciaAsync();
 
         return lote;
@@ -592,6 +666,7 @@ public class EstoqueLoteService : IEstoqueLoteService
         pedido.TotalItens = lotes.Count;
         pedido.TotalUnidades = lotes.Sum(l => l.QuantidadeInicial);
         pedido.ValorTotal = lotes.Sum(l => l.CustoUnitario * l.QuantidadeInicial);
+        pedido.AtualizadoEm = HorarioBrasil.Agora;
         await _pedidos.ReplaceOneAsync(x => x.Id == pedidoId, pedido);
     }
 

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CategoriasPecaService, CategoriaPecaCadastro } from '../../../services/categorias-peca';
 import { GridAcao } from '../../../components/grid-acao/grid-acao';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 @Component({
   selector: 'app-categorias-peca-lista',
@@ -68,6 +69,7 @@ export class CategoriasPecaLista implements OnInit {
     const nome = this.novoNome.trim();
     if (!nome) {
       this.erro = 'Informe o nome da categoria.';
+      avisarErroUsuario(this.erro);
       return;
     }
     this.salvando = true;
@@ -102,6 +104,7 @@ export class CategoriasPecaLista implements OnInit {
     const nome = this.editNome.trim();
     if (!nome) {
       this.erro = 'Informe o nome da categoria.';
+      avisarErroUsuario(this.erro);
       return;
     }
     this.salvando = true;

@@ -8,6 +8,7 @@ import { AparelhosService } from '../../../services/aparelhos';
 import { AparelhoCompativel, ModeloAparelho } from '../../../models/bling.models';
 import { TIPOS_COMPATIBILIDADE, TIPOS_DISPOSITIVO, TIPOS_TELA } from '../../../config/aparelhos.config';
 import { formatarDataCadastroModelo } from '../../../utils/modelo-autocomplete.util';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 @Component({
   selector: 'app-modelos-form',
@@ -136,10 +137,12 @@ export class ModelosForm implements OnInit, OnDestroy {
   salvar(): void {
     if (!this.modelo.nome?.trim()) {
       this.erro = 'Nome do modelo é obrigatório.';
+      avisarErroUsuario(this.erro);
       return;
     }
     if (!this.modelo.marcaNome?.trim()) {
       this.erro = 'Informe a marca do modelo.';
+      avisarErroUsuario(this.erro);
       return;
     }
 

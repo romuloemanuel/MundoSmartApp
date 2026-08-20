@@ -2,6 +2,7 @@ import {
   DevolucaoGarantiaDocumento,
   LoteDevolucaoGarantiaDocumento,
 } from '../models/estoque.models';
+import { avisarErroUsuario } from '../services/user-feedback.service';
 
 function esc(valor?: string | number | null): string {
   if (valor == null) return '';
@@ -77,7 +78,7 @@ export function montarHtmlDevolucaoGarantia(doc: DevolucaoGarantiaDocumento): st
 export function abrirJanelaDevolucaoGarantia(html: string): void {
   const janela = window.open('about:blank', '_blank', 'width=800,height=700');
   if (!janela) {
-    window.alert('Permita pop-ups do navegador para gerar o documento.');
+    avisarErroUsuario('Permita pop-ups do navegador para gerar o documento.');
     return;
   }
   janela.document.open();

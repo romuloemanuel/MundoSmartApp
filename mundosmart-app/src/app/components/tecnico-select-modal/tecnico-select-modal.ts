@@ -6,6 +6,7 @@ import {
   TecnicoSelectDialogService,
   TecnicoSelectDialogRequest,
 } from '../../services/tecnico-select-dialog';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-tecnico-select-modal',
@@ -226,6 +227,7 @@ export class TecnicoSelectModal implements OnInit, OnDestroy {
     const nome = this.selecionado.trim();
     if (!nome) {
       this.erro = 'Selecione um técnico para continuar.';
+      avisarErroUsuario(this.erro);
       return;
     }
     this.aberto = false;

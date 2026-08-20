@@ -2,6 +2,7 @@ import { Component, EventEmitter, Input, Output, signal } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BlingOrdemServico, JustificativaAtrasoItem } from '../../models/bling.models';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-justificativa-atraso-modal',
@@ -294,7 +295,9 @@ export class JustificativaAtrasoModal {
   onConfirmar(): void {
     const t = this.texto.trim();
     if (t.length < 5) {
-      this.erroLocal.set('Informe a justificativa do atraso (mínimo 5 caracteres).');
+      const msg = 'Informe a justificativa do atraso (mínimo 5 caracteres).';
+      this.erroLocal.set(msg);
+      avisarErroUsuario(msg);
       return;
     }
     this.erroLocal.set(null);

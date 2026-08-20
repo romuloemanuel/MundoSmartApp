@@ -36,6 +36,10 @@ public class PedidoCompraEstoque
 
     [BsonElement("criadoEm")]
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Última alteração (inclusão/edição/exclusão de item) — usado para ordenar a lista.</summary>
+    [BsonElement("atualizadoEm")]
+    public DateTime AtualizadoEm { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>Lote de estoque — unidade rastreável com garantia e custo.</summary>
@@ -206,7 +210,7 @@ public class RegistrarSaidaEstoqueRequest
     public string? Observacao { get; set; }
 }
 
-/// <summary>Altera metadados e/ou quantidade de um lote já lançado (pedido de compra).</summary>
+/// <summary>Altera metadados, identidade (peça/modelo/cor) e/ou quantidade de um lote já lançado.</summary>
 public class AtualizarLoteEstoqueRequest
 {
     public string? Fornecedor { get; set; }
@@ -218,6 +222,11 @@ public class AtualizarLoteEstoqueRequest
     /// Deve ser ≥ unidades já saídas (inicial − restante).
     /// </summary>
     public int? QuantidadeInicial { get; set; }
+    /// <summary>Troca a peça do lote (mesmo fluxo visual de incluir item).</summary>
+    public string? PecaId { get; set; }
+    public string? ModeloId { get; set; }
+    public string? ModeloNome { get; set; }
+    public string? Cor { get; set; }
 }
 
 public class RegistrarEstornoOsRequest

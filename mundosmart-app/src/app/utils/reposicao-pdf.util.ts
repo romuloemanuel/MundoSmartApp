@@ -1,4 +1,5 @@
 import { ReposicaoSemanalItem, ReposicaoSemanalResponse } from '../models/estoque.models';
+import { avisarErroUsuario } from '../services/user-feedback.service';
 
 function esc(valor?: string | number | null): string {
   if (valor == null) return '';
@@ -147,7 +148,7 @@ export function montarHtmlReposicaoPdf(
 export function abrirJanelaReposicaoPdf(html: string, titulo = 'Peças utilizadas — MundoSmart'): void {
   const janela = window.open('about:blank', '_blank', 'width=900,height=720');
   if (!janela) {
-    window.alert('Permita pop-ups do navegador para exportar o PDF.');
+    avisarErroUsuario('Permita pop-ups do navegador para exportar o PDF.');
     return;
   }
   janela.document.open();

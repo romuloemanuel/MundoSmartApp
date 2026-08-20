@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AparelhosService } from '../../services/aparelhos';
 import { ModeloAparelho } from '../../models/bling.models';
 import { TIPOS_DISPOSITIVO, TIPOS_TELA } from '../../config/aparelhos.config';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-cadastro-aparelho-modal',
@@ -198,6 +199,7 @@ export class CadastroAparelhoModal implements OnInit {
     this.erro = '';
     if (!this.modelo.marcaNome?.trim() || !this.modelo.nome?.trim()) {
       this.erro = 'Marca e nome do modelo são obrigatórios.';
+      avisarErroUsuario(this.erro);
       return;
     }
 

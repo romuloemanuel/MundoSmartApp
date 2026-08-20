@@ -211,6 +211,62 @@ main {
   padding: 28px 24px;
 }
 
+/* Modal editar/incluir item do pedido (estoque) — global p/ não ficar clipada pelo layout */
+.lote-item-modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0, 0, 0, 0.55) !important;
+  z-index: 20000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+}
+.lote-item-modal-box {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 980px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.lote-item-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #0d0d0d;
+}
+.lote-item-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #fff;
+}
+.lote-item-modal-close {
+  background: transparent !important;
+  border: none !important;
+  color: #fff !important;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px !important;
+}
+.lote-item-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.lote-item-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
 // ── Buttons ──────────────────────────────────────────────────────────────────
 
 button {

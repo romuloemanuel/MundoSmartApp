@@ -5,6 +5,7 @@ import { BlingOrcamento, BlingOrdemServico } from '../models/bling.models';
 import { environment } from '../../environments/environment';
 import { montarHtmlImpressaoOrcamento } from '../utils/orcamento-impressao.templates';
 import { OsImpressaoService } from './os-impressao.service';
+import { avisarErroSistema } from './user-feedback.service';
 
 /** Validade padrão do orçamento em dias úteis. */
 export const ORCAMENTO_VALIDADE_DIAS_UTEIS = 7;
@@ -74,7 +75,7 @@ export class OrcamentosService {
         this.impressaoOs.abrirJanelaImpressao(html, `Pré-orçamento #${o.numero ?? o.id}`);
       } catch (err) {
         console.error('[impressão orçamento]', err);
-        window.alert('Não foi possível montar a impressão do orçamento.');
+        avisarErroSistema('Não foi possível montar a impressão do orçamento.');
       }
     };
 
@@ -85,7 +86,7 @@ export class OrcamentosService {
 
     this.obter(orcamento.id).subscribe({
       next: disparar,
-      error: () => window.alert('Não foi possível carregar o orçamento para impressão.'),
+      error: () => avisarErroSistema('Não foi possível carregar o orçamento para impressão.'),
     });
   }
 }

@@ -10,6 +10,7 @@ import { OrdensServicoService } from './ordens-servico';
 import { ClientesService } from './clientes';
 import { OsImpressaoConfigService } from './os-impressao-config.service';
 import { ImpressoraTermicaService } from './impressora-termica.service';
+import { avisarErroSistema, avisarErroUsuario } from './user-feedback.service';
 
 @Injectable({ providedIn: 'root' })
 export class OsImpressaoService {
@@ -39,12 +40,12 @@ export class OsImpressaoService {
           this.abrirJanelaImpressao(html, titulo);
         } catch (err) {
           console.error('[impressão OS] falha ao montar HTML', err);
-          window.alert('Não foi possível montar a impressão da OS.');
+          avisarErroSistema('Não foi possível montar a impressão da OS.');
         }
       },
       error: (err) => {
         console.error('[impressão OS] falha ao carregar dados', err);
-        window.alert('Não foi possível carregar os dados da OS para impressão.');
+        avisarErroSistema('Não foi possível carregar os dados da OS para impressão.');
       },
     });
   }
@@ -61,7 +62,7 @@ export class OsImpressaoService {
         if (this.impressoraTermica.conectada()) {
           const dados = await montarEscPosImpressaoOs(tipo, os, ctx);
           this.impressoraTermica.imprimir(dados).catch(() => {
-            window.alert('Falha ao enviar para a impressora USB. Tente reconectar ou use impressão pelo navegador.');
+            avisarErroUsuario('Falha ao enviar para a impressora USB. Tente reconectar ou use impressão pelo navegador.');
           });
           return;
         }
@@ -72,7 +73,7 @@ export class OsImpressaoService {
       },
       error: (err) => {
         console.error('[impressão térmica] falha ao carregar dados', err);
-        window.alert('Não foi possível carregar os dados da OS para impressão térmica.');
+        avisarErroSistema('Não foi possível carregar os dados da OS para impressão térmica.');
       },
     });
   }
@@ -142,7 +143,7 @@ export class OsImpressaoService {
     const doc = iframe.contentDocument ?? win?.document;
     if (!win || !doc) {
       iframe.remove();
-      window.alert('Não foi possível preparar a impressão. Tente novamente.');
+      avisarErroSistema('Não foi possível preparar a impressão. Tente novamente.');
       return;
     }
 

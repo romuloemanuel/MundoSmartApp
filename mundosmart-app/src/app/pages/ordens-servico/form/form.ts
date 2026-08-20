@@ -74,6 +74,7 @@ import {
 import { agruparPecasPorCategoria, categoriaUsaCoresPorModelo, labelPecaCatalogo } from '../../../config/peca-categoria.config';
 import { agoraDatetimeLocalBrasil, formatarDatetimeLocalBrasil, paraIsoOperacionalBrasil } from '../../../utils/horario-brasil.util';
 import { AcrescimoEstoqueConfigService } from '../../../services/acrescimo-estoque-config.service';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 type ContatoAlternativoOpcao = {
   indice: number;
@@ -851,6 +852,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   private finalizarPrefillOrcamento(orc: BlingOrcamento): void {
     if (orc.id == null) {
       this.erro = 'Orçamento inválido para preencher a OS.';
+      avisarErroUsuario(this.erro);
       this.orcamentoOrigemId = undefined;
       this.inicializarNovaOs();
       this.cdr.detectChanges();
@@ -859,6 +861,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
 
     if (orc.osGeradaBlingId) {
       this.erro = `Este orçamento já foi convertido na OS #${orc.osGeradaNumero || orc.osGeradaBlingId}.`;
+      avisarErroUsuario(this.erro);
       this.orcamentoOrigemId = undefined;
       this.prefillOrcamentoAplicadoId = undefined;
       this.orcamentoPrefill.limpar();
@@ -2194,7 +2197,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     if (this.somenteLeitura) return;
     const texto = this.novaJustificativaAtraso.trim();
     if (texto.length < 5) {
-      alert('Informe a justificativa do atraso (mínimo 5 caracteres).');
+      avisarErroUsuario('Informe a justificativa do atraso (mínimo 5 caracteres).');
       return;
     }
     this.os.justificativasAtraso = [
@@ -2322,6 +2325,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     const validacao = this.validarOs();
     if (validacao) {
       this.erro = validacao;
+      avisarErroUsuario(this.erro);
       this.cdr.markForCheck();
       this.scrollParaPrimeiroErro();
       return;
@@ -2384,6 +2388,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
         const semEstoque = (this.os.itens ?? []).some(i => i.estoqueInsuficiente);
         if (semEstoque) {
           this.erro = 'OS salva, mas uma ou mais peças não tiveram baixa no estoque (saldo insuficiente).';
+          avisarErroUsuario(this.erro);
         }
         if (this.os.id) this.modalIntakeAberto = true;
         this.cdr.markForCheck();
@@ -2482,6 +2487,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     if (this.os.modeloId?.trim()) return true;
     this.bloqueioPecaSemModelo = true;
     this.erro = 'Selecione o modelo do aparelho na seção Equipamento antes de adicionar peças.';
+    avisarErroUsuario(this.erro);
     this.cdr.markForCheck();
     this.scrollParaCampo('modelo');
     return false;

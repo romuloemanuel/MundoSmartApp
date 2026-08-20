@@ -1,5 +1,15 @@
 import {
-  Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges,
+  Component,
+  ElementRef,
+  EventEmitter,
+  HostListener,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  Output,
+  SimpleChanges,
+  ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -10,6 +20,7 @@ import {
   MODELO_LIMITE_AUTOCOMPLETE_API,
   MODELO_LIMITE_AUTOCOMPLETE_UI,
 } from '../../config/aparelhos.config';
+import { posicionarPopoverFixo } from '../../utils/popover-posicao.util';
 
 export interface AutocompleteItem {
   id?: string;
@@ -25,7 +36,7 @@ export interface AutocompleteItem {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="ac-wrapper">
+    <div class="ac-wrapper" #ancora>
       <div class="ac-input-row">
         <div class="ac-input-container">
           <input
@@ -43,7 +54,11 @@ export interface AutocompleteItem {
         </div>
       </div>
 
-      <ul class="ac-lista" *ngIf="aberto && !itemSelecionado && (carregando || sugestoesExibidas.length > 0 || buscaSemResultado || mensagemLimite)">
+      <ul
+        class="ac-lista"
+        *ngIf="aberto && !itemSelecionado && (carregando || sugestoesExibidas.length > 0 || buscaSemResultado || mensagemLimite)"
+        [ngStyle]="listaStyle"
+      >
         <li *ngIf="permitirCriar && sugestoesExibidas.length === 0 && !carregando && buscaSemResultado && termo.trim().length > 0" class="ac-criar"
           (mousedown)="criarNovo()">
           <span class="ac-criar-icone">+</span> Cadastrar <strong>"{{ termo }}"</strong>
@@ -78,10 +93,12 @@ export interface AutocompleteItem {
       font-size: 13px; cursor: pointer; color: #9ca3af;
     }
     .ac-lista {
-      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      /* position/size via [ngStyle] fixed — evita clip por overflow dos pais */
       background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 9999;
-      list-style: none; max-height: 220px; overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      list-style: none; margin: 0; padding: 0;
+      max-height: 220px; overflow-y: auto;
+      min-width: 180px;
     }
     .ac-item {
       display: flex; flex-direction: column;
@@ -128,6 +145,8 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
   /** Quando `permitirCriar` e não há `criarFn`, emite o termo para o pai abrir modal de cadastro. */
   @Output() solicitarCriar = new EventEmitter<string>();
 
+  @ViewChild('ancora', { static: true }) ancora!: ElementRef<HTMLElement>;
+
   termo = '';
   sugestoesExibidas: AutocompleteItem[] = [];
   totalRecebido = 0;
@@ -136,6 +155,7 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
   aberto = false;
   buscaSemResultado = false;
   itemSelecionado: AutocompleteItem | null = null;
+  listaStyle: Record<string, string> = {};
 
   private busca$ = new Subject<string>();
   private destroy$ = new Subject<void>();
@@ -152,6 +172,9 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnInit(): void {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('scroll', this.onScrollCapture, true);
+    }
     if (this.valorInicial) {
       this.aplicarValorInicial();
     }
@@ -175,6 +198,7 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
         this.mensagemLimite = this.montarMensagemLimite();
         if (items.length > 0 || this.focado) {
           this.aberto = true;
+          this.atualizarPosicaoLista();
         }
       },
       error: () => {
@@ -205,7 +229,6 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
   }
 
   rotuloItem(item: AutocompleteItem): string {
-    // Só o modelo na sugestão (ex.: G24). Marca vai no subtítulo.
     return item.nome;
   }
 
@@ -223,7 +246,17 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
     return partes.length ? partes.join(' · ') : null;
   }
 
-  ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('scroll', this.onScrollCapture, true);
+    }
+  }
+
+  private readonly onScrollCapture = (): void => {
+    if (this.aberto) this.atualizarPosicaoLista();
+  };
 
   private aplicarValorInicial(): void {
     this.termo = this.valorInicial || '';
@@ -243,6 +276,7 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
     this.buscaSemResultado = false;
     if (valor.trim().length > 0) {
       this.aberto = true;
+      this.atualizarPosicaoLista();
     } else if (!this.focado) {
       this.sugestoesExibidas = [];
       this.mensagemLimite = '';
@@ -258,6 +292,7 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
       this.itemSelecionado = null;
     }
     this.aberto = true;
+    this.atualizarPosicaoLista();
     if (!this.carregando) {
       this.busca$.next(this.termo);
     }
@@ -304,5 +339,28 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
       this.focado = false;
       this.aberto = false;
     }, 150);
+  }
+
+  @HostListener('window:resize')
+  @HostListener('window:scroll')
+  onViewportChange(): void {
+    if (this.aberto) this.atualizarPosicaoLista();
+  }
+
+  private atualizarPosicaoLista(): void {
+    const el = this.ancora?.nativeElement;
+    if (!el) return;
+    const width = Math.max(el.getBoundingClientRect().width, 180);
+    const style = posicionarPopoverFixo(el, {
+      width,
+      height: 220,
+      gap: 4,
+      align: 'start',
+    });
+    this.listaStyle = {
+      ...style,
+      width: `${width}px`,
+      right: 'auto',
+    };
   }
 }

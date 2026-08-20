@@ -28,6 +28,7 @@ import {
   temDuplicata,
 } from '../../../utils/cliente-duplicata';
 import { of } from 'rxjs';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 @Component({
@@ -335,6 +336,7 @@ export class ClientesForm implements OnInit, OnDestroy {
     this.erros = validarFormularioCliente(this.contato);
     if (!formularioClienteValido(this.erros) || this.temDuplicidade) {
       this.erro = this.erros.geral ?? (this.temDuplicidade ? 'Corrija os dados duplicados antes de salvar.' : 'Verifique os campos destacados.');
+      avisarErroUsuario(this.erro);
       return;
     }
 

@@ -8,6 +8,7 @@ import {
   diasUteisProximoFollowUp,
   sugerirDataFollowUp,
 } from '../../config/orcamento-followup.config';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 export interface OrcamentoFollowUpModalPayload {
   anotacao: string;
@@ -176,10 +177,12 @@ export class OrcamentoFollowupModal implements OnChanges {
     const responsavel = this.responsavel.trim();
     if (!responsavel) {
       this.erroLocal = 'Informe quem fez o contato.';
+      avisarErroUsuario(this.erroLocal);
       return;
     }
     if (!anotacao) {
       this.erroLocal = 'Informe a justificativa / anotação.';
+      avisarErroUsuario(this.erroLocal);
       return;
     }
     this.erroLocal = '';

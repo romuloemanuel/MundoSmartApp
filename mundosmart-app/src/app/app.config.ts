@@ -1,4 +1,4 @@
-import { ApplicationConfig, APP_INITIALIZER, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
+import { ApplicationConfig, APP_INITIALIZER, ErrorHandler, provideBrowserGlobalErrorListeners, provideZoneChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -6,10 +6,12 @@ import { firstValueFrom } from 'rxjs';
 import { routes } from './app.routes';
 import { apiLogInterceptor } from './interceptors/api-log.interceptor';
 import { authInterceptor } from './interceptors/auth.interceptor';
+import { errorAlertInterceptor } from './interceptors/error-alert.interceptor';
 import { EstoqueConfigService } from './services/estoque-config';
 import { OsImpressaoConfigService } from './services/os-impressao-config.service';
 import { AcrescimoEstoqueConfigService } from './services/acrescimo-estoque-config.service';
 import { AppAuthService } from './services/app-auth';
+import { GlobalErrorHandler } from './services/global-error-handler';
 
 function initSessaoTransferida(auth: AppAuthService) {
   return () => firstValueFrom(auth.inicializarSessaoDaUrl());
@@ -32,7 +34,8 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    provideHttpClient(withInterceptors([authInterceptor, apiLogInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, errorAlertInterceptor, apiLogInterceptor])),
+    { provide: ErrorHandler, useClass: GlobalErrorHandler },
     {
       provide: APP_INITIALIZER,
       useFactory: initSessaoTransferida,

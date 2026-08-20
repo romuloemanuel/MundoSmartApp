@@ -2,6 +2,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BlingOrcamento } from '../../models/bling.models';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 export interface OrcamentoDesistenciaPayload {
   motivo: string;
@@ -107,6 +108,7 @@ export class OrcamentoDesistenciaModal {
     const motivo = this.motivo.trim();
     if (!motivo) {
       this.erroLocal = 'Informe o motivo da desistência.';
+      avisarErroUsuario(this.erroLocal);
       return;
     }
     this.erroLocal = '';

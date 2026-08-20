@@ -7,6 +7,7 @@ import {
   OsHistoricoResumo,
 } from '../../../services/ordens-servico';
 import { BlingOrdemServico } from '../../../models/bling.models';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 @Component({
   selector: 'app-os-historico',
@@ -37,6 +38,7 @@ export class OsHistoricoPage implements OnInit {
     this.osId = Number(this.route.snapshot.paramMap.get('id'));
     if (!this.osId) {
       this.erro = 'OS inválida.';
+      avisarErroUsuario(this.erro);
       this.carregando = false;
       return;
     }

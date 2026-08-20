@@ -16,6 +16,7 @@ import {
   rotuloCategoriaFoto,
 } from '../../../config/os-foto-categoria.config';
 import { prepararArquivoParaUpload } from '../../../utils/preparar-arquivo-foto';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 const UPLOAD_TIMEOUT_MS = 90_000;
 
@@ -73,6 +74,7 @@ export class OsIntakeMobile implements OnInit, OnDestroy {
     this.token = this.route.snapshot.paramMap.get('token') ?? '';
     if (!this.token) {
       this.erro = 'Link inválido. Peça um novo QR na loja.';
+      avisarErroUsuario(this.erro);
       this.carregando = false;
       return;
     }
@@ -147,6 +149,7 @@ export class OsIntakeMobile implements OnInit, OnDestroy {
     input.value = '';
     if (!selecionados.length) {
       this.erro = 'Nenhuma foto selecionada. Tente novamente (câmera ou galeria).';
+      avisarErroUsuario(this.erro);
       return;
     }
 
@@ -315,6 +318,7 @@ export class OsIntakeMobile implements OnInit, OnDestroy {
       },
       error: () => {
         this.erro = 'Link expirado ou inválido. Peça um novo QR na loja.';
+        avisarErroUsuario(this.erro);
         this.carregando = false;
         this.primeiraCarga = false;
       },

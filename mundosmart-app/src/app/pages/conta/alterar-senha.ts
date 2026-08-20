@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AppAuthService } from '../../services/app-auth';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-alterar-senha',
@@ -163,6 +164,7 @@ export class AlterarSenhaPage {
     this.ok = false;
     if (this.nova !== this.confirma) {
       this.erro = 'A confirmação da nova senha não confere.';
+      avisarErroUsuario(this.erro);
       return;
     }
     this.salvando = true;

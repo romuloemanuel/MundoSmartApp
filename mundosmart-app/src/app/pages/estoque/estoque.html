@@ -213,6 +213,9 @@
 
     <div class="detalhe-pedido" *ngIf="pecaLotesExpandida">
       <h3>Lotes com saldo — {{ labelPeca(pecaLotesExpandida) }}</h3>
+      <p class="campo-hint" style="margin:0 0 10px">
+        Clique em <strong>Editar</strong> para alterar o lote na mesma tela de inclusão de item.
+      </p>
       <p *ngIf="carregandoLotes">Carregando lotes...</p>
       <table *ngIf="!carregandoLotes && lotesPeca.length > 0">
         <thead>
@@ -226,6 +229,7 @@
             <th>Custo un.</th>
             <th>Entrada</th>
             <th>Garantia at&eacute;</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -239,6 +243,13 @@
             <td>{{ formatarMoeda(l.custoUnitario) }}</td>
             <td>{{ formatarData(l.dataEntrada) }}</td>
             <td>{{ formatarData(l.dataVencimentoGarantia) }}</td>
+            <td>
+              <button
+                type="button"
+                (click)="iniciarEdicaoLote(l); $event.stopPropagation()"
+                [disabled]="!l.id || salvandoLote"
+              >{{ loteEditandoId === l.id ? 'Editando…' : 'Editar' }}</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -276,245 +287,6 @@
       </tbody>
     </table>
     <p *ngIf="pedidos.length === 0">Nenhum pedido registrado.</p>
-
-    <div class="detalhe-pedido" *ngIf="pedidoDetalhe">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px">
-        <h3 style="margin:0">Lotes do pedido {{ pedidoDetalhe.pedido.numeroPedido }}</h3>
-        <button type="button" (click)="abrirIncluirItemPedido()" [disabled]="salvandoLote || incluindoItem">
-          + Incluir item
-        </button>
-      </div>
-      <p class="campo-hint" style="margin:0 0 10px">
-        <strong>Editar</strong> corrige fornecedor, marca, quantidade, custo ou garantia.
-        <strong>Excluir</strong> remove o item (s&oacute; se ainda n&atilde;o saiu estoque).
-        <strong>Incluir item</strong> adiciona um novo lote neste pedido.
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Pe&ccedil;a</th>
-            <th>Marca</th>
-            <th>Modelo</th>
-            <th>Cor</th>
-            <th>Qtd inicial</th>
-            <th>Saldo</th>
-            <th>Custo un.</th>
-            <th>Garantia at&eacute;</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <ng-container *ngFor="let l of pedidoDetalhe.lotes">
-            <tr>
-              <td>{{ l.pecaNome }}</td>
-              <td>{{ l.marcaPeca || '—' }}</td>
-              <td>{{ labelModeloMovimentacao(l.modeloNome, l.modeloId) }}</td>
-              <td>{{ l.cor || '—' }}</td>
-              <td>{{ l.quantidadeInicial }}</td>
-              <td>{{ l.quantidadeRestante }}</td>
-              <td>{{ formatarMoeda(l.custoUnitario) }}</td>
-              <td>{{ formatarData(l.dataVencimentoGarantia) }}</td>
-              <td>
-                <div class="garantia-acoes">
-                  <button
-                    type="button"
-                    (click)="iniciarEdicaoLote(l)"
-                    [disabled]="!l.id || salvandoLote || excluindoLoteId === l.id"
-                  >{{ loteEditandoId === l.id ? 'Editando…' : 'Editar' }}</button>
-                  <button
-                    type="button"
-                    class="btn-limpar"
-                    [disabled]="!lotePodeExcluir(l) || salvandoLote"
-                    [title]="tituloExcluirLote(l)"
-                    (click)="excluirLotePedido(l)"
-                  >{{ excluindoLoteId === l.id ? 'Excluindo…' : 'Excluir' }}</button>
-                </div>
-              </td>
-            </tr>
-            <tr *ngIf="loteEditandoId === l.id && loteEdit">
-              <td colspan="9">
-                <div class="lote-edit-form">
-                  <div class="form-group">
-                    <label>Fornecedor</label>
-                    <select [(ngModel)]="loteEdit.fornecedor" name="loteEditForn">
-                      <option value="">Selecione...</option>
-                      <option *ngFor="let f of fornecedoresPedidoPrecadastro" [value]="f">{{ f }}</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label>Marca pe&ccedil;a</label>
-                    <input [(ngModel)]="loteEdit.marcaPeca" name="loteEditMarca" />
-                  </div>
-                  <div class="form-group">
-                    <label>Qtd inicial</label>
-                    <input
-                      type="number"
-                      min="1"
-                      [(ngModel)]="loteEdit.quantidadeInicial"
-                      name="loteEditQtd"
-                    />
-                    <span class="campo-hint" *ngIf="loteEdit.unidadesJaSaidas > 0">
-                      M&iacute;n. {{ loteEdit.unidadesJaSaidas }} (j&aacute; sa&iacute;ram)
-                    </span>
-                  </div>
-                  <div class="form-group">
-                    <label>Custo un.</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      [(ngModel)]="loteEdit.custoUnitario"
-                      name="loteEditCusto"
-                    />
-                  </div>
-                  <div class="form-group">
-                    <label>Garantia (meses)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      [(ngModel)]="loteEdit.garantiaMeses"
-                      name="loteEditGarantia"
-                    />
-                  </div>
-                  <div class="lote-edit-acoes">
-                    <button type="button" (click)="salvarEdicaoLote()" [disabled]="salvandoLote">
-                      {{ salvandoLote ? 'Salvando…' : 'Salvar lote' }}
-                    </button>
-                    <button type="button" class="btn-limpar" (click)="cancelarEdicaoLote()" [disabled]="salvandoLote">
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          </ng-container>
-        </tbody>
-      </table>
-
-      <div *ngIf="incluindoItem" class="lote-item-novo">
-        <h4>Novo item neste pedido</h4>
-        <p class="campo-hint" style="margin:0 0 8px">
-          Igual ao cadastro: escolha a categoria e <strong>selecione o modelo</strong> no catálogo.
-        </p>
-        <div class="item-pedido-linha">
-          <div class="form-group form-group-cat">
-            <label>Cat. <span class="campo-obrigatorio">*</span></label>
-            <div class="campo-com-acao">
-              <select
-                [(ngModel)]="itemPedidoExtra.categoria"
-                name="extraCat"
-                (ngModelChange)="onCategoriaItemChange(itemPedidoExtra)"
-              >
-                <option value="">—</option>
-                <option *ngFor="let c of categoriasPecaPedido" [value]="c">{{ c }}</option>
-              </select>
-              <button
-                type="button"
-                class="btn-icon-mais"
-                (click)="abrirNovaPecaPedido(itemPedidoExtra)"
-                title="Cadastrar nova pe&ccedil;a"
-              >+</button>
-            </div>
-          </div>
-          <div class="form-group form-group-modelo">
-            <label>Modelo <span class="campo-obrigatorio">*</span></label>
-            <input
-              *ngIf="!itemPedidoExtra.categoria"
-              class="input-bloqueado"
-              disabled
-              placeholder="Cat. primeiro"
-            />
-            <ng-container *ngIf="itemPedidoExtra.categoria">
-              <ng-container *ngFor="let k of [itemPedidoExtra.modeloAutocompleteKey ?? 0]; trackBy: trackAutocompleteKey">
-                <app-autocomplete-criavel
-                  placeholder="Buscar e selecionar o modelo..."
-                  [buscarFn]="itemPedidoExtra.buscarModelosFn || buscarModelosPedidoFn"
-                  [permitirCriar]="false"
-                  [valorInicial]="valorInicialModeloPedido(itemPedidoExtra)"
-                  (itemSelecionadoChange)="onModeloPedidoAutocomplete(itemPedidoExtra, $event)"
-                />
-              </ng-container>
-            </ng-container>
-          </div>
-          <div class="form-group form-group-cor" *ngIf="itemUsaCor(itemPedidoExtra)">
-            <label>Cor <span class="campo-obrigatorio">*</span></label>
-            <input
-              list="cores-tampa-extra"
-              [(ngModel)]="itemPedidoExtra.cor"
-              name="extraCor"
-              placeholder="Ex: Preto"
-              (ngModelChange)="onCorItemChange(itemPedidoExtra)"
-            />
-            <datalist id="cores-tampa-extra">
-              <option *ngFor="let c of itemPedidoExtra.coresSugeridas || []" [value]="c"></option>
-            </datalist>
-          </div>
-          <div class="form-group form-group-qual" *ngIf="(itemPedidoExtra.pecasCandidatas?.length ?? 0) > 1">
-            <label>Qual.</label>
-            <select
-              [(ngModel)]="itemPedidoExtra.pecaId"
-              name="extraQual"
-              (ngModelChange)="onPecaQualidadeItemChange(itemPedidoExtra)"
-            >
-              <option value="">—</option>
-              <option *ngFor="let p of itemPedidoExtra.pecasCandidatas || []" [value]="p.id">
-                {{ labelPecaPedido(p) }}
-              </option>
-            </select>
-          </div>
-          <div class="form-group form-group-forn">
-            <label>Fornec.</label>
-            <select [(ngModel)]="itemPedidoExtra.fornecedor" name="extraForn">
-              <option value="">—</option>
-              <option *ngFor="let f of fornecedoresPedidoPrecadastro" [value]="f">{{ f }}</option>
-            </select>
-          </div>
-          <div class="form-group form-group-marca">
-            <label>Marca</label>
-            <input [(ngModel)]="itemPedidoExtra.marcaPeca" name="extraMarca" placeholder="—" />
-          </div>
-          <div class="form-group form-group-qtd">
-            <label>Qtd</label>
-            <input type="number" min="1" [(ngModel)]="itemPedidoExtra.quantidade" name="extraQtd" />
-          </div>
-          <div class="form-group form-group-custo">
-            <label>Custo</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              [(ngModel)]="itemPedidoExtra.custoUnitario"
-              name="extraCusto"
-            />
-          </div>
-          <div class="form-group form-group-gar">
-            <label>Meses</label>
-            <input type="number" min="1" [(ngModel)]="itemPedidoExtra.garantiaMeses" name="extraGarantia" />
-          </div>
-        </div>
-        <p
-          class="item-pedido-aviso"
-          [class.ok]="!!itemPedidoExtra.pecaId"
-          *ngIf="itemPedidoExtra.avisoResolucao && !itemSemPecaCadastrada(itemPedidoExtra)"
-        >
-          {{ itemPedidoExtra.avisoResolucao }}
-        </p>
-        <div class="item-pedido-sugestao" *ngIf="itemSemPecaCadastrada(itemPedidoExtra)">
-          <span>{{ itemPedidoExtra.avisoResolucao }}</span>
-          <button type="button" class="btn-sugestao-cadastro" (click)="abrirNovaPecaPedido(itemPedidoExtra)">
-            Cadastrar pe&ccedil;a agora
-          </button>
-        </div>
-        <div class="lote-edit-acoes" style="margin-top:10px">
-          <button type="button" (click)="salvarIncluirItemPedido()" [disabled]="salvandoLote">
-            {{ salvandoLote ? 'Incluindo…' : 'Salvar item' }}
-          </button>
-          <button type="button" class="btn-limpar" (click)="cancelarIncluirItemPedido()" [disabled]="salvandoLote">
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- NOVO PEDIDO -->
@@ -1294,4 +1066,219 @@
     (fechado)="fecharModalNovaPeca()"
     (pecaSalva)="onPecaPedidoSalva($event)"
   />
+
+  <app-item-pedido-lote-modal
+    [aberto]="modalLotesPedidoAberto"
+    [titulo]="tituloModalLotesPedido"
+    [salvando]="salvandoLote"
+    [mostrarRodape]="false"
+    [largo]="true"
+    (fechar)="fecharModalLotesPedido()"
+  >
+    <ng-container *ngIf="pedidoDetalhe as det">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <p class="campo-hint" style="margin:0">
+          <strong>Editar</strong> abre o formulário abaixo da linha.
+          <strong>Excluir</strong> só se ainda não saiu estoque.
+        </p>
+        <button type="button" (click)="abrirIncluirItemPedido()" [disabled]="salvandoLote || incluindoItem">
+          + Incluir item
+        </button>
+      </div>
+      <p class="erro" *ngIf="erro" style="margin:0 0 10px">{{ erro }}</p>
+      <p class="campo-hint" *ngIf="sucesso" style="margin:0 0 10px;color:#166534;font-weight:600">{{ sucesso }}</p>
+
+      <div *ngIf="incluindoItem" class="lote-edit-inline" style="margin-bottom:14px">
+        <h4 style="margin:0 0 8px;font-size:14px">Novo item neste pedido</h4>
+        <ng-container *ngTemplateOutlet="formItemPedido; context: { $implicit: itemPedidoExtra, prefix: 'extra' }" />
+        <div class="lote-edit-acoes" style="margin-top:10px">
+          <button type="button" (click)="salvarIncluirItemPedido()" [disabled]="salvandoLote">
+            {{ salvandoLote ? 'Incluindo…' : 'Salvar item' }}
+          </button>
+          <button type="button" class="btn-limpar" (click)="cancelarIncluirItemPedido()" [disabled]="salvandoLote">
+            Cancelar
+          </button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Pe&ccedil;a</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Cor</th>
+            <th>Qtd inicial</th>
+            <th>Saldo</th>
+            <th>Custo un.</th>
+            <th>Garantia at&eacute;</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let l of det.lotes">
+            <tr>
+              <td>{{ l.pecaNome }}</td>
+              <td>{{ l.marcaPeca || '—' }}</td>
+              <td>{{ labelModeloMovimentacao(l.modeloNome, l.modeloId) }}</td>
+              <td>{{ l.cor || '—' }}</td>
+              <td>{{ l.quantidadeInicial }}</td>
+              <td>{{ l.quantidadeRestante }}</td>
+              <td>{{ formatarMoeda(l.custoUnitario) }}</td>
+              <td>{{ formatarData(l.dataVencimentoGarantia) }}</td>
+              <td>
+                <div class="garantia-acoes">
+                  <button
+                    type="button"
+                    (click)="iniciarEdicaoLote(l)"
+                    [disabled]="!l.id || salvandoLote || excluindoLoteId === l.id"
+                  >{{ loteEditandoId === l.id ? 'Editando…' : 'Editar' }}</button>
+                  <button
+                    type="button"
+                    class="btn-limpar"
+                    [disabled]="!lotePodeExcluir(l) || salvandoLote"
+                    [title]="tituloExcluirLote(l)"
+                    (click)="excluirLotePedido(l)"
+                  >{{ excluindoLoteId === l.id ? 'Excluindo…' : 'Excluir' }}</button>
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="loteEditandoId === l.id">
+              <td colspan="9">
+                <div class="lote-edit-inline">
+                  <p class="campo-hint" style="margin:0 0 8px">
+                    Mesmo formulário de inclusão — categoria e modelo do catálogo.
+                  </p>
+                  <p class="campo-hint" *ngIf="loteUnidadesJaSaidas > 0" style="margin:0 0 8px">
+                    Já saíram <strong>{{ loteUnidadesJaSaidas }}</strong> unidade(s) — qtd mínima.
+                  </p>
+                  <ng-container *ngTemplateOutlet="formItemPedido; context: { $implicit: itemPedidoExtra, prefix: 'edit' }" />
+                  <div class="lote-edit-acoes" style="margin-top:10px">
+                    <button type="button" (click)="salvarEdicaoLote()" [disabled]="salvandoLote">
+                      {{ salvandoLote ? 'Salvando…' : 'Salvar lote' }}
+                    </button>
+                    <button type="button" class="btn-limpar" (click)="cancelarEdicaoLote()" [disabled]="salvandoLote">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </ng-container>
+  </app-item-pedido-lote-modal>
+
+  <ng-template #formItemPedido let-item let-prefix="prefix">
+    <div class="item-pedido-linha">
+      <div class="form-group form-group-cat">
+        <label>Cat. <span class="campo-obrigatorio">*</span></label>
+        <div class="campo-com-acao">
+          <select
+            [(ngModel)]="item.categoria"
+            [name]="prefix + 'Cat'"
+            (ngModelChange)="onCategoriaItemChange(item)"
+          >
+            <option value="">—</option>
+            <option *ngFor="let c of categoriasPecaPedido" [value]="c">{{ c }}</option>
+          </select>
+          <button
+            type="button"
+            class="btn-icon-mais"
+            (click)="abrirNovaPecaPedido(item)"
+            title="Cadastrar nova pe&ccedil;a"
+          >+</button>
+        </div>
+      </div>
+      <div class="form-group form-group-modelo">
+        <label>Modelo <span class="campo-obrigatorio">*</span></label>
+        <input
+          *ngIf="!item.categoria"
+          class="input-bloqueado"
+          disabled
+          placeholder="Cat. primeiro"
+        />
+        <ng-container *ngIf="item.categoria">
+          <ng-container *ngFor="let k of [item.modeloAutocompleteKey ?? 0]; trackBy: trackAutocompleteKey">
+            <app-autocomplete-criavel
+              placeholder="Buscar e selecionar o modelo..."
+              [buscarFn]="item.buscarModelosFn || buscarModelosPedidoFn"
+              [permitirCriar]="false"
+              [valorInicial]="valorInicialModeloPedido(item)"
+              (itemSelecionadoChange)="onModeloPedidoAutocomplete(item, $event)"
+            />
+          </ng-container>
+        </ng-container>
+      </div>
+      <div class="form-group form-group-cor" *ngIf="itemUsaCor(item)">
+        <label>Cor <span class="campo-obrigatorio">*</span></label>
+        <input
+          [attr.list]="'cores-tampa-' + prefix"
+          [(ngModel)]="item.cor"
+          [name]="prefix + 'Cor'"
+          placeholder="Ex: Preto"
+          (ngModelChange)="onCorItemChange(item)"
+        />
+        <datalist [id]="'cores-tampa-' + prefix">
+          <option *ngFor="let c of item.coresSugeridas || []" [value]="c"></option>
+        </datalist>
+      </div>
+      <div class="form-group form-group-qual" *ngIf="(item.pecasCandidatas?.length ?? 0) > 1">
+        <label>Qual.</label>
+        <select
+          [(ngModel)]="item.pecaId"
+          [name]="prefix + 'Qual'"
+          (ngModelChange)="onPecaQualidadeItemChange(item)"
+        >
+          <option value="">—</option>
+          <option *ngFor="let p of item.pecasCandidatas || []" [value]="p.id">
+            {{ labelPecaPedido(p) }}
+          </option>
+        </select>
+      </div>
+      <div class="form-group form-group-forn">
+        <label>Fornec.</label>
+        <select [(ngModel)]="item.fornecedor" [name]="prefix + 'Forn'">
+          <option value="">—</option>
+          <option *ngFor="let f of fornecedoresPedidoPrecadastro" [value]="f">{{ f }}</option>
+        </select>
+      </div>
+      <div class="form-group form-group-marca">
+        <label>Marca</label>
+        <input [(ngModel)]="item.marcaPeca" [name]="prefix + 'Marca'" placeholder="—" />
+      </div>
+      <div class="form-group form-group-qtd">
+        <label>Qtd</label>
+        <input type="number" min="1" [(ngModel)]="item.quantidade" [name]="prefix + 'Qtd'" />
+      </div>
+      <div class="form-group form-group-custo">
+        <label>Custo</label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          [(ngModel)]="item.custoUnitario"
+          [name]="prefix + 'Custo'"
+        />
+      </div>
+      <div class="form-group form-group-gar">
+        <label>Meses</label>
+        <input type="number" min="1" [(ngModel)]="item.garantiaMeses" [name]="prefix + 'Garantia'" />
+      </div>
+    </div>
+    <p
+      class="item-pedido-aviso"
+      [class.ok]="!!item.pecaId"
+      *ngIf="item.avisoResolucao && !itemSemPecaCadastrada(item)"
+    >
+      {{ item.avisoResolucao }}
+    </p>
+    <div class="item-pedido-sugestao" *ngIf="itemSemPecaCadastrada(item)">
+      <span>{{ item.avisoResolucao }}</span>
+      <button type="button" class="btn-sugestao-cadastro" (click)="abrirNovaPecaPedido(item)">
+        Cadastrar pe&ccedil;a agora
+      </button>
+    </div>
+  </ng-template>
 </div>

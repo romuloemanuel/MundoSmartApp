@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -49,6 +49,7 @@ import {
 import { ModeloAparelho, ModeloCompativel, PecaEstoque } from '../../models/bling.models';
 import { MODELO_LIMITE_LISTA, TIPOS_TELA, mesmoTipoTelaArquitetura } from '../../config/aparelhos.config';
 import { NovaPecaPedidoModal } from '../../components/nova-peca-pedido-modal/nova-peca-pedido-modal';
+import { ItemPedidoLoteModal } from '../../components/item-pedido-lote-modal/item-pedido-lote-modal';
 import { AutocompleteCriavel, AutocompleteItem } from '../../components/autocomplete-criavel/autocomplete-criavel';
 import { GridPaginator } from '../../components/grid-paginator/grid-paginator';
 import { GridPaginationState } from '../../utils/grid-pagination.state';
@@ -66,6 +67,7 @@ import {
 } from '../../utils/garantia-devolucao-pdf.util';
 import { FORNECEDORES_ESTOQUE_PRECADASTRO } from '../../config/os-peca-origem.config';
 import { AppAuthService } from '../../services/app-auth';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 type AbaEstoque =
   | 'estoque'
@@ -85,7 +87,7 @@ interface EstoqueGrupoMarca {
 @Component({
   selector: 'app-estoque',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, NovaPecaPedidoModal, AutocompleteCriavel, GridPaginator],
+  imports: [CommonModule, FormsModule, RouterLink, NovaPecaPedidoModal, ItemPedidoLoteModal, AutocompleteCriavel, GridPaginator],
   templateUrl: './estoque.html',
   styles: [`
     .estoque-abas {
@@ -322,8 +324,6 @@ interface EstoqueGrupoMarca {
       overflow: visible;
       position: relative;
     }
-    .form-group-modelo:focus-within { z-index: 50; }
-    .item-pedido-linha ::ng-deep .ac-lista { z-index: 100; }
     .form-group-cor { width: 100px; }
     .form-group-qual { width: 100px; }
     .form-group-forn { width: 88px; }
@@ -349,28 +349,13 @@ interface EstoqueGrupoMarca {
     }
     .reposicao-alerta { color: #b45309; font-weight: 600; }
     .detalhe-pedido { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
-    .lote-edit-form {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 10px;
-      margin-top: 10px;
+    .lote-edit-inline {
+      margin: 4px 0;
       padding: 12px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
       overflow: visible;
-    }
-    .lote-item-novo {
-      margin-top: 14px;
-      padding: 12px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      overflow: visible;
-    }
-    .lote-item-novo h4 {
-      margin: 0 0 8px;
-      font-size: 14px;
     }
     .lote-edit-acoes {
       display: flex;
@@ -551,16 +536,11 @@ export class EstoquePage implements OnInit {
   pedidos: PedidoCompraEstoque[] = [];
   pedidoDetalhe?: PedidoCompraDetalhe;
   loteEditandoId = '';
-  loteEdit: {
-    fornecedor: string;
-    marcaPeca: string;
-    custoUnitario: number;
-    garantiaMeses: number;
-    quantidadeInicial: number;
-    unidadesJaSaidas: number;
-  } | null = null;
+  loteUnidadesJaSaidas = 0;
   salvandoLote = false;
   excluindoLoteId = '';
+  /** Modal com a lista de lotes do pedido (Ver lotes). */
+  modalLotesPedidoAberto = false;
   incluindoItem = false;
   itemPedidoExtra: ItemPedidoCompraUi = this.itemVazio();
   movimentacoes: MovimentacaoEstoque[] = [];
@@ -683,8 +663,15 @@ export class EstoquePage implements OnInit {
     private aparelhosService: AparelhosService,
     private categoriasPecaService: CategoriasPecaService,
     private route: ActivatedRoute,
+    private cdr: ChangeDetectorRef,
     public appAuth: AppAuthService,
   ) {}
+
+  /** Validação / erro de processo do usuário — toast 15s + texto na página. */
+  private setErroUsuario(mensagem: string): void {
+    this.erro = mensagem;
+    avisarErroUsuario(mensagem);
+  }
 
   ngOnInit(): void {
     this.categoriasPecaService.nomes().subscribe(nomes => {
@@ -722,10 +709,9 @@ export class EstoquePage implements OnInit {
     this.sucesso = '';
     this.pedidoDetalhe = undefined;
     this.loteEditandoId = '';
-    this.loteEdit = null;
+    this.loteUnidadesJaSaidas = 0;
     this.excluindoLoteId = '';
-    this.incluindoItem = false;
-    this.itemPedidoExtra = this.itemVazio();
+    this.fecharModalLotesPedido();
     this.pecaLotesExpandida = '';
     this.lotesPeca = [];
 
@@ -1184,61 +1170,112 @@ export class EstoquePage implements OnInit {
 
   verPedido(id: string): void {
     this.loteEditandoId = '';
-    this.loteEdit = null;
+    this.loteUnidadesJaSaidas = 0;
     this.excluindoLoteId = '';
     this.incluindoItem = false;
     this.itemPedidoExtra = this.itemVazio();
+    this.erro = '';
+    this.sucesso = '';
     this.carregarPecas();
     this.carregarModelosPedido();
     this.service.obterPedido(id).subscribe({
-      next: d => { this.pedidoDetalhe = d; },
+      next: d => {
+        this.pedidoDetalhe = d;
+        this.modalLotesPedidoAberto = true;
+        this.cdr.detectChanges();
+      },
       error: () => { this.erro = 'Erro ao carregar pedido.'; },
     });
   }
 
+  fecharModalLotesPedido(): void {
+    this.modalLotesPedidoAberto = false;
+    this.loteEditandoId = '';
+    this.loteUnidadesJaSaidas = 0;
+    this.incluindoItem = false;
+    this.itemPedidoExtra = this.itemVazio();
+    this.pedidoDetalhe = undefined;
+  }
+
+  get tituloModalLotesPedido(): string {
+    const n = this.pedidoDetalhe?.pedido.numeroPedido;
+    return n ? `Lotes do pedido ${n}` : 'Lotes do pedido';
+  }
+
   iniciarEdicaoLote(l: LoteEstoque): void {
-    if (!l.id) return;
+    if (!l.id) {
+      this.setErroUsuario('Este lote não tem id — não é possível editar. Recarregue a página.');
+      return;
+    }
     this.erro = '';
     this.sucesso = '';
+    this.incluindoItem = false;
     this.loteEditandoId = l.id;
-    const jaSaidas = Math.max(0, (l.quantidadeInicial ?? 0) - (l.quantidadeRestante ?? 0));
-    this.loteEdit = {
-      fornecedor: l.fornecedor || '',
-      marcaPeca: l.marcaPeca || '',
-      custoUnitario: l.custoUnitario ?? 0,
-      garantiaMeses: l.garantiaMeses ?? 12,
-      quantidadeInicial: l.quantidadeInicial ?? 0,
-      unidadesJaSaidas: jaSaidas,
-    };
+    this.loteUnidadesJaSaidas = Math.max(0, (l.quantidadeInicial ?? 0) - (l.quantidadeRestante ?? 0));
+    this.itemPedidoExtra = this.itemFromLote(l);
+    this.itemPedidoExtra.modeloAutocompleteKey = (this.itemPedidoExtra.modeloAutocompleteKey ?? 0) + 1;
+    this.carregarModelosPedido();
+    this.carregarPecas(() => {
+      this.resolverPecaPedido(this.itemPedidoExtra);
+      this.cdr.detectChanges();
+    });
+  }
+
+  abrirIncluirItemPedido(): void {
+    this.erro = '';
+    this.sucesso = '';
+    this.loteEditandoId = '';
+    this.loteUnidadesJaSaidas = 0;
+    this.incluindoItem = true;
+    this.itemPedidoExtra = this.itemVazio();
+    if (this.pedidoDetalhe?.pedido.fornecedor) {
+      this.itemPedidoExtra.fornecedor = this.pedidoDetalhe.pedido.fornecedor;
+    }
+    this.carregarPecas();
+    this.carregarModelosPedido();
   }
 
   cancelarEdicaoLote(): void {
     this.loteEditandoId = '';
-    this.loteEdit = null;
+    this.loteUnidadesJaSaidas = 0;
+    this.itemPedidoExtra = this.itemVazio();
+  }
+
+  cancelarIncluirItemPedido(): void {
+    this.incluindoItem = false;
+    this.itemPedidoExtra = this.itemVazio();
   }
 
   salvarEdicaoLote(): void {
-    if (!this.loteEditandoId || !this.loteEdit || this.salvandoLote) return;
+    if (!this.loteEditandoId || this.salvandoLote) return;
 
-    const edit = this.loteEdit;
-    if (!edit.fornecedor.trim()) {
-      this.erro = 'Informe o fornecedor do lote.';
+    const item = this.itemPedidoExtra;
+    if (!item.categoria?.trim() || !item.modeloId?.trim() || !item.pecaId?.trim()) {
+      this.setErroUsuario('Informe categoria, modelo e peça do item.');
       return;
     }
-    if (edit.quantidadeInicial <= 0) {
-      this.erro = 'Quantidade inicial deve ser maior que zero.';
+    if (this.itemUsaCor(item) && !item.cor?.trim()) {
+      this.setErroUsuario('Informe a cor do item.');
       return;
     }
-    if (edit.quantidadeInicial < edit.unidadesJaSaidas) {
-      this.erro = `Não é possível reduzir abaixo de ${edit.unidadesJaSaidas} (já saíram do lote).`;
+    if (!item.fornecedor?.trim()) {
+      this.setErroUsuario('Informe o fornecedor do lote.');
       return;
     }
-    if (edit.garantiaMeses <= 0) {
-      this.erro = 'Garantia em meses deve ser maior que zero.';
+    if ((item.quantidade ?? 0) <= 0) {
+      this.setErroUsuario('Quantidade inicial deve ser maior que zero.');
       return;
     }
-    if (edit.custoUnitario < 0) {
-      this.erro = 'Custo unitário não pode ser negativo.';
+    if ((item.quantidade ?? 0) < this.loteUnidadesJaSaidas) {
+      this.setErroUsuario(`Não é possível reduzir abaixo de ${this.loteUnidadesJaSaidas} (já saíram do lote).`);
+      return;
+    }
+    if ((item.garantiaMeses ?? 0) <= 0) {
+      this.setErroUsuario('Garantia em meses deve ser maior que zero.');
+      return;
+    }
+    if ((item.custoUnitario ?? 0) < 0) {
+      this.setErroUsuario('Custo unitário não pode ser negativo.');
       return;
     }
 
@@ -1248,19 +1285,26 @@ export class EstoquePage implements OnInit {
     const pedidoId = this.pedidoDetalhe?.pedido.id;
 
     this.service.atualizarLote(this.loteEditandoId, {
-      fornecedor: edit.fornecedor.trim(),
-      marcaPeca: edit.marcaPeca.trim() || undefined,
-      custoUnitario: edit.custoUnitario,
-      garantiaMeses: edit.garantiaMeses,
-      quantidadeInicial: edit.quantidadeInicial,
+      fornecedor: item.fornecedor.trim(),
+      marcaPeca: item.marcaPeca?.trim() || undefined,
+      custoUnitario: item.custoUnitario,
+      garantiaMeses: item.garantiaMeses,
+      quantidadeInicial: item.quantidade,
+      pecaId: item.pecaId,
+      modeloId: item.modeloId,
+      modeloNome: item.modeloNome,
+      cor: item.cor?.trim() || undefined,
     }).subscribe({
       next: () => {
         this.salvandoLote = false;
         this.loteEditandoId = '';
-        this.loteEdit = null;
+        this.loteUnidadesJaSaidas = 0;
+        this.itemPedidoExtra = this.itemVazio();
         this.sucesso = 'Lote atualizado.';
-        if (pedidoId) this.verPedido(pedidoId);
+        if (pedidoId) this.recarregarPedidoNaModal(pedidoId);
         this.carregarPedidos();
+        this.recarregarLotesPecaAbertos();
+        this.carregarEstoque();
       },
       error: err => {
         this.salvandoLote = false;
@@ -1268,6 +1312,33 @@ export class EstoquePage implements OnInit {
           ?? (err?.status === 404
             ? 'Edição de lote indisponível. Reinicie a API e tente novamente.'
             : 'Erro ao atualizar lote.');
+      },
+    });
+  }
+
+  /** Recarrega o pedido mantendo a modal aberta. */
+  private recarregarPedidoNaModal(pedidoId: string): void {
+    this.service.obterPedido(pedidoId).subscribe({
+      next: d => {
+        this.pedidoDetalhe = d;
+        this.modalLotesPedidoAberto = true;
+      },
+      error: () => { this.erro = 'Erro ao recarregar pedido.'; },
+    });
+  }
+
+  /** Atualiza a grade de lotes aberta na aba Estoque (Ver lotes). */
+  private recarregarLotesPecaAbertos(): void {
+    const pecaId = this.pecaLotesExpandida;
+    if (!pecaId) return;
+    this.carregandoLotes = true;
+    this.service.listarLotes(pecaId, true).subscribe({
+      next: lotes => {
+        this.lotesPeca = lotes;
+        this.carregandoLotes = false;
+      },
+      error: () => {
+        this.carregandoLotes = false;
       },
     });
   }
@@ -1302,7 +1373,7 @@ export class EstoquePage implements OnInit {
       next: () => {
         this.excluindoLoteId = '';
         this.sucesso = 'Item excluído do pedido.';
-        if (pedidoId) this.verPedido(pedidoId);
+        if (pedidoId) this.recarregarPedidoNaModal(pedidoId);
         this.carregarPedidos();
       },
       error: err => {
@@ -1312,44 +1383,25 @@ export class EstoquePage implements OnInit {
     });
   }
 
-  abrirIncluirItemPedido(): void {
-    this.erro = '';
-    this.sucesso = '';
-    this.loteEditandoId = '';
-    this.loteEdit = null;
-    this.incluindoItem = true;
-    this.itemPedidoExtra = this.itemVazio();
-    if (this.pedidoDetalhe?.pedido.fornecedor) {
-      this.itemPedidoExtra.fornecedor = this.pedidoDetalhe.pedido.fornecedor;
-    }
-    this.carregarPecas();
-    this.carregarModelosPedido();
-  }
-
-  cancelarIncluirItemPedido(): void {
-    this.incluindoItem = false;
-    this.itemPedidoExtra = this.itemVazio();
-  }
-
   salvarIncluirItemPedido(): void {
     const pedidoId = this.pedidoDetalhe?.pedido.id;
     if (!pedidoId || this.salvandoLote) return;
 
     const item = this.itemPedidoExtra;
     if (!item.categoria?.trim() || !item.modeloId?.trim() || !item.pecaId?.trim()) {
-      this.erro = 'Informe categoria, modelo e peça do novo item.';
+      this.setErroUsuario('Informe categoria, modelo e peça do novo item.');
       return;
     }
     if (this.itemUsaCor(item) && !item.cor?.trim()) {
-      this.erro = 'Informe a cor do item.';
+      this.setErroUsuario('Informe a cor do item.');
       return;
     }
     if ((item.quantidade ?? 0) <= 0) {
-      this.erro = 'Quantidade deve ser maior que zero.';
+      this.setErroUsuario('Quantidade deve ser maior que zero.');
       return;
     }
     if ((item.custoUnitario ?? 0) < 0) {
-      this.erro = 'Custo unitário não pode ser negativo.';
+      this.setErroUsuario('Custo unitário não pode ser negativo.');
       return;
     }
 
@@ -1370,10 +1422,14 @@ export class EstoquePage implements OnInit {
     }).subscribe({
       next: () => {
         this.salvandoLote = false;
-        this.incluindoItem = false;
-        this.itemPedidoExtra = this.itemVazio();
         this.sucesso = 'Item incluído no pedido.';
-        this.verPedido(pedidoId);
+        // Mantém o formulário no topo pronto para o próximo item.
+        this.itemPedidoExtra = this.itemVazio();
+        if (this.pedidoDetalhe?.pedido.fornecedor) {
+          this.itemPedidoExtra.fornecedor = this.pedidoDetalhe.pedido.fornecedor;
+        }
+        this.incluindoItem = true;
+        this.recarregarPedidoNaModal(pedidoId);
         this.carregarPedidos();
       },
       error: err => {
@@ -1462,11 +1518,11 @@ export class EstoquePage implements OnInit {
     this.erro = '';
     this.sucesso = '';
     if (this.periodoReposicao === 'personalizado' && !this.reposicaoInicio) {
-      this.erro = 'Informe a data inicial do período.';
+      this.setErroUsuario('Informe a data inicial do período.');
       return;
     }
     if (this.periodoReposicao === 'personalizado' && !this.reposicaoFim) {
-      this.erro = 'Informe a data final do período.';
+      this.setErroUsuario('Informe a data final do período.');
       return;
     }
 
@@ -1488,6 +1544,7 @@ export class EstoquePage implements OnInit {
         this.carregando = false;
         if (this.periodoReposicao !== 'semanal' && !r.periodo) {
           this.erro = 'Período avançado disponível após reiniciar a API. Exibindo relatório semanal por enquanto.';
+          avisarErroUsuario(this.erro);
         }
       },
       error: err => {
@@ -1543,12 +1600,12 @@ export class EstoquePage implements OnInit {
    */
   gerarRelatorioReposicao(): void {
     if (!this.relatorio?.itens?.length) {
-      this.erro = 'Pesquise primeiro um período com peças utilizadas.';
+      this.setErroUsuario('Pesquise primeiro um período com peças utilizadas.');
       return;
     }
     const itens = this.relatorio.itens.filter(i => (i.quantidadeSaida ?? 0) > 0);
     if (!itens.length) {
-      this.erro = 'Nenhuma peça utilizada neste período para gerar relatório.';
+      this.setErroUsuario('Nenhuma peça utilizada neste período para gerar relatório.');
       return;
     }
 
@@ -1902,7 +1959,7 @@ export class EstoquePage implements OnInit {
     if (!lote.id) return;
     const max = this.maxRetornoGarantia(lote);
     if (max <= 0) {
-      this.erro = 'Nenhuma quantidade disponível para retorno neste lote.';
+      this.setErroUsuario('Nenhuma quantidade disponível para retorno neste lote.');
       return;
     }
     const qtd = Math.max(1, Math.min(max, Number(this.devolucaoQtd[lote.id]) || 1));
@@ -1960,7 +2017,7 @@ export class EstoquePage implements OnInit {
     this.erro = '';
     const faltam = this.limiteItensPedido - this.itensPedido.length;
     if (faltam <= 0) {
-      this.erro = `Limite de ${this.limiteItensPedido} itens por pedido.`;
+      this.setErroUsuario(`Limite de ${this.limiteItensPedido} itens por pedido.`);
       return;
     }
     const n = Math.min(Math.max(1, quantidade), faltam);
@@ -1969,7 +2026,7 @@ export class EstoquePage implements OnInit {
       this.itensPedido.push(this.itemVazio());
     }
     if (quantidade > faltam) {
-      this.erro = `Só foi possível adicionar ${n} linha(s) (limite ${this.limiteItensPedido}).`;
+      this.setErroUsuario(`Só foi possível adicionar ${n} linha(s) (limite ${this.limiteItensPedido}).`);
     }
   }
 
@@ -2271,20 +2328,22 @@ export class EstoquePage implements OnInit {
       (i.categoria || i.modeloId || i.quantidade > 0 || i.custoUnitario > 0)
       && (!i.categoria || !i.modeloId || !i.pecaId));
     if (incompletos.length > 0) {
-      this.erro = incompletos[0].avisoResolucao
-        ?? 'Preencha categoria, modelo e aguarde a peça ser encontrada em cada linha.';
+      this.setErroUsuario(
+        incompletos[0].avisoResolucao
+          ?? 'Preencha categoria, modelo e aguarde a peça ser encontrada em cada linha.',
+      );
       return;
     }
 
     const semCor = this.itensPedido.filter(i =>
       i.pecaId && i.modeloId && this.itemUsaCor(i) && !i.cor?.trim());
     if (semCor.length > 0) {
-      this.erro = 'Em Tampa traseira / Vidro Traseiro, informe a cor em cada linha (quantidade por cor e modelo).';
+      this.setErroUsuario('Em Tampa traseira / Vidro Traseiro, informe a cor em cada linha (quantidade por cor e modelo).');
       return;
     }
 
     if (this.itensPedido.length > this.limiteItensPedido) {
-      this.erro = `Limite de ${this.limiteItensPedido} itens por pedido.`;
+      this.setErroUsuario(`Limite de ${this.limiteItensPedido} itens por pedido.`);
       return;
     }
 
@@ -2302,11 +2361,11 @@ export class EstoquePage implements OnInit {
         return item;
       });
     if (!this.pedidoFornecedor.trim()) {
-      this.erro = 'Informe o fornecedor.';
+      this.setErroUsuario('Informe o fornecedor.');
       return;
     }
     if (itens.length === 0) {
-      this.erro = 'Adicione ao menos um item válido.';
+      this.setErroUsuario('Adicione ao menos um item válido.');
       return;
     }
 
@@ -2340,6 +2399,7 @@ export class EstoquePage implements OnInit {
         this.sucesso = '';
         if (err instanceof TimeoutError || err?.name === 'TimeoutError') {
           this.erro = 'Tempo esgotado ao salvar o pedido. Verifique a conexão e tente novamente.';
+          avisarErroUsuario(this.erro);
           return;
         }
         this.erro = err.error?.erro
@@ -2394,15 +2454,15 @@ export class EstoquePage implements OnInit {
     this.erro = '';
     this.sucesso = '';
     if (!this.saidaModeloId) {
-      this.erro = 'Selecione o modelo do aparelho.';
+      this.setErroUsuario('Selecione o modelo do aparelho.');
       return;
     }
     if (!this.saidaPecaId) {
-      this.erro = 'Selecione a peça compatível.';
+      this.setErroUsuario('Selecione a peça compatível.');
       return;
     }
     if (!this.pecaCompativelComModelo(this.saidaPecaId, this.saidaModeloId)) {
-      this.erro = 'A peça selecionada não é compatível com o modelo.';
+      this.setErroUsuario('A peça selecionada não é compatível com o modelo.');
       return;
     }
 
@@ -2460,6 +2520,39 @@ export class EstoquePage implements OnInit {
     d.setDate(d.getDate() - dias);
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 10);
+  }
+
+  private itemFromLote(l: LoteEstoque): ItemPedidoCompraUi {
+    const peca = this.pecas.find(p => p.id === l.pecaId);
+    const categoria = peca
+      ? (peca.categoria ?? inferirCategoriaPeca(peca.nome, peca.categoria))
+      : inferirCategoriaPeca(l.pecaNome || '');
+    const modelo = l.modeloId
+      ? this.modelosPedido.find(m => m.id === l.modeloId)
+      : undefined;
+    const buscaModelo = modelo
+      ? this.labelModeloFiltro(modelo)
+      : (l.modeloNome || '');
+
+    const item = this.prepararItemPedido({
+      uid: this.proximoUidItemPedido++,
+      categoria,
+      buscaModelo,
+      avisoResolucao: '',
+      modeloAutocompleteKey: 0,
+      pecasCandidatas: [],
+      coresSugeridas: [],
+      pecaId: l.pecaId || '',
+      fornecedor: l.fornecedor || '',
+      marcaPeca: l.marcaPeca || '',
+      modeloId: l.modeloId || '',
+      modeloNome: l.modeloNome,
+      cor: l.cor,
+      quantidade: l.quantidadeInicial ?? 1,
+      custoUnitario: l.custoUnitario ?? 0,
+      garantiaMeses: l.garantiaMeses > 0 ? l.garantiaMeses : 12,
+    });
+    return item;
   }
 
   private itemVazio(): ItemPedidoCompraUi {

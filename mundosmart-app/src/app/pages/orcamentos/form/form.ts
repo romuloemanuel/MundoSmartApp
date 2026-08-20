@@ -51,6 +51,7 @@ import {
   OrcamentoDesistenciaModal,
   OrcamentoDesistenciaPayload,
 } from '../../../components/orcamento-desistencia-modal/orcamento-desistencia-modal';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 @Component({
   selector: 'app-orcamentos-form',
@@ -828,22 +829,27 @@ export class OrcamentosForm implements OnInit {
     if (this.jaConvertido || this.salvando) return;
     if (!this.orcamento.contato?.id) {
       this.erro = 'Informe o cliente.';
+      avisarErroUsuario(this.erro);
       return;
     }
     if (!(this.orcamento.responsavelOrcamento ?? '').trim()) {
       this.erro = 'Informe quem fez o orçamento.';
+      avisarErroUsuario(this.erro);
       return;
     }
     if (!(Number(this.orcamento.valorAVista) > 0) && !(Number(this.valorAcordadoExibido) > 0)) {
       this.erro = 'Informe o valor à vista.';
+      avisarErroUsuario(this.erro);
       return;
     }
     if (!(Number(this.orcamento.valorAPrazo) > 0) && !(Number(this.valorAcordadoExibido) > 0)) {
       this.erro = 'Informe o valor parcelado combinado.';
+      avisarErroUsuario(this.erro);
       return;
     }
     if (!(this.orcamento.itens?.length)) {
       this.erro = 'Inclua ao menos um serviço com valor.';
+      avisarErroUsuario(this.erro);
       return;
     }
 

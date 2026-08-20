@@ -11,6 +11,7 @@ import { CATEGORIAS_PECA, categoriaUsaCoresPorModelo, inferirCategoriaPeca } fro
 import { formatarDataCadastroModelo } from '../../../utils/modelo-autocomplete.util';
 import { CorEstoqueModelo, ModeloAparelho, ModeloCompativel, PecaEstoque, VariacaoServico } from '../../../models/bling.models';
 import { MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 @Component({
   selector: 'app-pecas-form',
@@ -373,6 +374,7 @@ export class PecasForm implements OnInit, OnDestroy {
   salvar(): void {
     if (!this.peca.categoria?.trim()) {
       this.erro = 'Selecione a categoria da peça.';
+      avisarErroUsuario(this.erro);
       return;
     }
     if (!this.peca.nome?.trim()) {
@@ -380,6 +382,7 @@ export class PecasForm implements OnInit, OnDestroy {
     }
     if (!this.peca.nome?.trim()) {
       this.erro = 'Nome da peça é obrigatório.';
+      avisarErroUsuario(this.erro);
       return;
     }
 
@@ -388,6 +391,7 @@ export class PecasForm implements OnInit, OnDestroy {
         !(m.cores ?? []).some(c => (c.cor ?? '').trim()));
       if ((this.peca.modelosCompativeis?.length ?? 0) > 0 && semCor) {
         this.erro = 'Informe ao menos uma cor para cada modelo (Tampa traseira / Vidro Traseiro).';
+        avisarErroUsuario(this.erro);
         return;
       }
       this.peca.quantidadeEstoque = this.totalEstoqueCores;

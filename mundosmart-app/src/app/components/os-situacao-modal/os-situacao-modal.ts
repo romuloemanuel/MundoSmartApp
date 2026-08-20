@@ -10,6 +10,7 @@ import {
   PRAZO_AGUARDANDO_PECA_DIAS_PADRAO,
   prazoPecaPadraoDatetimeLocal,
 } from '../../config/os-situacao.config';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-os-situacao-modal',
@@ -300,6 +301,7 @@ export class OsSituacaoModal implements OnInit, OnDestroy {
       const texto = this.motivo.trim();
       if (!texto) {
         this.erro = 'Informe o motivo do cancelamento.';
+        avisarErroUsuario(this.erro);
         return;
       }
       this.aberto = false;
@@ -311,6 +313,7 @@ export class OsSituacaoModal implements OnInit, OnDestroy {
       const dias = Number(this.prazoDias);
       if (!Number.isFinite(dias) || dias < 1) {
         this.erro = 'Informe um prazo válido em dias (mínimo 1).';
+        avisarErroUsuario(this.erro);
         return;
       }
       this.aberto = false;

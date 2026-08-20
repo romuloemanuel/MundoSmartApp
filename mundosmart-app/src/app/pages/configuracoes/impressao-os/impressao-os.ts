@@ -20,6 +20,7 @@ import {
   montarHtmlTesteImpressoraTermica,
   montarTesteImpressoraTermica,
 } from '../../../utils/os-impressao.thermal';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 @Component({
   selector: 'app-config-impressao-os',
@@ -138,6 +139,7 @@ export class ConfigImpressaoOsPage implements OnInit {
       }
     } catch {
       this.erro = 'Falha ao imprimir teste.';
+      avisarErroUsuario(this.erro);
     } finally {
       this.testando = false;
     }
@@ -148,10 +150,12 @@ export class ConfigImpressaoOsPage implements OnInit {
     this.sucesso = '';
     if (!this.config.avisoPreOrcamento.trim() || !this.config.termosCondicoes.trim()) {
       this.erro = 'Preencha os textos da OS A4 antes de salvar.';
+      avisarErroUsuario(this.erro);
       return;
     }
     if (!this.config.nomeEmpresa.trim()) {
       this.erro = 'Informe o nome da empresa para os cupons térmicos.';
+      avisarErroUsuario(this.erro);
       return;
     }
 

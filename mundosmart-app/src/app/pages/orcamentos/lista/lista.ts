@@ -43,6 +43,7 @@ import {
   OrcamentoDesistenciaModal,
   OrcamentoDesistenciaPayload,
 } from '../../../components/orcamento-desistencia-modal/orcamento-desistencia-modal';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
 type FiltroValidade = '' | 'normal' | 'a-vencer' | 'vencidos';
 type FiltroSituacao = '' | 'Em aberto' | 'Convertido' | 'Não realizado' | 'Desistência';
@@ -703,6 +704,7 @@ export class OrcamentosLista implements OnInit {
     if (!o.id || !this.emAberto(o) || this.convertendoId) return;
     if (this.vencido(o)) {
       this.erro = 'Orçamento vencido. Abra o cadastro e renove a validade antes de transformar em OS.';
+      avisarErroUsuario(this.erro);
       return;
     }
     this.erro = '';

@@ -28,6 +28,7 @@ import {
 } from '../../utils/cliente-duplicata';
 import { of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 @Component({
   selector: 'app-novo-cliente-modal',
@@ -653,7 +654,8 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
   salvar(): void {
     this.erros = validarFormularioCliente(this.contato);
     if (!formularioClienteValido(this.erros) || this.temDuplicidade) {
-      this.erro = this.erros.geral ?? (this.temDuplicidade ? 'Corrija os dados duplicados antes de salvar.' : '');
+      this.erro = this.erros.geral ?? (this.temDuplicidade ? 'Corrija os dados duplicados antes de salvar.' : 'Verifique os campos destacados.');
+      avisarErroUsuario(this.erro);
       return;
     }
 

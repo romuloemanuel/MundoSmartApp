@@ -1,4 +1,5 @@
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { avisarErroUsuario } from '../../services/user-feedback.service';
 
 import { CommonModule } from '@angular/common';
 
@@ -477,6 +478,7 @@ export class ContatoAlternativoModal implements OnChanges {
       if (contatos.length >= 2) {
 
         this.erro = 'Máximo de 2 contatos alternativos por cliente.';
+        avisarErroUsuario(this.erro);
 
         return;
 
