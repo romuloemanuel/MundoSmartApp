@@ -10,4 +10,9 @@ export const environment = {
     limiteLaranja: 3,
     limiteAmarelo: 5,
   },
+  bling: {
+    clientId: '',
+    redirectUri: '',
+    consultaProdutosHabilitada: false,
+  },
 };

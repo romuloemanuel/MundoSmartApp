@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using MundoSmart.BlingAssistencia.API.Services;
-using MundoSmart.BlingAssistencia.API.Settings;
 
 namespace MundoSmart.BlingAssistencia.API.Controllers;
 
@@ -12,27 +10,28 @@ namespace MundoSmart.BlingAssistencia.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IBlingAuthService _authService;
-    private readonly BlingSettings _bling;
+    private readonly IBlingEffectiveSettings _bling;
 
-    public AuthController(IBlingAuthService authService, IOptions<BlingSettings> bling)
+    public AuthController(IBlingAuthService authService, IBlingEffectiveSettings bling)
     {
         _authService = authService;
-        _bling = bling.Value;
+        _bling = bling;
     }
 
     [HttpGet("login")]
     [AllowAnonymous]
-    public IActionResult Login()
+    public async Task<IActionResult> Login()
     {
+        await _bling.EnsureLoadedAsync();
         // OAuth só para consulta de capinhas/estoque — não habilita sync de OS/clientes.
-        if (!_bling.ConsultaProdutosHabilitada)
+        if (!_bling.Current.ConsultaProdutosHabilitada)
             return BadRequest(new { message = "Consulta de produtos Bling desabilitada." });
 
         var url = _authService.GetAuthorizationUrl();
         return Ok(new
         {
             authorizationUrl = url,
-            modoLocal = _bling.ModoLocal,
+            modoLocal = _bling.Current.ModoLocal,
             escopo = "consulta-produtos",
         });
     }
@@ -83,8 +82,8 @@ public class AuthController : ControllerBase
         return Ok(new
         {
             message = "Token Bling configurado (consulta de produtos).",
-            modoLocal = _bling.ModoLocal,
-            consultaProdutos = _bling.ConsultaProdutosHabilitada,
+            modoLocal = _bling.Current.ModoLocal,
+            consultaProdutos = _bling.Current.ConsultaProdutosHabilitada,
         });
     }
 }

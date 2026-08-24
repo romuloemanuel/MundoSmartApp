@@ -46,4 +46,5 @@ msbuild.wrn
 
 # Segredos Bling locais
 **/BlingAssistencia.API/appsettings.Development.json
+**/BlingAssistencia.API/App_Data/
 

@@ -25,6 +25,9 @@ public class BlingProdutoAcessorioCache
     [BsonElement("modelo")]
     public string? Modelo { get; set; }
 
+    [BsonElement("marca")]
+    public string? Marca { get; set; }
+
     [BsonElement("cor")]
     public string Cor { get; set; } = "Única";
 
@@ -39,6 +42,10 @@ public class BlingProdutoAcessorioCache
 
     [BsonElement("imagemUrl")]
     public string? ImagemUrl { get; set; }
+
+    /// <summary>Campo customizado Bling «Permite Personalização».</summary>
+    [BsonElement("permitePersonalizacao")]
+    public bool PermitePersonalizacao { get; set; }
 
     [BsonElement("atualizadoEm")]
     public DateTime AtualizadoEm { get; set; } = DateTime.UtcNow;

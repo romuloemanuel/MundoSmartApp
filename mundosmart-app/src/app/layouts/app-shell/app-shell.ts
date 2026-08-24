@@ -42,6 +42,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <div class="nav-section-label" *ngIf="appAuth.isAdmin()">Configura&ccedil;&otilde;es</div>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/impressao-os" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Impress&atilde;o da OS</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/acrescimo-estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Acr&eacute;scimo estoque</a>
+          <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/bling" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Bling</a>
         </nav>
       </aside>
 

@@ -116,6 +116,12 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/configuracoes/acrescimo-estoque/acrescimo-estoque').then(m => m.ConfigAcrescimoEstoquePage),
       },
+      {
+        path: 'configuracoes/bling',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./pages/configuracoes/bling/bling').then(m => m.ConfigBlingPage),
+      },
     ],
   },
 ];

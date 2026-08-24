@@ -16,4 +16,13 @@ export const environment = {
     limiteLaranja: 3,
     limiteAmarelo: 5,
   },
+  /**
+   * Prefill da tela Configurações → Bling (só ng serve / environment.ts).
+   * Sem Client Secret — o secret fica em appsettings.Development.json (gitignored).
+   */
+  bling: {
+    clientId: '728c66cc1011016019658641be6bc663fda8c446',
+    redirectUri: 'http://localhost:4200/auth/callback',
+    consultaProdutosHabilitada: true,
+  },
 };

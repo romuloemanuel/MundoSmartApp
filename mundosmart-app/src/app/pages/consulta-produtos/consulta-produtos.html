@@ -1,79 +1,163 @@
 <div class="consulta-page">
   <header class="consulta-head">
-    <p class="eyebrow">Consulta de estoque</p>
-    <h1>Capinhas, películas e térmicos</h1>
-    <p class="sub">Consulte o estoque por categoria. O modelo &eacute; opcional — filtre se quiser.</p>
+    <p class="eyebrow">Estoque na loja</p>
+    <h1>Consultar capinhas</h1>
+    <p class="sub">Digite o aparelho (ex.: Moto G84) e veja as cores com estoque.</p>
   </header>
 
-  <nav class="cats" aria-label="Categorias">
-    <button
-      type="button"
-      *ngFor="let c of categorias"
-      class="cat"
-      [class.ativa]="categoria === c.id"
-      (click)="selecionarCategoria(c.id)"
-    >
-      {{ c.label }}
-    </button>
-  </nav>
-
-  <form class="busca" (submit)="$event.preventDefault(); buscar()">
-    <label class="busca-label" for="consulta-modelo">{{ hintCategoria }}</label>
-    <div class="busca-row">
-      <input
-        id="consulta-modelo"
-        type="search"
-        enterkeyhint="search"
-        inputmode="search"
-        autocomplete="off"
-        autocapitalize="off"
-        spellcheck="false"
-        [(ngModel)]="termo"
-        name="termo"
-        [placeholder]="placeholder"
-        (ngModelChange)="onTermoChange()"
-      />
-      <button type="submit" class="btn-buscar" [disabled]="carregando">
-        {{ carregando ? '…' : 'Buscar' }}
+  <div class="consulta-sticky">
+    <nav class="cats" aria-label="Categorias">
+      <button
+        type="button"
+        *ngFor="let c of categorias"
+        class="cat"
+        [class.ativa]="categoria === c.id"
+        (click)="selecionarCategoria(c.id)"
+      >
+        {{ c.label }}
       </button>
-    </div>
-    <label class="chk">
-      <input type="checkbox" [checked]="incluirZerados" (change)="toggleZerados()" />
-      Mostrar sem estoque
-    </label>
-  </form>
+    </nav>
 
-  <p class="origem" *ngIf="tituloOrigem && buscou && !erro && !aviso">{{ tituloOrigem }}</p>
+    <form class="busca" (submit)="$event.preventDefault(); buscar()">
+      <label class="busca-label" for="consulta-modelo">{{ hintCategoria }}</label>
+      <div class="busca-row">
+        <div class="input-wrap">
+          <input
+            id="consulta-modelo"
+            type="search"
+            enterkeyhint="search"
+            inputmode="search"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            [(ngModel)]="termo"
+            name="termo"
+            [placeholder]="placeholder"
+            (ngModelChange)="onTermoChange()"
+          />
+          <button
+            type="button"
+            class="btn-limpar"
+            *ngIf="termo.trim()"
+            (click)="limparBusca()"
+            aria-label="Limpar busca"
+          >
+            ×
+          </button>
+        </div>
+        <button type="submit" class="btn-buscar" [disabled]="carregando || sincronizando">
+          {{ carregando ? '…' : 'Buscar' }}
+        </button>
+      </div>
+
+      <div class="busca-acoes">
+        <button
+          type="button"
+          class="chip-toggle"
+          [class.ativa]="incluirZerados"
+          (click)="toggleZerados()"
+        >
+          {{ incluirZerados ? 'Com e sem estoque' : 'Só com estoque' }}
+        </button>
+        <button
+          type="button"
+          class="chip-toggle chip-perso"
+          [class.ativa]="soPersonalizaveis"
+          (click)="togglePersonalizaveis()"
+        >
+          {{ soPersonalizaveis ? 'Só personalizáveis' : 'Todas as capinhas' }}
+        </button>
+        <button
+          type="button"
+          class="btn-sync"
+          [disabled]="sincronizando || carregando"
+          (click)="atualizarDoBling()"
+        >
+          {{ sincronizando ? 'Atualizando…' : 'Atualizar' }}
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <p class="origem" *ngIf="tituloOrigem && buscou && !erro">{{ tituloOrigem }}</p>
   <div class="aviso-box" *ngIf="aviso">
     <p class="aviso">{{ aviso }}</p>
     <button type="button" class="btn-conectar" *ngIf="precisaConectarBling" (click)="conectarBling()">
-      Conectar Bling (capinhas)
+      Conectar Bling
     </button>
   </div>
   <p class="erro" *ngIf="erro">{{ erro }}</p>
-  <p class="loading" *ngIf="carregando">Consultando estoque no Bling…</p>
+  <p class="loading" *ngIf="carregando">Carregando estoque…</p>
+  <p class="loading" *ngIf="sincronizando && !carregando">Atualizando do Bling…</p>
 
-  <section class="resultados" *ngIf="!carregando && buscou && !erro && (!aviso || grupos.length > 0)">
-    <p class="vazio" *ngIf="grupos.length === 0 && !aviso">
-      Nada encontrado no Bling
-      <ng-container *ngIf="termo.trim()"> para <strong>{{ termo }}</strong></ng-container>
-      em {{ categorias.find(c => c.id === categoria)?.label }}.
-    </p>
+  <section id="consulta-resultados" class="resultados" *ngIf="!carregando && buscou && !erro">
+    <div class="resultados-meta" *ngIf="grupos.length > 0">
+      <strong>{{ grupos.length }}</strong>
+      {{ grupos.length === 1 ? 'resultado' : 'resultados' }}
+      <ng-container *ngIf="termo.trim()"> · «{{ termo }}»</ng-container>
+    </div>
 
-    <article class="card" *ngFor="let g of grupos">
-      <header class="card-head">
-        <h2>{{ g.nome }}</h2>
-        <span class="saldo-total" [ngClass]="saldoClass(g.saldoTotal)">
-          {{ g.saldoTotal }} un
-        </span>
-      </header>
-      <p class="modelo" *ngIf="g.modelo">Modelo: {{ g.modelo }}</p>
-      <ul class="cores">
-        <li *ngFor="let c of g.cores" [ngClass]="saldoClass(c.saldo)">
-          <span class="cor-nome">{{ c.cor }}</span>
-          <span class="cor-saldo">{{ c.saldo }}</span>
-        </li>
-      </ul>
-    </article>
+    <div class="vazio" *ngIf="grupos.length === 0">
+      <p class="vazio-titulo">Nada encontrado</p>
+      <p *ngIf="soPersonalizaveis">
+        Nenhum item <strong>personalizável</strong> neste filtro.
+        Desligue «Só personalizáveis» ou clique em <strong>Atualizar</strong> para sincronizar a flag do Bling.
+      </p>
+      <p *ngIf="!soPersonalizaveis">
+        Tente só o modelo (ex.: <strong>G84</strong>, <strong>A54</strong>, <strong>15</strong>)
+        ou a marca (<strong>Apple</strong>, <strong>Samsung</strong>).
+      </p>
+    </div>
+
+    <app-grid-paginator
+      *ngIf="grupos.length > 0"
+      [total]="grupos.length"
+      [page]="grid.page"
+      [pageSize]="grid.pageSize"
+      (pageChange)="onPaginaChange($event)"
+      (pageSizeChange)="onTamanhoPaginaChange($event)"
+    />
+
+    <ng-container *ngFor="let linha of linhasPaginadas">
+      <h2 class="marca-head" *ngIf="linha.kind === 'marca'">{{ linha.label }}</h2>
+      <h3 class="tipo-head" *ngIf="linha.kind === 'tipo'">{{ linha.label }}</h3>
+
+      <article class="card" *ngIf="linha.kind === 'item'">
+        <header class="card-head">
+          <div class="card-title">
+            <h4>{{ linha.grupo.modelo || 'Sem aparelho' }}</h4>
+            <span class="badge-perso" *ngIf="linha.grupo.permitePersonalizacao">Personalizável</span>
+          </div>
+          <span class="saldo-total" [ngClass]="saldoClass(linha.grupo.saldoTotal)">
+            {{ linha.grupo.saldoTotal }} un
+          </span>
+        </header>
+        <ul class="cores">
+          <li *ngFor="let c of linha.grupo.cores || []" [ngClass]="saldoClass(c.saldo)">
+            <span class="cor-swatch" [attr.data-cor]="(c.cor || '').toLowerCase()" aria-hidden="true"></span>
+            <span class="cor-nome">{{ c.cor }}</span>
+            <span class="cor-saldo">{{ c.saldo }}</span>
+          </li>
+        </ul>
+      </article>
+    </ng-container>
+
+    <app-grid-paginator
+      *ngIf="grupos.length > grid.pageSize"
+      [total]="grupos.length"
+      [page]="grid.page"
+      [pageSize]="grid.pageSize"
+      (pageChange)="onPaginaChange($event)"
+      (pageSizeChange)="onTamanhoPaginaChange($event)"
+    />
+
+    <button
+      type="button"
+      class="btn-topo"
+      *ngIf="grupos.length > 6"
+      (click)="rolarParaTopo()"
+    >
+      Voltar ao topo
+    </button>
   </section>
 </div>

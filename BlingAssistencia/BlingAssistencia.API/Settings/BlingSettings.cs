@@ -16,6 +16,18 @@ public class BlingSettings
     /// <summary>OAuth + GET produtos/estoques para consulta de capinhas (única integração ativa agora).</summary>
     public bool ConsultaProdutosHabilitada { get; set; } = false;
 
+    /// <summary>
+    /// Intervalo do sync Bling → Mongo em background (consulta do balcão lê só o cache).
+    /// Padrão 15 min — saldo razoável sem estourar rate limit.
+    /// </summary>
+    public int ConsultaProdutosSyncMinutos { get; set; } = 15;
+
+    /// <summary>
+    /// Id do campo customizado Bling «Permite Personalização» (opcional).
+    /// Se 0, a API tenta descobrir pelo nome do campo.
+    /// </summary>
+    public long IdCampoPermitePersonalizacao { get; set; }
+
     public string ClientId { get; set; } = string.Empty;
     public string ClientSecret { get; set; } = string.Empty;
     public string RedirectUri { get; set; } = string.Empty;

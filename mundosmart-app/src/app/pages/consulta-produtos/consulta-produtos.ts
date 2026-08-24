@@ -9,78 +9,133 @@ import {
   ConsultaProdutosService,
 } from '../../services/consulta-produtos';
 import { BlingAuthService } from '../../services/bling-auth';
+import { GridPaginator } from '../../components/grid-paginator/grid-paginator';
+import { GridPaginationState } from '../../utils/grid-pagination.state';
 
 @Component({
   selector: 'app-consulta-produtos',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, GridPaginator],
   templateUrl: './consulta-produtos.html',
   styleUrl: './consulta-produtos.scss',
 })
 export class ConsultaProdutosPage implements OnInit, OnDestroy {
   readonly categorias: Array<{ id: ConsultaProdutoCategoria; label: string; hint: string }> = [
-    { id: 'capinhas', label: 'Capinhas', hint: 'Modelo do aparelho (opcional)' },
-    { id: 'peliculas', label: 'Películas', hint: 'Modelo do aparelho (opcional)' },
-    { id: 'termicos', label: 'Térmicos', hint: 'Modelo da garrafa/copo (opcional)' },
+    { id: 'capinhas', label: 'Capinhas', hint: 'Digite o aparelho ou a marca' },
+    { id: 'peliculas', label: 'Películas', hint: 'Digite o aparelho ou a marca' },
+    { id: 'termicos', label: 'Térmicos', hint: 'Digite a marca ou o modelo' },
   ];
 
   categoria: ConsultaProdutoCategoria = 'capinhas';
   termo = '';
+    /// <summary>No balcão, o padrão é mostrar o que tem para vender.</summary>
   incluirZerados = false;
+  /** Filtra só itens com «Permite Personalização» ativo no Bling. */
+  soPersonalizaveis = true;
   carregando = false;
   erro = '';
   aviso = '';
   origem = '';
+  atualizadoEm: string | null = null;
+  syncIntervaloMinutos = 15;
+  sincronizando = false;
   grupos: ConsultaProdutoGrupo[] = [];
   buscou = false;
-
-  private readonly busca$ = new Subject<string>();
-  private sub?: Subscription;
+  readonly grid = new GridPaginationState();
 
   constructor(
     private service: ConsultaProdutosService,
     public blingAuth: BlingAuthService,
-  ) {}
+  ) {
+    // No celular, páginas menores = menos rolagem e consulta mais rápida.
+    const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches;
+    this.grid.pageSize = mobile ? 10 : 20;
+  }
+
+  /** Catálogo completo da categoria (sem filtro de texto). */
+  private catalogo: ConsultaProdutoGrupo[] = [];
+  private readonly catalogo$ = new Subject<string>();
+  private readonly filtro$ = new Subject<string>();
+  private sub?: Subscription;
 
   ngOnInit(): void {
-    this.sub = this.busca$
-      .pipe(
-        debounceTime(280),
-        distinctUntilChanged(),
-        switchMap(chave => {
-          const [categoria, termo, zerados] = chave.split('\t');
-          this.carregando = true;
-          this.erro = '';
-          this.aviso = '';
-          // Garante que o token do browser está na memória da API antes de consultar.
-          return this.blingAuth.syncTokenToApi().pipe(
-            switchMap(() =>
-              this.service.consultar(
-                categoria as ConsultaProdutoCategoria,
-                termo,
-                zerados === '1',
+    this.sub = new Subscription();
+
+    this.sub.add(
+      this.catalogo$
+        .pipe(
+          debounceTime(120),
+          distinctUntilChanged(),
+          switchMap(chave => {
+            const [categoria, zerados] = chave.split('\t');
+            this.carregando = true;
+            this.erro = '';
+            this.aviso = '';
+            return this.blingAuth.syncTokenToApi().pipe(
+              switchMap(() =>
+                this.service.consultar(
+                  categoria as ConsultaProdutoCategoria,
+                  '',
+                  zerados === '1',
+                ),
               ),
-            ),
-            catchError(err => {
+              catchError(err => {
+                this.carregando = false;
+                this.buscou = true;
+                this.catalogo = [];
+                this.grupos = [];
+                this.grid.reset();
+                this.erro = this.mensagemErroHttp(err);
+                return of(null);
+              }),
+            );
+          }),
+        )
+        .subscribe({
+          next: resp => {
+            if (!resp) return;
+            try {
               this.carregando = false;
               this.buscou = true;
+              this.catalogo = Array.isArray(resp.grupos) ? resp.grupos : [];
+              this.origem = resp.origem ?? '';
+              this.aviso = resp.aviso ?? '';
+              this.atualizadoEm = resp.atualizadoEm ?? null;
+              this.syncIntervaloMinutos = resp.syncIntervaloMinutos ?? 15;
+              this.aplicarFiltroLocal();
+            } catch (e) {
+              console.error(e);
+              this.carregando = false;
+              this.buscou = true;
+              this.catalogo = [];
               this.grupos = [];
-              this.erro = err.error?.erro ?? 'Não foi possível consultar o estoque.';
-              return of(null);
-            }),
-          );
+              this.grid.reset();
+              this.erro = 'Consulta de produtos falhou inesperadamente. Tente novamente.';
+            }
+          },
+          error: err => {
+            console.error(err);
+            this.carregando = false;
+            this.buscou = true;
+            this.catalogo = [];
+            this.grupos = [];
+            this.grid.reset();
+            this.erro = 'Consulta de produtos falhou inesperadamente. Tente novamente.';
+          },
         }),
-      )
-      .subscribe(resp => {
-        if (!resp) return;
-        this.carregando = false;
-        this.buscou = true;
-        this.grupos = resp.grupos ?? [];
-        this.origem = resp.origem ?? '';
-        this.aviso = resp.aviso ?? '';
-      });
+    );
 
-    this.dispararBusca();
+    this.sub.add(
+      this.filtro$.pipe(debounceTime(160), distinctUntilChanged()).subscribe(() => {
+        try {
+          this.aplicarFiltroLocal();
+        } catch (e) {
+          console.error(e);
+        }
+      }),
+    );
+
+    this.recarregarCatalogo();
   }
 
   ngOnDestroy(): void {
@@ -93,51 +148,218 @@ export class ConsultaProdutosPage implements OnInit, OnDestroy {
 
   get placeholder(): string {
     return this.categoria === 'termicos'
-      ? 'Ex: 500ml, Stanley… ou deixe em branco'
-      : 'Ex: A54, iPhone 15… ou deixe em branco';
+      ? 'Ex.: Stanley, 500ml…'
+      : 'Ex.: G84, A54, iPhone 15…';
   }
 
   get tituloOrigem(): string {
-    if (this.origem === 'bling') return 'Estoque Bling';
+    if (this.origem === 'cache' || this.origem === 'bling') {
+      const quando = this.textoAtualizadoEm;
+      return quando ? `Atualizado ${quando}` : 'Estoque local';
+    }
     return '';
+  }
+
+  get textoAtualizadoEm(): string {
+    if (!this.atualizadoEm) return '';
+    const d = new Date(this.atualizadoEm);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   get precisaConectarBling(): boolean {
     return !this.blingAuth.isAuthenticated()
-      || (!!this.aviso && /conecte o bling|não conectado|expirado/i.test(this.aviso));
+      || (!!this.aviso && /conecte o bling|não conectado|expirado|desabilitada|insufficient_scope|403|permiss/i.test(this.aviso));
+  }
+
+  get gruposPaginados(): ConsultaProdutoGrupo[] {
+    return this.grid.paginate(this.grupos);
+  }
+
+  /** Linhas de lista com cabeçalhos de marca/tipo intercalados. */
+  get linhasPaginadas(): Array<
+    | { kind: 'marca'; label: string }
+    | { kind: 'tipo'; label: string }
+    | { kind: 'item'; grupo: ConsultaProdutoGrupo }
+  > {
+    const linhas: Array<
+      | { kind: 'marca'; label: string }
+      | { kind: 'tipo'; label: string }
+      | { kind: 'item'; grupo: ConsultaProdutoGrupo }
+    > = [];
+    let marcaAtual = '';
+    let tipoAtual = '';
+
+    for (const g of this.gruposPaginados) {
+      const marca = (g.marca || 'Outras').trim();
+      const tipo = (g.nome || 'Capinha').trim();
+      if (marca.toLowerCase() !== marcaAtual.toLowerCase()) {
+        marcaAtual = marca;
+        tipoAtual = '';
+        linhas.push({ kind: 'marca', label: marca });
+      }
+      if (tipo.toLowerCase() !== tipoAtual.toLowerCase()) {
+        tipoAtual = tipo;
+        linhas.push({ kind: 'tipo', label: tipo });
+      }
+      linhas.push({ kind: 'item', grupo: g });
+    }
+    return linhas;
   }
 
   conectarBling(): void {
-    this.blingAuth.getAuthorizationUrl().subscribe(({ authorizationUrl }) => {
-      window.location.href = authorizationUrl;
+    this.blingAuth.getAuthorizationUrl().subscribe({
+      next: ({ authorizationUrl }) => {
+        window.location.href = authorizationUrl;
+      },
+      error: () => {
+        this.erro = 'Não foi possível iniciar a conexão com o Bling.';
+      },
+    });
+  }
+
+  atualizarDoBling(): void {
+    if (this.sincronizando) return;
+    this.sincronizando = true;
+    this.erro = '';
+    this.blingAuth.syncTokenToApi().pipe(
+      switchMap(() => this.service.sincronizar(this.categoria)),
+      catchError(err => {
+        this.sincronizando = false;
+        this.aviso = this.mensagemErroHttp(err);
+        return of(null);
+      }),
+    ).subscribe(result => {
+      this.sincronizando = false;
+      if (!result) return;
+      if (result.atualizadoEm) this.atualizadoEm = result.atualizadoEm;
+      if (result.aviso) this.aviso = result.aviso;
+      else if (result.ok) this.aviso = `Sincronizado: ${result.itens} itens do Bling.`;
+      this.recarregarCatalogo();
     });
   }
 
   selecionarCategoria(cat: ConsultaProdutoCategoria): void {
     if (this.categoria === cat) return;
     this.categoria = cat;
+    this.catalogo = [];
     this.grupos = [];
+    this.grid.reset();
     this.buscou = false;
     this.aviso = '';
     this.erro = '';
-    this.dispararBusca();
+    this.recarregarCatalogo();
   }
 
   onTermoChange(): void {
-    this.dispararBusca();
+    this.filtro$.next(this.termo.trim().toLowerCase());
+  }
+
+  limparBusca(): void {
+    this.termo = '';
+    this.filtro$.next('');
   }
 
   buscar(): void {
-    this.dispararBusca();
+    this.recarregarCatalogo();
   }
 
   toggleZerados(): void {
     this.incluirZerados = !this.incluirZerados;
-    this.dispararBusca();
+    this.recarregarCatalogo();
   }
 
-  private dispararBusca(): void {
-    this.busca$.next(`${this.categoria}\t${this.termo.trim()}\t${this.incluirZerados ? '1' : '0'}`);
+  togglePersonalizaveis(): void {
+    this.soPersonalizaveis = !this.soPersonalizaveis;
+    this.aplicarFiltroLocal();
+  }
+
+  onPaginaChange(pagina: number): void {
+    this.grid.onPageChange(pagina);
+    this.rolarParaResultados();
+  }
+
+  onTamanhoPaginaChange(tamanho: number): void {
+    this.grid.onPageSizeChange(tamanho);
+    this.rolarParaResultados();
+  }
+
+  private recarregarCatalogo(): void {
+    this.catalogo$.next(`${this.categoria}\t${this.incluirZerados ? '1' : '0'}`);
+  }
+
+  private aplicarFiltroLocal(): void {
+    const lista = Array.isArray(this.catalogo) ? this.catalogo : [];
+    const t = this.normalizar(this.termo);
+    let filtrada = lista;
+    if (this.soPersonalizaveis) {
+      filtrada = filtrada.filter(g => !!g.permitePersonalizacao);
+    }
+    // No celular, 1 caractere já filtra (ex.: "A", "G") — mais ágil no balcão.
+    if (t.length >= 1) {
+      const tokens = t.split(/\s+/).filter(x => x.length >= 1);
+      filtrada = filtrada.filter(g => this.grupoCombina(g, t, tokens));
+    }
+    this.grupos = filtrada;
+    this.grid.reset();
+  }
+
+  private rolarParaResultados(): void {
+    if (typeof document === 'undefined') return;
+    document.getElementById('consulta-resultados')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }
+
+  rolarParaTopo(): void {
+    if (typeof window === 'undefined') return;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  private grupoCombina(g: ConsultaProdutoGrupo, termo: string, tokens: string[]): boolean {
+    const perso = g?.permitePersonalizacao ? 'personalizavel personalizacao personalizado' : '';
+    const hay = this.normalizar(
+      [g?.modelo, g?.marca, g?.nome, perso, ...(g?.cores ?? []).map(c => c?.cor)]
+        .filter(Boolean)
+        .join(' '),
+    );
+    const hayCompact = hay.replace(/\s+/g, '');
+    const termoCompact = termo.replace(/\s+/g, '');
+
+    if (hay.includes(termo) || (termoCompact.length >= 2 && hayCompact.includes(termoCompact))) {
+      return true;
+    }
+    if (tokens.length > 1) {
+      return tokens.every(
+        tok => hay.includes(tok) || hayCompact.includes(tok.replace(/\s+/g, '')),
+      );
+    }
+    return false;
+  }
+
+  private normalizar(valor: string | undefined | null): string {
+    return (valor ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private mensagemErroHttp(err: unknown): string {
+    const anyErr = err as { error?: { erro?: string; message?: string }; message?: string; status?: number };
+    const doBody = anyErr?.error?.erro || anyErr?.error?.message;
+    if (typeof doBody === 'string' && doBody.trim()) return doBody.trim();
+    if (anyErr?.status === 0) {
+      return 'Não foi possível conectar à API. Verifique a rede e se o servidor está no ar.';
+    }
+    return 'Consulta de produtos falhou inesperadamente. Tente novamente.';
   }
 
   saldoClass(saldo: number): string {

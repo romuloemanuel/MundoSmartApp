@@ -15,22 +15,65 @@ public interface IBlingAuthService
 
 public class BlingAuthService : IBlingAuthService
 {
-    private readonly IConfiguration _config;
+    private readonly IBlingEffectiveSettings _settings;
     private readonly HttpClient _http;
+    private readonly ILogger<BlingAuthService> _log;
+    private readonly string _tokenPath;
+    private readonly object _gate = new();
     private BlingTokenResponse? _currentToken;
 
-    private string ClientId => _config["Bling:ClientId"] ?? throw new InvalidOperationException("Bling:ClientId não configurado.");
-    private string ClientSecret => _config["Bling:ClientSecret"] ?? throw new InvalidOperationException("Bling:ClientSecret não configurado.");
-    private string RedirectUri => _config["Bling:RedirectUri"] ?? throw new InvalidOperationException("Bling:RedirectUri não configurado.");
-
-    public BlingAuthService(IConfiguration config, IHttpClientFactory httpClientFactory)
+    private string ClientId
     {
-        _config = config;
+        get
+        {
+            var v = _settings.Current.ClientId;
+            if (string.IsNullOrWhiteSpace(v))
+                throw new InvalidOperationException("Bling ClientId não configurado. Vá em Configurações → Bling.");
+            return v;
+        }
+    }
+
+    private string ClientSecret
+    {
+        get
+        {
+            var v = _settings.Current.ClientSecret;
+            if (string.IsNullOrWhiteSpace(v))
+                throw new InvalidOperationException("Bling ClientSecret não configurado. Vá em Configurações → Bling.");
+            return v;
+        }
+    }
+
+    private string RedirectUri
+    {
+        get
+        {
+            var v = _settings.Current.RedirectUri;
+            if (string.IsNullOrWhiteSpace(v))
+                throw new InvalidOperationException("Bling RedirectUri não configurado. Vá em Configurações → Bling.");
+            return v;
+        }
+    }
+
+    public BlingAuthService(
+        IBlingEffectiveSettings settings,
+        IHttpClientFactory httpClientFactory,
+        IHostEnvironment env,
+        ILogger<BlingAuthService> log)
+    {
+        _settings = settings;
         _http = httpClientFactory.CreateClient("BlingAuth");
+        _log = log;
+        var dir = Path.Combine(env.ContentRootPath, "App_Data");
+        Directory.CreateDirectory(dir);
+        _tokenPath = Path.Combine(dir, "bling-consulta-token.json");
+        _currentToken = CarregarTokenDisco();
     }
 
     public string GetAuthorizationUrl()
     {
+        // Garante override Mongo carregado antes de montar a URL.
+        _settings.EnsureLoadedAsync().GetAwaiter().GetResult();
         var state = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))
             .ToLowerInvariant();
         return $"https://www.bling.com.br/Api/v3/oauth/authorize" +
@@ -42,6 +85,7 @@ public class BlingAuthService : IBlingAuthService
 
     public async Task<BlingTokenResponse> ExchangeCodeAsync(string code)
     {
+        await _settings.EnsureLoadedAsync();
         var credentials = Convert.ToBase64String(
             System.Text.Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"));
 
@@ -65,12 +109,14 @@ public class BlingAuthService : IBlingAuthService
         var result = JsonSerializer.Deserialize<BlingTokenRaw>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("Resposta de token Bling inválida.");
 
-        _currentToken = MapToken(result);
-        return _currentToken;
+        var mapped = MapToken(result);
+        SetToken(mapped);
+        return mapped;
     }
 
     public async Task<BlingTokenResponse> RefreshTokenAsync(string refreshToken)
     {
+        await _settings.EnsureLoadedAsync();
         var credentials = Convert.ToBase64String(
             System.Text.Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"));
 
@@ -83,18 +129,72 @@ public class BlingAuthService : IBlingAuthService
         });
 
         var response = await _http.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-
         var json = await response.Content.ReadAsStringAsync();
-        var result = JsonSerializer.Deserialize<BlingTokenRaw>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Bling refresh HTTP {(int)response.StatusCode}: {json}");
+        }
 
-        _currentToken = MapToken(result);
-        return _currentToken;
+        var result = JsonSerializer.Deserialize<BlingTokenRaw>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var mapped = MapToken(result);
+        SetToken(mapped);
+        return mapped;
     }
 
-    public BlingTokenResponse? GetCurrentToken() => _currentToken;
+    public BlingTokenResponse? GetCurrentToken()
+    {
+        lock (_gate) return _currentToken;
+    }
 
-    public void SetToken(BlingTokenResponse token) => _currentToken = token;
+    public void SetToken(BlingTokenResponse token)
+    {
+        lock (_gate)
+        {
+            _currentToken = token;
+            SalvarTokenDisco(token);
+        }
+    }
+
+    private BlingTokenResponse? CarregarTokenDisco()
+    {
+        try
+        {
+            if (!File.Exists(_tokenPath)) return null;
+            var json = File.ReadAllText(_tokenPath);
+            var token = JsonSerializer.Deserialize<BlingTokenResponse>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+            });
+            if (token is null || string.IsNullOrWhiteSpace(token.AccessToken)) return null;
+            if (token.ExpiresAt <= DateTime.UtcNow.AddMinutes(1)
+                && string.IsNullOrWhiteSpace(token.RefreshToken))
+            {
+                return null;
+            }
+
+            _log.LogInformation("Token Bling de consulta carregado do disco (expira {Exp})", token.ExpiresAt);
+            return token;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Falha ao ler token Bling do disco");
+            return null;
+        }
+    }
+
+    private void SalvarTokenDisco(BlingTokenResponse token)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(token);
+            File.WriteAllText(_tokenPath, json);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Falha ao gravar token Bling no disco");
+        }
+    }
 
     private static BlingTokenResponse MapToken(BlingTokenRaw raw) => new()
     {

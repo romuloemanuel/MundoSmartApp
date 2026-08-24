@@ -46,6 +46,8 @@ builder.Services.AddSingleton<IPecaEstoqueRepository, PecaEstoqueRepository>();
 builder.Services.AddSingleton<ICategoriaPecaRepository, CategoriaPecaRepository>();
 builder.Services.AddSingleton<IAssistenciaConfigRepository, AssistenciaConfigRepository>();
 builder.Services.AddSingleton<IAssistenciaConfigService, AssistenciaConfigService>();
+builder.Services.AddSingleton<IBlingConfigRepository, BlingConfigRepository>();
+builder.Services.AddSingleton<IBlingEffectiveSettings, BlingEffectiveSettings>();
 builder.Services.AddSingleton<ITecnicoRepository, TecnicoRepository>();
 builder.Services.AddSingleton<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddSingleton<IRefreshTokenRepository, RefreshTokenRepository>();
@@ -62,6 +64,7 @@ builder.Services.AddHttpClient("BlingProdutos", client =>
 });
 builder.Services.AddSingleton<IBlingProdutoAcessorioRepository, BlingProdutoAcessorioRepository>();
 builder.Services.AddSingleton<IBlingProdutoConsultaService, BlingProdutoConsultaService>();
+builder.Services.AddHostedService<BlingProdutoSyncHostedService>();
 builder.Services.AddScoped<IOsIntakeService, OsIntakeService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IOsHistoricoRepository, OsHistoricoRepository>();
@@ -263,6 +266,8 @@ try
     Console.WriteLine("[MundoSmart API] Categorias de peça seedadas.");
     var acessoriosRepo = app.Services.GetRequiredService<IBlingProdutoAcessorioRepository>();
     await acessoriosRepo.EnsureIndexesAsync();
+    await app.Services.GetRequiredService<IBlingEffectiveSettings>().EnsureLoadedAsync();
+    await acessoriosRepo.GarantirSeedAsync();
     Console.WriteLine("[MundoSmart API] Consulta de acessórios: só Bling (sem catálogo local).");
     var estoqueLote = app.Services.GetRequiredService<IEstoqueLoteService>();
     await estoqueLote.EnsureIndexesAsync();

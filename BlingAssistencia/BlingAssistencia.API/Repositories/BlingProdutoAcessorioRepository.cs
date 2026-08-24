@@ -11,6 +11,7 @@ public interface IBlingProdutoAcessorioRepository
     Task GarantirSeedAsync();
     Task<List<BlingProdutoAcessorioCache>> BuscarAsync(string categoria, string termo, bool incluirZerados);
     Task UpsertMuitosAsync(IEnumerable<BlingProdutoAcessorioCache> itens);
+    Task<DateTime?> ObterUltimaAtualizacaoAsync(string? categoria = null);
 }
 
 public class BlingProdutoAcessorioRepository : IBlingProdutoAcessorioRepository
@@ -52,13 +53,15 @@ public class BlingProdutoAcessorioRepository : IBlingProdutoAcessorioRepository
                 Builders<BlingProdutoAcessorioCache>.Filter.Regex(x => x.Nome, rx),
                 Builders<BlingProdutoAcessorioCache>.Filter.Regex(x => x.NomeBase, rx),
                 Builders<BlingProdutoAcessorioCache>.Filter.Regex(x => x.Modelo, rx),
+                Builders<BlingProdutoAcessorioCache>.Filter.Regex(x => x.Marca, rx),
+                Builders<BlingProdutoAcessorioCache>.Filter.Regex(x => x.Cor, rx),
                 Builders<BlingProdutoAcessorioCache>.Filter.Regex(x => x.Codigo, rx));
         }
 
         return await _col.Find(filtro)
             .SortBy(x => x.NomeBase)
             .ThenBy(x => x.Cor)
-            .Limit(200)
+            .Limit(string.IsNullOrWhiteSpace(t) ? 5000 : 800)
             .ToListAsync();
     }
 
@@ -73,11 +76,13 @@ public class BlingProdutoAcessorioRepository : IBlingProdutoAcessorioRepository
                 .Set(x => x.Nome, item.Nome)
                 .Set(x => x.NomeBase, item.NomeBase)
                 .Set(x => x.Modelo, item.Modelo)
+                .Set(x => x.Marca, item.Marca)
                 .Set(x => x.Cor, item.Cor)
                 .Set(x => x.Codigo, item.Codigo)
                 .Set(x => x.Saldo, item.Saldo)
                 .Set(x => x.Preco, item.Preco)
                 .Set(x => x.ImagemUrl, item.ImagemUrl)
+                .Set(x => x.PermitePersonalizacao, item.PermitePersonalizacao)
                 .Set(x => x.AtualizadoEm, agora)
                 .SetOnInsert(x => x.BlingId, item.BlingId);
 
@@ -88,16 +93,67 @@ public class BlingProdutoAcessorioRepository : IBlingProdutoAcessorioRepository
         }
     }
 
+    public async Task<DateTime?> ObterUltimaAtualizacaoAsync(string? categoria = null)
+    {
+        var filtro = string.IsNullOrWhiteSpace(categoria)
+            ? Builders<BlingProdutoAcessorioCache>.Filter.Empty
+            : Builders<BlingProdutoAcessorioCache>.Filter.Eq(x => x.Categoria, categoria);
+
+        var item = await _col.Find(filtro)
+            .SortByDescending(x => x.AtualizadoEm)
+            .Limit(1)
+            .FirstOrDefaultAsync();
+        return item?.AtualizadoEm;
+    }
+
     public async Task GarantirSeedAsync()
     {
         var count = await _col.CountDocumentsAsync(_ => true);
-        if (count > 0) return;
+        if (count > 0)
+        {
+            // Seed antigo sem Motorola/couro → complementa exemplos locais.
+            var temMoto = await _col.Find(x => x.Categoria == "capinhas" && x.Modelo != null && x.Modelo.ToLower().Contains("moto")).AnyAsync();
+            if (temMoto) return;
+
+            var agoraExtra = DateTime.UtcNow;
+            long idExtra = -910_001;
+            var extra = new List<BlingProdutoAcessorioCache>();
+            foreach (var modelo in new[] { "Moto G84", "Moto G54", "Moto Edge 40" })
+            {
+                foreach (var (tipo, cor, saldo, preco) in new (string, string, int, decimal)[]
+                         {
+                             ("Capinha Silicone", "Preto", 8, 29.9m),
+                             ("Capinha Couro", "Marrom", 4, 49.9m),
+                             ("Capinha Couro", "Preto", 3, 49.9m),
+                             ("Capinha Antishock", "Preto", 2, 39.9m),
+                         })
+                {
+                    extra.Add(new BlingProdutoAcessorioCache
+                    {
+                        BlingId = idExtra--,
+                        Categoria = "capinhas",
+                        Nome = $"{tipo} {modelo} {cor}",
+                        NomeBase = tipo,
+                        Modelo = modelo,
+                        Marca = "Motorola",
+                        Cor = cor,
+                        Saldo = saldo,
+                        Preco = preco,
+                        Codigo = $"CAP-{modelo.Replace(" ", "")}-{cor[..2].ToUpperInvariant()}",
+                        AtualizadoEm = agoraExtra,
+                    });
+                }
+            }
+            if (extra.Count > 0)
+                await _col.InsertManyAsync(extra);
+            return;
+        }
 
         var agora = DateTime.UtcNow;
         long id = -900_001;
         var seed = new List<BlingProdutoAcessorioCache>();
 
-        void Add(string cat, string nomeBase, string modelo, string cor, int saldo, decimal preco)
+        void Add(string cat, string nomeBase, string modelo, string? marca, string cor, int saldo, decimal preco)
         {
             var titulo = cat == "termicos" ? nomeBase : $"{nomeBase} {modelo}".Trim();
             seed.Add(new BlingProdutoAcessorioCache
@@ -105,8 +161,9 @@ public class BlingProdutoAcessorioRepository : IBlingProdutoAcessorioRepository
                 BlingId = id--,
                 Categoria = cat,
                 Nome = $"{titulo} {cor}".Trim(),
-                NomeBase = titulo,
+                NomeBase = nomeBase,
                 Modelo = modelo,
+                Marca = marca,
                 Cor = cor,
                 Saldo = saldo,
                 Preco = preco,
@@ -115,26 +172,31 @@ public class BlingProdutoAcessorioRepository : IBlingProdutoAcessorioRepository
             });
         }
 
-        foreach (var modelo in new[] { "iPhone 13", "iPhone 15", "Galaxy A54", "Galaxy A15" })
+        foreach (var modelo in new[] { "iPhone 13", "iPhone 15", "Galaxy A54", "Galaxy A15", "Moto G84", "Moto G54", "Moto Edge 40" })
         {
-            Add("capinhas", "Capinha Silicone", modelo, "Preto", 8, 29.9m);
-            Add("capinhas", "Capinha Silicone", modelo, "Azul", 4, 29.9m);
-            Add("capinhas", "Capinha Silicone", modelo, "Transparente", 6, 24.9m);
-            Add("capinhas", "Capinha Antishock", modelo, "Preto", 3, 39.9m);
-            Add("capinhas", "Capinha Antishock", modelo, "Rosa", 2, 39.9m);
-            Add("peliculas", "Película 3D", modelo, "Transparente", 12, 19.9m);
-            Add("peliculas", "Película Privacidade", modelo, "Preto", 5, 34.9m);
+            var marca = modelo.StartsWith("iPhone", StringComparison.OrdinalIgnoreCase) ? "Apple"
+                : modelo.StartsWith("Galaxy", StringComparison.OrdinalIgnoreCase) ? "Samsung"
+                : modelo.StartsWith("Moto", StringComparison.OrdinalIgnoreCase) ? "Motorola"
+                : null;
+            Add("capinhas", "Capinha Silicone", modelo, marca, "Preto", 8, 29.9m);
+            Add("capinhas", "Capinha Silicone", modelo, marca, "Azul", 4, 29.9m);
+            Add("capinhas", "Capinha Couro", modelo, marca, "Preto", 5, 49.9m);
+            Add("capinhas", "Capinha Couro", modelo, marca, "Marrom", 3, 49.9m);
+            Add("capinhas", "Capinha Antishock", modelo, marca, "Preto", 3, 39.9m);
+            Add("capinhas", "Capinha Antishock", modelo, marca, "Rosa", 2, 39.9m);
+            Add("peliculas", "Película 3D", modelo, marca, "Transparente", 12, 19.9m);
+            Add("peliculas", "Película Privacidade", modelo, marca, "Preto", 5, 34.9m);
         }
 
-        Add("termicos", "Garrafa Térmica 500ml", "500ml", "Preto", 7, 89.9m);
-        Add("termicos", "Garrafa Térmica 500ml", "500ml", "Branco", 4, 89.9m);
-        Add("termicos", "Garrafa Térmica 500ml", "500ml", "Azul", 2, 89.9m);
-        Add("termicos", "Garrafa Térmica 887ml", "887ml", "Preto", 3, 129.9m);
-        Add("termicos", "Garrafa Térmica 887ml", "887ml", "Verde", 1, 129.9m);
-        Add("termicos", "Copo Térmico 473ml", "473ml", "Preto", 6, 79.9m);
-        Add("termicos", "Copo Térmico 473ml", "473ml", "Rosa", 3, 79.9m);
-        Add("termicos", "Copo Térmico Stanley", "Stanley", "Preto", 4, 199.9m);
-        Add("termicos", "Copo Térmico Stanley", "Stanley", "Verde", 2, 199.9m);
+        Add("termicos", "Garrafa Térmica 500ml", "500ml", null, "Preto", 7, 89.9m);
+        Add("termicos", "Garrafa Térmica 500ml", "500ml", null, "Branco", 4, 89.9m);
+        Add("termicos", "Garrafa Térmica 500ml", "500ml", null, "Azul", 2, 89.9m);
+        Add("termicos", "Garrafa Térmica 887ml", "887ml", null, "Preto", 3, 129.9m);
+        Add("termicos", "Garrafa Térmica 887ml", "887ml", null, "Verde", 1, 129.9m);
+        Add("termicos", "Copo Térmico 473ml", "473ml", null, "Preto", 6, 79.9m);
+        Add("termicos", "Copo Térmico 473ml", "473ml", null, "Rosa", 3, 79.9m);
+        Add("termicos", "Copo Térmico Stanley", "Stanley", "Stanley", "Preto", 4, 199.9m);
+        Add("termicos", "Copo Térmico Stanley", "Stanley", "Stanley", "Verde", 2, 199.9m);
 
         await _col.InsertManyAsync(seed);
     }

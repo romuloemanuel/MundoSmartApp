@@ -12,11 +12,19 @@ public class ConfigController : ControllerBase
 {
     private readonly IEstoqueNivelService _estoqueNivel;
     private readonly IAssistenciaConfigService _assistenciaConfig;
+    private readonly IBlingEffectiveSettings _blingConfig;
+    private readonly IBlingAuthService _blingAuth;
 
-    public ConfigController(IEstoqueNivelService estoqueNivel, IAssistenciaConfigService assistenciaConfig)
+    public ConfigController(
+        IEstoqueNivelService estoqueNivel,
+        IAssistenciaConfigService assistenciaConfig,
+        IBlingEffectiveSettings blingConfig,
+        IBlingAuthService blingAuth)
     {
         _estoqueNivel = estoqueNivel;
         _assistenciaConfig = assistenciaConfig;
+        _blingConfig = blingConfig;
+        _blingAuth = blingAuth;
     }
 
     [HttpGet("estoque")]
@@ -59,6 +67,38 @@ public class ConfigController : ControllerBase
         try
         {
             var salvo = await _assistenciaConfig.SalvarAcrescimoEstoqueAsync(dto, cancellationToken);
+            return Ok(salvo);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
+    /// <summary>Credenciais e flags Bling para produção (somente Admin/Root).</summary>
+    [Authorize(Roles = AppRoles.AdminOuRoot)]
+    [HttpGet("bling")]
+    public async Task<IActionResult> Bling(CancellationToken cancellationToken)
+    {
+        var dto = await _blingConfig.ObterAdminAsync(cancellationToken);
+        var token = _blingAuth.GetCurrentToken();
+        dto.TokenConectado = token is not null && token.ExpiresAt > DateTime.UtcNow;
+        dto.TokenExpiraEm = token?.ExpiresAt;
+        return Ok(dto);
+    }
+
+    [Authorize(Roles = AppRoles.AdminOuRoot)]
+    [HttpPut("bling")]
+    public async Task<IActionResult> SalvarBling(
+        [FromBody] BlingConfigAdminSalvarDto dto,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var salvo = await _blingConfig.SalvarAdminAsync(dto, cancellationToken);
+            var token = _blingAuth.GetCurrentToken();
+            salvo.TokenConectado = token is not null && token.ExpiresAt > DateTime.UtcNow;
+            salvo.TokenExpiraEm = token?.ExpiresAt;
             return Ok(salvo);
         }
         catch (ArgumentException ex)

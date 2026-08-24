@@ -1,9 +1,10 @@
 import { Injectable, inject, provideAppInitializer } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable, of, tap } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { BlingTokenResponse } from '../models/bling.models';
 import { environment } from '../../environments/environment';
+import { SKIP_GLOBAL_ERROR_ALERT } from '../interceptors/error-alert.interceptor';
 
 @Injectable({
   providedIn: 'root',
@@ -51,6 +52,8 @@ export class BlingAuthService {
       accessToken: token.accessToken,
       refreshToken: token.refreshToken,
       expiresIn: restanteSeg,
+    }, {
+      context: new HttpContext().set(SKIP_GLOBAL_ERROR_ALERT, true),
     }).pipe(catchError(() => of(null)));
   }
 
