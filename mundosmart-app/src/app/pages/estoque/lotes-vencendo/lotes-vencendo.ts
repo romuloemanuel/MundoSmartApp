@@ -5,10 +5,12 @@ import { RouterLink } from '@angular/router';
 import { EstoqueService } from '../../../services/estoque';
 import { LoteGarantiaItem } from '../../../models/estoque.models';
 
+import { EstoquePageNav } from '../../../components/estoque-page-nav/estoque-page-nav';
+
 @Component({
   selector: 'app-lotes-vencendo',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, EstoquePageNav],
   templateUrl: './lotes-vencendo.html',
   styles: [`
     .filtros {
@@ -20,15 +22,6 @@ import { LoteGarantiaItem } from '../../../models/estoque.models';
     }
     .filtros .form-group { margin: 0; min-width: 160px; }
     .filtros select, .filtros input { width: 100%; }
-    .links-secundarios {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin: 0 0 16px;
-      font-size: 13px;
-    }
-    .links-secundarios a { color: #1d4ed8; text-decoration: none; }
-    .links-secundarios a:hover { text-decoration: underline; }
     .resumo {
       display: flex;
       flex-wrap: wrap;

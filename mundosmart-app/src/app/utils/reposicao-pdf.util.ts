@@ -35,7 +35,7 @@ function pecasUtilizadas(relatorio: ReposicaoSemanalResponse): ReposicaoSemanalI
       || (a.cor || '').localeCompare(b.cor || '', 'pt-BR'));
 }
 
-/** PDF: somente peças utilizadas no período (peça, marca, modelo, cor, qtd). */
+/** PDF: peças utilizadas no período com saldo e sugestão de pedido. */
 export function montarHtmlReposicaoPdf(
   relatorio: ReposicaoSemanalResponse,
   opts: ReposicaoPdfOpcoes,
@@ -61,6 +61,8 @@ export function montarHtmlReposicaoPdf(
           <th>Modelo</th>
           <th>Cor</th>
           <th class="num">Qtd utilizada</th>
+          <th class="num">Disponível</th>
+          <th class="num">Sugerido pedir</th>
         </tr>
       </thead>
       <tbody>
@@ -71,6 +73,8 @@ export function montarHtmlReposicaoPdf(
             <td>${esc(labelModelo(r.modeloNome, r.modeloId))}</td>
             <td>${esc(r.cor?.trim() ? r.cor : '—')}</td>
             <td class="num">${esc(r.quantidadeSaida)}</td>
+            <td class="num">${esc(r.estoqueAtual ?? 0)}</td>
+            <td class="num">${esc(r.sugestaoReposicao ?? 0)}</td>
           </tr>`).join('')}
       </tbody>
     </table>`

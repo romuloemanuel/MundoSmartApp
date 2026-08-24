@@ -68,6 +68,7 @@ import {
 import { FORNECEDORES_ESTOQUE_PRECADASTRO } from '../../config/os-peca-origem.config';
 import { AppAuthService } from '../../services/app-auth';
 import { avisarErroUsuario } from '../../services/user-feedback.service';
+import { EstoquePageNav } from '../../components/estoque-page-nav/estoque-page-nav';
 
 type AbaEstoque =
   | 'estoque'
@@ -87,46 +88,9 @@ interface EstoqueGrupoMarca {
 @Component({
   selector: 'app-estoque',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, NovaPecaPedidoModal, ItemPedidoLoteModal, AutocompleteCriavel, GridPaginator],
+  imports: [CommonModule, FormsModule, RouterLink, NovaPecaPedidoModal, ItemPedidoLoteModal, AutocompleteCriavel, GridPaginator, EstoquePageNav],
   templateUrl: './estoque.html',
   styles: [`
-    .estoque-abas {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .estoque-abas button {
-      padding: 8px 14px;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      background: #fff;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-      color: #475569;
-    }
-    .estoque-abas button.ativa {
-      background: #2563eb;
-      border-color: #2563eb;
-      color: #fff;
-    }
-    .estoque-aba-link {
-      display: inline-flex;
-      align-items: center;
-      padding: 8px 14px;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      background: #fff;
-      color: #475569;
-      font-size: 13px;
-      font-weight: 600;
-      text-decoration: none;
-    }
-    .estoque-aba-link:hover {
-      border-color: #93c5fd;
-      color: #1d4ed8;
-    }
     .estoque-painel {
       background: #fff;
       border: 1px solid #e2e8f0;

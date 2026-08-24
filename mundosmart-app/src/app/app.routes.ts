@@ -25,6 +25,8 @@ import { LoginPage } from './pages/login/login';
 import { AlterarSenhaPage } from './pages/conta/alterar-senha';
 import { UsuariosLista } from './pages/usuarios/lista';
 import { CategoriasPecaLista } from './pages/categorias-peca/lista/lista';
+import { ConsultaProdutosPage } from './pages/consulta-produtos/consulta-produtos';
+import { ConsultaTelasPage } from './pages/consulta-telas/consulta-telas';
 import { adminGuard, authGuard, guestGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
@@ -90,11 +92,8 @@ export const routes: Routes = [
       { path: 'orcamentos', component: OrcamentosLista },
       { path: 'orcamentos/novo', component: OrcamentosForm },
       { path: 'orcamentos/:id', component: OrcamentosForm },
-      {
-        path: 'consulta-produtos',
-        loadComponent: () =>
-          import('./pages/consulta-produtos/consulta-produtos').then(m => m.ConsultaProdutosPage),
-      },
+      { path: 'consulta-produtos', component: ConsultaProdutosPage },
+      { path: 'consulta-telas', component: ConsultaTelasPage },
       {
         path: 'calculo-juros',
         loadComponent: () =>

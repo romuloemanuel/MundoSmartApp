@@ -87,6 +87,13 @@ export function inferirCategoriaPeca(nome: string, categoria?: string): string {
   return 'Outros';
 }
 
+/** Peças de display (OLED / Incell / LCD), com ou sem aro. */
+export function ehCategoriaTela(nome: string, categoria?: string): boolean {
+  const n = normalizarTextoPeca(inferirCategoriaPeca(nome, categoria));
+  if (n.includes('vidro')) return false;
+  return n.includes('tela') || n.includes('incell') || n.includes('oled') || n.includes('lcd');
+}
+
 /** Tela OLED só cabe em aparelho OLED. Tela Incell/LCD cabe em LCD e também em OLED (opção mais barata). */
 export function modeloElegivelParaCategoriaPeca(tipoTela: string | undefined, categoria: string): boolean {
   const n = normalizarTextoPeca(categoria);

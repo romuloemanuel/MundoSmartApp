@@ -1,20 +1,11 @@
 <div class="page">
+  <app-estoque-page-nav
+    crumbAtual="An&aacute;lise retorno"
+    abaRota="analise-retorno"
+  ></app-estoque-page-nav>
+
   <div class="page-header">
     <h2>An&aacute;lise de retorno de garantia</h2>
-  </div>
-
-  <nav class="breadcrumb" aria-label="Navegação">
-    <a routerLink="/ordens-servico">Ordens de Servi&ccedil;o</a>
-    <span class="breadcrumb-sep" aria-hidden="true">/</span>
-    <a routerLink="/estoque">Estoque</a>
-    <span class="breadcrumb-sep" aria-hidden="true">/</span>
-    <span class="breadcrumb-atual">An&aacute;lise retorno</span>
-  </nav>
-
-  <div class="links-secundarios">
-    <a routerLink="/estoque" [queryParams]="{ aba: 'garantia' }">← Caixa de retorno</a>
-    <a routerLink="/estoque/lotes-retorno">Lotes baixados</a>
-    <a routerLink="/estoque/lotes-vencendo">Lotes a vencer</a>
   </div>
 
   <p class="campo-hint" style="margin:0 0 14px">

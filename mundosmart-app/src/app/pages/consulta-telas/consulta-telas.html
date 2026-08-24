@@ -1,0 +1,133 @@
+<div class="consulta-page">
+  <header class="consulta-head">
+    <p class="eyebrow">Estoque na loja</p>
+    <h1>Consultar telas</h1>
+    <p class="sub">Digite o aparelho e veja OLED / Incell (com ou sem aro) com saldo.</p>
+  </header>
+
+  <div class="consulta-sticky">
+    <nav class="cats" aria-label="Tipo de tela">
+      <button
+        type="button"
+        *ngFor="let c of tipos"
+        class="cat"
+        [class.ativa]="tipo === c.id"
+        (click)="selecionarTipo(c.id)"
+      >
+        {{ c.label }}
+      </button>
+    </nav>
+
+    <form class="busca" (submit)="$event.preventDefault(); buscar()">
+      <label class="busca-label" for="consulta-tela-modelo">{{ hint }}</label>
+      <div class="busca-row">
+        <div class="input-wrap">
+          <input
+            id="consulta-tela-modelo"
+            type="search"
+            enterkeyhint="search"
+            inputmode="search"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            [(ngModel)]="termo"
+            name="termo"
+            placeholder="G84, A54, 15 Pro…"
+            (ngModelChange)="onTermoChange()"
+          />
+          <button
+            type="button"
+            class="btn-limpar"
+            *ngIf="termo.trim()"
+            (click)="limparBusca()"
+            aria-label="Limpar busca"
+          >
+            ×
+          </button>
+        </div>
+        <button type="submit" class="btn-buscar" [disabled]="carregando">
+          {{ carregando ? '…' : 'Buscar' }}
+        </button>
+      </div>
+
+      <div class="busca-acoes">
+        <button
+          type="button"
+          class="chip-toggle"
+          [class.ativa]="incluirZerados"
+          (click)="toggleZerados()"
+        >
+          {{ incluirZerados ? 'Com e sem estoque' : 'Só com estoque' }}
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <p class="erro" *ngIf="erro">{{ erro }}</p>
+  <p class="loading" *ngIf="carregando">Carregando telas do estoque…</p>
+
+  <section id="consulta-telas-resultados" class="resultados" *ngIf="!carregando && buscou && !erro">
+    <div class="resultados-meta" *ngIf="grupos.length > 0">
+      <strong>{{ grupos.length }}</strong>
+      {{ grupos.length === 1 ? 'aparelho' : 'aparelhos' }}
+      <ng-container *ngIf="termo.trim()"> · «{{ termo }}»</ng-container>
+    </div>
+
+    <div class="vazio" *ngIf="grupos.length === 0">
+      <p class="vazio-titulo">Nada encontrado</p>
+      <p>
+        Tente só o modelo (ex.: <strong>G84</strong>, <strong>A54</strong>, <strong>15</strong>)
+        ou a marca (<strong>Apple</strong>, <strong>Samsung</strong>).
+      </p>
+    </div>
+
+    <app-grid-paginator
+      *ngIf="grupos.length > 0"
+      [total]="grupos.length"
+      [page]="grid.page"
+      [pageSize]="grid.pageSize"
+      (pageChange)="onPaginaChange($event)"
+      (pageSizeChange)="onTamanhoPaginaChange($event)"
+    />
+
+    <ng-container *ngFor="let linha of linhasPaginadas">
+      <h2 class="marca-head" *ngIf="linha.kind === 'marca'">{{ linha.label }}</h2>
+
+      <article class="card" *ngIf="linha.kind === 'item'">
+        <header class="card-head">
+          <div class="card-title">
+            <h4>{{ linha.grupo.modelo }}</h4>
+          </div>
+          <span class="saldo-total" [ngClass]="saldoClass(linha.grupo.saldoTotal)">
+            {{ linha.grupo.saldoTotal }} un
+          </span>
+        </header>
+        <ul class="cores">
+          <li *ngFor="let t of linha.grupo.telas" [ngClass]="saldoClass(t.quantidade)">
+            <span class="cor-nome">{{ t.categoria }}</span>
+            <span class="cor-preco" *ngIf="t.preco">{{ t.preco | currency:'BRL' }}</span>
+            <span class="cor-saldo">{{ t.quantidade }}</span>
+          </li>
+        </ul>
+      </article>
+    </ng-container>
+
+    <app-grid-paginator
+      *ngIf="grupos.length > grid.pageSize"
+      [total]="grupos.length"
+      [page]="grid.page"
+      [pageSize]="grid.pageSize"
+      (pageChange)="onPaginaChange($event)"
+      (pageSizeChange)="onTamanhoPaginaChange($event)"
+    />
+
+    <button
+      type="button"
+      class="btn-topo"
+      *ngIf="grupos.length > 6"
+      (click)="rolarParaTopo()"
+    >
+      Voltar ao topo
+    </button>
+  </section>
+</div>

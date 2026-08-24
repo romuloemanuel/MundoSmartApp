@@ -30,6 +30,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <a routerLink="/estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Pe&ccedil;as &amp; Estoque</a>
           <a routerLink="/orcamentos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Or&ccedil;amentos</a>
           <a routerLink="/consulta-produtos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Consulta estoque</a>
+          <a routerLink="/consulta-telas" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Consulta telas</a>
           <a routerLink="/calculo-juros" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Cálculo de juros</a>
           <a routerLink="/clientes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Clientes</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/historico-alteracoes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Hist&oacute;rico de altera&ccedil;&otilde;es</a>

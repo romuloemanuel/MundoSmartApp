@@ -1108,30 +1108,7 @@ public class EstoqueLoteService : IEstoqueLoteService
 
         foreach (var item in agrupado)
         {
-            var filtroLote = Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, item.PecaId)
-                & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
-            if (!string.IsNullOrWhiteSpace(item.MarcaPeca))
-                filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.MarcaPeca, item.MarcaPeca);
-            if (!string.IsNullOrWhiteSpace(item.ModeloId))
-                filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.ModeloId, item.ModeloId);
-            if (!string.IsNullOrWhiteSpace(item.Cor))
-                filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.Cor, item.Cor);
-
-            var lotes = await _lotes.Find(filtroLote).ToListAsync();
-            item.EstoqueAtual = lotes.Sum(l => l.QuantidadeRestante);
-
-            // Fallback: estoque por cor no cadastro da peça (quando não há lote com cor).
-            if (item.EstoqueAtual == 0 && !string.IsNullOrWhiteSpace(item.Cor) && !string.IsNullOrWhiteSpace(item.ModeloId))
-            {
-                var peca = await _pecas.Find(x => x.Id == item.PecaId).FirstOrDefaultAsync();
-                var corEstoque = peca?.ModelosCompativeis
-                    .FirstOrDefault(m => string.Equals(m.ModeloId, item.ModeloId, StringComparison.OrdinalIgnoreCase))
-                    ?.Cores
-                    ?.FirstOrDefault(c => string.Equals(c.Cor, item.Cor, StringComparison.OrdinalIgnoreCase));
-                if (corEstoque is not null)
-                    item.EstoqueAtual = Math.Max(0, corEstoque.Quantidade);
-            }
-
+            item.EstoqueAtual = await CalcularEstoqueDisponivelReposicaoAsync(item);
             item.SugestaoReposicao = Math.Max(0, item.QuantidadeSaida - item.EstoqueAtual);
         }
 
@@ -1173,6 +1150,51 @@ public class EstoqueLoteService : IEstoqueLoteService
             ResumoPorModelo = resumoPorModelo,
             TotalSaidas = saidas.Sum(s => s.Quantidade),
         };
+    }
+
+    /// <summary>
+    /// Saldo disponível para reposição — mesma regra da baixa de estoque (peça + marca + cor),
+    /// sem filtrar lote por modelo (telas compartilhadas entre G14/G54/G55 etc.).
+    /// </summary>
+    private async Task<int> CalcularEstoqueDisponivelReposicaoAsync(ReposicaoSemanalItem item)
+    {
+        var filtroLote = Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, item.PecaId)
+            & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
+
+        if (!string.IsNullOrWhiteSpace(item.MarcaPeca))
+            filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.MarcaPeca, item.MarcaPeca);
+
+        if (!string.IsNullOrWhiteSpace(item.Cor))
+            filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.Cor, item.Cor);
+
+        var lotes = await _lotes.Find(filtroLote).ToListAsync();
+        var total = lotes.Sum(l => l.QuantidadeRestante);
+
+        // Se filtrou por marca do fornecedor e não achou lote, tenta sem o filtro (igual à saída).
+        if (total == 0 && !string.IsNullOrWhiteSpace(item.MarcaPeca))
+        {
+            var filtroSemMarca = Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, item.PecaId)
+                & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
+            if (!string.IsNullOrWhiteSpace(item.Cor))
+                filtroSemMarca &= Builders<LoteEstoque>.Filter.Eq(x => x.Cor, item.Cor);
+
+            lotes = await _lotes.Find(filtroSemMarca).ToListAsync();
+            total = lotes.Sum(l => l.QuantidadeRestante);
+        }
+
+        // Fallback: estoque por cor no cadastro da peça (quando não há lote com cor).
+        if (total == 0 && !string.IsNullOrWhiteSpace(item.Cor) && !string.IsNullOrWhiteSpace(item.ModeloId))
+        {
+            var peca = await _pecas.Find(x => x.Id == item.PecaId).FirstOrDefaultAsync();
+            var corEstoque = peca?.ModelosCompativeis
+                .FirstOrDefault(m => string.Equals(m.ModeloId, item.ModeloId, StringComparison.OrdinalIgnoreCase))
+                ?.Cores
+                ?.FirstOrDefault(c => string.Equals(c.Cor, item.Cor, StringComparison.OrdinalIgnoreCase));
+            if (corEstoque is not null)
+                total = Math.Max(0, corEstoque.Quantidade);
+        }
+
+        return total;
     }
 
     /// <summary>

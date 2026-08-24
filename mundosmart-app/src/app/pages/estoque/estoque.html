@@ -1,31 +1,12 @@
 <div class="page">
+  <app-estoque-page-nav
+    [modoInline]="true"
+    [abaInterna]="aba"
+    (abaInternaClick)="irPara($event)"
+  ></app-estoque-page-nav>
+
   <div class="page-header">
     <h2>Pe&ccedil;as &amp; Estoque</h2>
-  </div>
-
-  <nav class="breadcrumb" aria-label="Navegação">
-    <a routerLink="/ordens-servico">Ordens de Servi&ccedil;o</a>
-    <span class="breadcrumb-sep" aria-hidden="true">/</span>
-    <span class="breadcrumb-atual">Estoque</span>
-  </nav>
-
-  <div class="estoque-abas">
-    <button type="button" [class.ativa]="aba === 'estoque'" (click)="irPara('estoque')">Estoque</button>
-    <button type="button" [class.ativa]="aba === 'pedidos'" (click)="irPara('pedidos')">Pedidos</button>
-    <button type="button" [class.ativa]="aba === 'novo-pedido'" (click)="irPara('novo-pedido')">+ Pedido</button>
-    <button type="button" [class.ativa]="aba === 'saidas'" (click)="irPara('saidas')">Sa&iacute;das</button>
-    <button type="button" [class.ativa]="aba === 'nova-saida'" (click)="irPara('nova-saida')">+ Sa&iacute;da</button>
-    <button type="button" [class.ativa]="aba === 'reposicao'" (click)="irPara('reposicao')">Reposi&ccedil;&atilde;o</button>
-    <button
-      *ngIf="appAuth.isAdmin()"
-      type="button"
-      [class.ativa]="aba === 'financeiro'"
-      (click)="irPara('financeiro')"
-    >Investimento</button>
-    <button type="button" [class.ativa]="aba === 'garantia'" (click)="irPara('garantia')">Garantia</button>
-    <a class="estoque-aba-link" routerLink="/estoque/lotes-retorno">Baixados</a>
-    <a class="estoque-aba-link" routerLink="/estoque/analise-retorno">An&aacute;lise</a>
-    <a class="estoque-aba-link" routerLink="/estoque/lotes-vencendo">A vencer</a>
   </div>
 
   <p *ngIf="erro" class="erro">{{ erro }}</p>
@@ -775,6 +756,12 @@
         Use <strong>Gerar relatório</strong> para registrar este período (ex.: 13 e 14/07) e evitar pedir pe&ccedil;as de novo.
       </p>
 
+      <p class="campo-hint" style="margin-bottom:12px">
+        Coluna <strong>Dispon&iacute;vel</strong>: saldo em estoque da pe&ccedil;a (marca/cor).
+        Telas compartilhadas (ex.: Incell G14/G54/G55/G64) usam o mesmo estoque f&iacute;sico.
+        <strong>Sugerido pedir</strong> = utilizada &minus; dispon&iacute;vel (m&iacute;nimo 0).
+      </p>
+
       <table *ngIf="relatorio.itens.length > 0">
         <thead>
           <tr>
@@ -783,6 +770,8 @@
             <th>Modelo</th>
             <th>Cor</th>
             <th>Qtd utilizada</th>
+            <th>Dispon&iacute;vel</th>
+            <th>Sugerido pedir</th>
           </tr>
         </thead>
         <tbody>
@@ -792,6 +781,10 @@
             <td>{{ labelModeloMovimentacao(r.modeloNome, r.modeloId) }}</td>
             <td>{{ r.cor || '—' }}</td>
             <td>{{ r.quantidadeSaida }}</td>
+            <td>{{ r.estoqueAtual ?? 0 }}</td>
+            <td [class.reposicao-alerta]="(r.sugestaoReposicao ?? 0) > 0">
+              {{ r.sugestaoReposicao ?? 0 }}
+            </td>
           </tr>
         </tbody>
       </table>
