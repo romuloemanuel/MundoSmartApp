@@ -14,6 +14,7 @@ import {
   getEstoqueConfig,
   labelNivelEstoque as textoNivelEstoque,
   NivelEstoque,
+  normalizarNivelApi,
   opcoesFiltroNivelEstoque as montarOpcoesFiltroNivelEstoque,
 } from '../../config/estoque.config';
 import {
@@ -1124,6 +1125,22 @@ export class EstoquePage implements OnInit {
     return textoNivelEstoque(nivel);
   }
 
+  get limiteAmareloEstoque(): number {
+    return getEstoqueConfig().limiteAmarelo;
+  }
+
+  classeNivelReposicao(item: ReposicaoSemanalItem): string {
+    const nivel = normalizarNivelApi(item.nivelEstoque)
+      ?? calcularNivelEstoque(item.estoqueAtual ?? 0);
+    return ESTOQUE_NIVEL_CLASSES[nivel];
+  }
+
+  labelNivelReposicao(item: ReposicaoSemanalItem): string {
+    const nivel = normalizarNivelApi(item.nivelEstoque)
+      ?? calcularNivelEstoque(item.estoqueAtual ?? 0);
+    return textoNivelEstoque(nivel);
+  }
+
   carregarPedidos(): void {
     this.carregando = true;
     this.service.listarPedidos().subscribe({
@@ -1501,9 +1518,11 @@ export class EstoquePage implements OnInit {
       modeloId: this.reposicaoModeloId || undefined,
     }).subscribe({
       next: r => {
+        const itens = (r.itens ?? []).map(i => this.enriquecerItemReposicao(i));
         this.relatorio = {
           ...r,
-          resumoPorModelo: r.resumoPorModelo ?? this.montarResumoPorModeloLocal(r.itens ?? []),
+          itens,
+          resumoPorModelo: r.resumoPorModelo ?? this.montarResumoPorModeloLocal(itens),
         };
         this.carregando = false;
         if (this.periodoReposicao !== 'semanal' && !r.periodo) {
@@ -1521,6 +1540,27 @@ export class EstoquePage implements OnInit {
   /** @deprecated use pesquisarReposicao */
   carregarRelatorio(): void {
     this.pesquisarReposicao();
+  }
+
+  private enriquecerItemReposicao(item: ReposicaoSemanalItem): ReposicaoSemanalItem {
+    const estoque = item.estoqueAtual ?? 0;
+    const limiteAmarelo = getEstoqueConfig().limiteAmarelo;
+    const nivel = normalizarNivelApi(item.nivelEstoque) ?? calcularNivelEstoque(estoque);
+    const faltaParaMinimo = item.faltaParaMinimo ?? (
+      estoque < limiteAmarelo ? Math.max(0, limiteAmarelo - estoque) : 0
+    );
+    const porConsumo = Math.max(0, (item.quantidadeSaida ?? 0) - estoque);
+    const sugestaoReposicao = Math.max(
+      item.sugestaoReposicao ?? 0,
+      porConsumo,
+      faltaParaMinimo,
+    );
+    return {
+      ...item,
+      nivelEstoque: nivel,
+      faltaParaMinimo,
+      sugestaoReposicao,
+    };
   }
 
   private montarResumoPorModeloLocal(itens: ReposicaoSemanalItem[]): ReposicaoResumoModelo[] {

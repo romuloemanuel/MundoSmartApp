@@ -280,6 +280,10 @@ public class ReposicaoSemanalItem
     public string? Cor { get; set; }
     public int QuantidadeSaida { get; set; }
     public int EstoqueAtual { get; set; }
+    /// <summary>verde | amarelo | laranja | vermelho — mesmo critério do estoque.</summary>
+    public string NivelEstoque { get; set; } = "vermelho";
+    /// <summary>Unidades que faltam para atingir o limiar de estoque normal (LimiteAmarelo).</summary>
+    public int FaltaParaMinimo { get; set; }
     public int SugestaoReposicao { get; set; }
 }
 

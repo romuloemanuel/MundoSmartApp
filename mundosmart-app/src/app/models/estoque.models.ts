@@ -156,6 +156,10 @@ export interface ReposicaoSemanalItem {
   cor?: string;
   quantidadeSaida: number;
   estoqueAtual: number;
+  /** verde | amarelo | laranja | vermelho */
+  nivelEstoque?: string;
+  /** Unidades que faltam para atingir o limiar de estoque normal. */
+  faltaParaMinimo?: number;
   sugestaoReposicao: number;
 }
 

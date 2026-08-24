@@ -1,5 +1,11 @@
 import { ReposicaoSemanalItem, ReposicaoSemanalResponse } from '../models/estoque.models';
 import { avisarErroUsuario } from '../services/user-feedback.service';
+import {
+  calcularNivelEstoque,
+  getEstoqueConfig,
+  labelNivelEstoque,
+  normalizarNivelApi,
+} from '../config/estoque.config';
 
 function esc(valor?: string | number | null): string {
   if (valor == null) return '';
@@ -35,6 +41,23 @@ function pecasUtilizadas(relatorio: ReposicaoSemanalResponse): ReposicaoSemanalI
       || (a.cor || '').localeCompare(b.cor || '', 'pt-BR'));
 }
 
+function nivelReposicao(item: ReposicaoSemanalItem) {
+  return normalizarNivelApi(item.nivelEstoque) ?? calcularNivelEstoque(item.estoqueAtual ?? 0);
+}
+
+function estiloNivelPdf(nivel: string): string {
+  switch (nivel) {
+    case 'verde':
+      return 'background:#dcfce7;color:#15803d;border:1px solid #86efac;';
+    case 'amarelo':
+      return 'background:#fef9c3;color:#a16207;border:1px solid #fde047;';
+    case 'laranja':
+      return 'background:#ffedd5;color:#c2410c;border:1px solid #fdba74;';
+    default:
+      return 'background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;';
+  }
+}
+
 /** PDF: peças utilizadas no período com saldo e sugestão de pedido. */
 export function montarHtmlReposicaoPdf(
   relatorio: ReposicaoSemanalResponse,
@@ -45,6 +68,7 @@ export function montarHtmlReposicaoPdf(
 
   const itens = pecasUtilizadas(relatorio);
   const totalUnidades = itens.reduce((s, i) => s + i.quantidadeSaida, 0);
+  const limiteAmarelo = getEstoqueConfig().limiteAmarelo;
 
   const geradoEm = new Date().toLocaleString('pt-BR', {
     dateStyle: 'short',
@@ -66,16 +90,23 @@ export function montarHtmlReposicaoPdf(
         </tr>
       </thead>
       <tbody>
-        ${itens.map(r => `
+        ${itens.map(r => {
+          const nivel = nivelReposicao(r);
+          return `
           <tr>
             <td>${esc(r.pecaNome)}</td>
             <td>${esc(r.marcaPeca || '—')}</td>
             <td>${esc(labelModelo(r.modeloNome, r.modeloId))}</td>
             <td>${esc(r.cor?.trim() ? r.cor : '—')}</td>
             <td class="num">${esc(r.quantidadeSaida)}</td>
-            <td class="num">${esc(r.estoqueAtual ?? 0)}</td>
+            <td class="num">
+              <span class="nivel" style="${estiloNivelPdf(nivel)}" title="${esc(labelNivelEstoque(nivel))}">
+                ${esc(r.estoqueAtual ?? 0)}
+              </span>
+            </td>
             <td class="num">${esc(r.sugestaoReposicao ?? 0)}</td>
-          </tr>`).join('')}
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>`
     : '<p class="vazio">Nenhuma peça utilizada no período.</p>';
@@ -110,6 +141,14 @@ export function montarHtmlReposicaoPdf(
     }
     th { background: #f1f5f9; font-weight: 600; }
     td.num, th.num { text-align: right; white-space: nowrap; }
+    .nivel {
+      display: inline-block;
+      min-width: 1.75rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      text-align: center;
+    }
     .vazio { color: #64748b; }
     .rodape {
       margin-top: 20px;
@@ -133,6 +172,7 @@ export function montarHtmlReposicaoPdf(
     ${relatorio.modeloNomeFiltro
       ? ` — filtro: <strong>${esc(relatorio.modeloNomeFiltro)}</strong>`
       : ''}
+    <br/>Sugerido pedir: maior entre (utilizada − disponível) e falta para ${esc(limiteAmarelo)} un. (estoque normal).
   </p>
   ${corpo}
   <p class="rodape">

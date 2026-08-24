@@ -90,17 +90,20 @@ public class EstoqueLoteService : IEstoqueLoteService
     private readonly IPecaEstoqueRepository _pecasRepo;
     private readonly IOsLocalRepository _osRepo;
     private readonly ICategoriaPecaRepository _categoriasPeca;
+    private readonly IEstoqueNivelService _estoqueNivel;
     private const int DiasAntecedenciaPrazoEnvio = 7;
 
     public EstoqueLoteService(
         MongoDbService mongo,
         IPecaEstoqueRepository pecasRepo,
         IOsLocalRepository osRepo,
-        ICategoriaPecaRepository categoriasPeca)
+        ICategoriaPecaRepository categoriasPeca,
+        IEstoqueNivelService estoqueNivel)
     {
         _pecasRepo = pecasRepo;
         _osRepo = osRepo;
         _categoriasPeca = categoriasPeca;
+        _estoqueNivel = estoqueNivel;
         _pedidos = mongo.GetCollection<PedidoCompraEstoque>("estoque_pedidos_compra");
         _lotes = mongo.GetCollection<LoteEstoque>("estoque_lotes");
         _movimentacoes = mongo.GetCollection<MovimentacaoEstoque>("estoque_movimentacoes");
@@ -1109,7 +1112,7 @@ public class EstoqueLoteService : IEstoqueLoteService
         foreach (var item in agrupado)
         {
             item.EstoqueAtual = await CalcularEstoqueDisponivelReposicaoAsync(item);
-            item.SugestaoReposicao = Math.Max(0, item.QuantidadeSaida - item.EstoqueAtual);
+            AplicarNivelESugestaoReposicao(item);
         }
 
         var resumoPorModelo = agrupado
@@ -1195,6 +1198,18 @@ public class EstoqueLoteService : IEstoqueLoteService
         }
 
         return total;
+    }
+
+    private void AplicarNivelESugestaoReposicao(ReposicaoSemanalItem item)
+    {
+        var limites = _estoqueNivel.ObterLimites();
+        item.NivelEstoque = _estoqueNivel.CalcularNivel(item.EstoqueAtual);
+
+        var porConsumo = Math.Max(0, item.QuantidadeSaida - item.EstoqueAtual);
+        item.FaltaParaMinimo = item.EstoqueAtual < limites.LimiteAmarelo
+            ? Math.Max(0, limites.LimiteAmarelo - item.EstoqueAtual)
+            : 0;
+        item.SugestaoReposicao = Math.Max(porConsumo, item.FaltaParaMinimo);
     }
 
     /// <summary>

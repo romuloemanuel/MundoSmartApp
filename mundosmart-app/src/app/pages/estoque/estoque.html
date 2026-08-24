@@ -757,9 +757,11 @@
       </p>
 
       <p class="campo-hint" style="margin-bottom:12px">
-        Coluna <strong>Dispon&iacute;vel</strong>: saldo em estoque da pe&ccedil;a (marca/cor).
-        Telas compartilhadas (ex.: Incell G14/G54/G55/G64) usam o mesmo estoque f&iacute;sico.
-        <strong>Sugerido pedir</strong> = utilizada &minus; dispon&iacute;vel (m&iacute;nimo 0).
+        <strong>Dispon&iacute;vel</strong> usa as mesmas cores do estoque:
+        sem estoque, abaixo do m&iacute;nimo, estoque m&iacute;nimo e normal.
+        Telas compartilhadas (ex.: Incell G14/G54/G55/G64) usam o mesmo saldo f&iacute;sico.
+        <strong>Sugerido pedir</strong> = o maior entre (utilizada &minus; dispon&iacute;vel) e o que falta
+        para atingir {{ limiteAmareloEstoque }} un. (estoque normal).
       </p>
 
       <table *ngIf="relatorio.itens.length > 0">
@@ -781,9 +783,21 @@
             <td>{{ labelModeloMovimentacao(r.modeloNome, r.modeloId) }}</td>
             <td>{{ r.cor || '—' }}</td>
             <td>{{ r.quantidadeSaida }}</td>
-            <td>{{ r.estoqueAtual ?? 0 }}</td>
+            <td>
+              <span
+                [ngClass]="classeNivelReposicao(r)"
+                [title]="labelNivelReposicao(r)"
+              >{{ r.estoqueAtual ?? 0 }}</span>
+            </td>
             <td [class.reposicao-alerta]="(r.sugestaoReposicao ?? 0) > 0">
               {{ r.sugestaoReposicao ?? 0 }}
+              <span
+                *ngIf="(r.faltaParaMinimo ?? 0) > 0 && (r.sugestaoReposicao ?? 0) === (r.faltaParaMinimo ?? 0)"
+                class="campo-hint"
+                style="display:block;font-size:11px;margin-top:2px"
+              >
+                p/ estoque normal
+              </span>
             </td>
           </tr>
         </tbody>
