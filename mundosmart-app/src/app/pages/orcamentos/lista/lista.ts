@@ -48,6 +48,18 @@ import { avisarErroUsuario } from '../../../services/user-feedback.service';
 type FiltroValidade = '' | 'normal' | 'a-vencer' | 'vencidos';
 type FiltroSituacao = '' | 'Em aberto' | 'Convertido' | 'Não realizado' | 'Desistência';
 type FiltroFollowUpStatus = '' | StatusFollowUpOrcamento;
+type OrcamentoOrdenacaoCampo =
+  | 'urgencia'
+  | 'numero'
+  | 'loja'
+  | 'cliente'
+  | 'responsavel'
+  | 'aparelho'
+  | 'situacao'
+  | 'revisitar'
+  | 'contatos'
+  | 'avista'
+  | 'parcelado';
 
 @Component({
   selector: 'app-orcamentos-lista',
@@ -317,6 +329,10 @@ export class OrcamentosLista implements OnInit {
   erroConverter = '';
   readonly grid = new GridPaginationState();
   readonly followUpCiclo = ORCAMENTO_FOLLOWUP_CICLO;
+  ordenacao: { campo: OrcamentoOrdenacaoCampo; direcao: 'asc' | 'desc' } = {
+    campo: 'urgencia',
+    direcao: 'asc',
+  };
 
   filtroCliente = '';
   filtroSituacao: FiltroSituacao = 'Em aberto';
@@ -593,21 +609,101 @@ export class OrcamentosLista implements OnInit {
       return true;
     });
 
-    // Atrasados de follow-up primeiro (como urgência na OS).
-    this.orcamentosFiltrados = [...this.orcamentosFiltrados].sort((a, b) => {
-      const rank = (o: BlingOrcamento) => {
-        if (!this.emAberto(o)) return 4;
-        switch (this.statusFollowUp(o)) {
-          case 'atrasado': return 0;
-          case 'proximo': return 1;
-          case 'em-dia': return 2;
-          default: return 3;
-        }
-      };
-      return rank(a) - rank(b);
-    });
+    this.orcamentosFiltrados = [...this.orcamentosFiltrados].sort((a, b) =>
+      this.compararOrcamentos(a, b),
+    );
 
     this.grid.reset();
+  }
+
+  ordenar(campo: OrcamentoOrdenacaoCampo): void {
+    if (this.ordenacao.campo === campo) {
+      this.ordenacao = {
+        campo,
+        direcao: this.ordenacao.direcao === 'asc' ? 'desc' : 'asc',
+      };
+    } else {
+      this.ordenacao = { campo, direcao: 'asc' };
+    }
+    this.orcamentosFiltrados = [...this.orcamentosFiltrados].sort((a, b) =>
+      this.compararOrcamentos(a, b),
+    );
+    this.grid.reset();
+  }
+
+  iconeOrdenacao(campo: OrcamentoOrdenacaoCampo): string {
+    if (this.ordenacao.campo !== campo) return '↕';
+    return this.ordenacao.direcao === 'asc' ? '↑' : '↓';
+  }
+
+  colunaOrdenada(campo: OrcamentoOrdenacaoCampo): boolean {
+    return this.ordenacao.campo === campo;
+  }
+
+  private rankUrgencia(o: BlingOrcamento): number {
+    if (!this.emAberto(o)) return 4;
+    switch (this.statusFollowUp(o)) {
+      case 'atrasado': return 0;
+      case 'proximo': return 1;
+      case 'em-dia': return 2;
+      default: return 3;
+    }
+  }
+
+  private textoAparelho(o: BlingOrcamento): string {
+    return (
+      o.equipamento
+      || `${o.marcaNome || ''} ${o.modeloNome || ''}`.trim()
+      || ''
+    );
+  }
+
+  private valorParceladoNum(o: BlingOrcamento): number {
+    return Number(o.valorAPrazo ?? this.valorExibido(o) ?? 0) || 0;
+  }
+
+  private compararOrcamentos(a: BlingOrcamento, b: BlingOrcamento): number {
+    const dir = this.ordenacao.direcao === 'asc' ? 1 : -1;
+    let cmp = 0;
+    switch (this.ordenacao.campo) {
+      case 'urgencia':
+        cmp = this.rankUrgencia(a) - this.rankUrgencia(b);
+        break;
+      case 'numero':
+        cmp = (a.numero ?? '').localeCompare(b.numero ?? '', 'pt-BR', { numeric: true });
+        break;
+      case 'loja':
+        cmp = this.siglaLoja(a).localeCompare(this.siglaLoja(b), 'pt-BR');
+        break;
+      case 'cliente':
+        cmp = (a.contato?.nome ?? '').localeCompare(b.contato?.nome ?? '', 'pt-BR');
+        break;
+      case 'responsavel':
+        cmp = (a.responsavelOrcamento ?? '').localeCompare(b.responsavelOrcamento ?? '', 'pt-BR');
+        break;
+      case 'aparelho':
+        cmp = this.textoAparelho(a).localeCompare(this.textoAparelho(b), 'pt-BR');
+        break;
+      case 'situacao':
+        cmp = (a.situacao ?? '').localeCompare(b.situacao ?? '', 'pt-BR');
+        break;
+      case 'revisitar':
+        cmp = (a.dataFollowUp ?? '').localeCompare(b.dataFollowUp ?? '');
+        break;
+      case 'contatos':
+        cmp = this.vezesContato(a) - this.vezesContato(b);
+        break;
+      case 'avista':
+        cmp = this.valorAVista(a) - this.valorAVista(b);
+        break;
+      case 'parcelado':
+        cmp = this.valorParceladoNum(a) - this.valorParceladoNum(b);
+        break;
+    }
+    if (cmp === 0 && this.ordenacao.campo !== 'numero') {
+      cmp = (a.numero ?? '').localeCompare(b.numero ?? '', 'pt-BR', { numeric: true });
+    }
+    return cmp * dir;
   }
 
   limparFiltros(): void {

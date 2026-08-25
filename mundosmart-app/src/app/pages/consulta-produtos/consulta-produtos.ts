@@ -49,7 +49,7 @@ export class ConsultaProdutosPage implements OnInit, OnDestroy {
   ) {
     // No celular, páginas menores = menos rolagem e consulta mais rápida.
     const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches;
-    this.grid.pageSize = mobile ? 10 : 20;
+    this.grid.pageSize = mobile ? 10 : 50;
   }
 
   /** Catálogo completo da categoria (sem filtro de texto). */

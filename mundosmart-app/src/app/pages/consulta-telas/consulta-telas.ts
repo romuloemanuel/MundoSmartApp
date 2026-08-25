@@ -66,7 +66,7 @@ export class ConsultaTelasPage implements OnInit {
     private aparelhos: AparelhosService,
   ) {
     const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches;
-    this.grid.pageSize = mobile ? 10 : 20;
+    this.grid.pageSize = mobile ? 10 : 50;
   }
 
   ngOnInit(): void {
@@ -192,24 +192,57 @@ export class ConsultaTelasPage implements OnInit {
 
   private montarGrupos(pecas: PecaEstoque[], modelos: ModeloAparelho[]): ConsultaTelaGrupo[] {
     const telas = pecas.filter(p => ehCategoriaTela(p.nome, p.categoria));
-    const mapa = new Map<string, ConsultaTelaGrupo>();
+    const porModelo = new Map<string, {
+      marca: string;
+      modelo: string;
+      diretas: Map<string, Map<string, { peca: PecaEstoque; categoria: string; preco?: number }>>;
+      expandida: Map<string, Map<string, { peca: PecaEstoque; categoria: string; preco?: number }>>;
+    }>();
+
+    const garantirModelo = (
+      modeloId: string,
+      modeloNome: string,
+      marca: string,
+    ) => {
+      if (!porModelo.has(modeloId)) {
+        porModelo.set(modeloId, {
+          marca,
+          modelo: modeloNome,
+          diretas: new Map(),
+          expandida: new Map(),
+        });
+      }
+      return porModelo.get(modeloId)!;
+    };
+
+    const registrar = (
+      destino: Map<string, Map<string, { peca: PecaEstoque; categoria: string; preco?: number }>>,
+      categoria: string,
+      peca: PecaEstoque,
+      preco?: number,
+    ) => {
+      const pecaId = peca.id || peca.nome;
+      if (!destino.has(categoria)) destino.set(categoria, new Map());
+      const porPeca = destino.get(categoria)!;
+      // Mesma peça só conta uma vez (evita duplicar estoque físico).
+      if (porPeca.has(pecaId)) return;
+      porPeca.set(pecaId, { peca, categoria, preco });
+    };
 
     for (const peca of telas) {
       const categoria = inferirCategoriaPeca(peca.nome, peca.categoria);
-      const idsDiretos = (peca.modelosCompativeis ?? [])
-        .map(mc => mc.modeloId)
-        .filter(id => !!id);
+      const idsDiretos = [...new Set(
+        (peca.modelosCompativeis ?? [])
+          .map(mc => mc.modeloId?.trim())
+          .filter((id): id is string => !!id),
+      )];
       const cobertos = categoriaExpandeCoberturaPorCompatibilidade(categoria)
         ? expandirIdsPorCompatibilidadeDePeca(idsDiretos, modelos)
         : new Set(idsDiretos);
 
       if (cobertos.size === 0) {
-        // Peça sem modelo cadastrado: ainda aparece como "Sem aparelho".
-        this.adicionarTela(mapa, {
-          modeloId: peca.id || peca.nome,
-          modelo: 'Sem aparelho',
-          marca: 'Outras',
-        }, peca, categoria);
+        const slot = garantirModelo(peca.id || peca.nome, 'Sem aparelho', 'Outras');
+        registrar(slot.diretas, categoria, peca, peca.valorSugeridoTroca);
         continue;
       }
 
@@ -217,11 +250,39 @@ export class ConsultaTelasPage implements OnInit {
         const modelo = modelos.find(m => m.id === modeloId);
         const direto = peca.modelosCompativeis?.find(mc => mc.modeloId === modeloId);
         if (modelo && !modeloElegivelParaCategoriaPeca(modelo.tipoTela, categoria)) continue;
-        this.adicionarTela(mapa, {
+
+        const slot = garantirModelo(
           modeloId,
-          modelo: modelo?.nome || direto?.modeloNome || 'Sem aparelho',
-          marca: modelo?.marcaNome || direto?.marcaNome || 'Outras',
-        }, peca, categoria, direto?.valorSugeridoTroca);
+          modelo?.nome || direto?.modeloNome || 'Sem aparelho',
+          modelo?.marcaNome || direto?.marcaNome || 'Outras',
+        );
+        const preco = direto?.valorSugeridoTroca ?? peca.valorSugeridoTroca;
+        if (idsDiretos.includes(modeloId)) {
+          registrar(slot.diretas, categoria, peca, preco);
+        } else {
+          // Só cobre por família/compartilhado (ex.: Incell G14 → G54).
+          registrar(slot.expandida, categoria, peca, preco);
+        }
+      }
+    }
+
+    const mapa = new Map<string, ConsultaTelaGrupo>();
+    for (const [modeloId, slot] of porModelo) {
+      const categorias = new Set([...slot.diretas.keys(), ...slot.expandida.keys()]);
+      for (const categoria of categorias) {
+        // Preferência: peças cadastradas neste modelo. Expansão só se não houver vínculo direto
+        // (evita somar telas de outros iPhones ligados por família/compatibilidade).
+        const fonte = slot.diretas.get(categoria)?.size
+          ? slot.diretas.get(categoria)!
+          : (slot.expandida.get(categoria) ?? new Map());
+
+        for (const { peca, preco } of fonte.values()) {
+          this.adicionarTela(mapa, {
+            modeloId,
+            modelo: slot.modelo,
+            marca: slot.marca,
+          }, peca, categoria, preco);
+        }
       }
     }
 

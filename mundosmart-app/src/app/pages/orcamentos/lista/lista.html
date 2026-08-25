@@ -142,18 +142,62 @@
   <table class="data-grid" *ngIf="!carregando && orcamentosFiltrados.length > 0">
     <thead>
       <tr>
-        <th class="col-urgencia" title="Urgência do follow-up"></th>
-        <th>Número</th>
-        <th>Loja</th>
-        <th class="col-cliente">Cliente</th>
-        <th>Responsável</th>
-        <th>Aparelho</th>
-        <th>Situação</th>
-        <th>Revisitar</th>
-        <th>Contatos</th>
+        <th class="col-urgencia" title="Urgência do follow-up">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('urgencia')" (click)="ordenar('urgencia')" aria-label="Ordenar por urgência">
+            <span class="grid-sort-icone">{{ iconeOrdenacao('urgencia') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('numero')" (click)="ordenar('numero')">
+            Número <span class="grid-sort-icone">{{ iconeOrdenacao('numero') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('loja')" (click)="ordenar('loja')">
+            Loja <span class="grid-sort-icone">{{ iconeOrdenacao('loja') }}</span>
+          </button>
+        </th>
+        <th class="col-cliente">
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('cliente')" (click)="ordenar('cliente')">
+            Cliente <span class="grid-sort-icone">{{ iconeOrdenacao('cliente') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('responsavel')" (click)="ordenar('responsavel')">
+            Responsável <span class="grid-sort-icone">{{ iconeOrdenacao('responsavel') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('aparelho')" (click)="ordenar('aparelho')">
+            Aparelho <span class="grid-sort-icone">{{ iconeOrdenacao('aparelho') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('situacao')" (click)="ordenar('situacao')">
+            Situação <span class="grid-sort-icone">{{ iconeOrdenacao('situacao') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('revisitar')" (click)="ordenar('revisitar')">
+            Revisitar <span class="grid-sort-icone">{{ iconeOrdenacao('revisitar') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('contatos')" (click)="ordenar('contatos')">
+            Contatos <span class="grid-sort-icone">{{ iconeOrdenacao('contatos') }}</span>
+          </button>
+        </th>
         <th class="col-hist" title="Histórico de follow-ups">Histórico</th>
-        <th>À vista</th>
-        <th>Parcelado</th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('avista')" (click)="ordenar('avista')">
+            À vista <span class="grid-sort-icone">{{ iconeOrdenacao('avista') }}</span>
+          </button>
+        </th>
+        <th>
+          <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('parcelado')" (click)="ordenar('parcelado')">
+            Parcelado <span class="grid-sort-icone">{{ iconeOrdenacao('parcelado') }}</span>
+          </button>
+        </th>
         <th>Ações</th>
       </tr>
     </thead>
