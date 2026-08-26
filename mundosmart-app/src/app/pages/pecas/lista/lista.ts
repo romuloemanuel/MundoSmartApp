@@ -28,6 +28,7 @@ import { GridAcao } from '../../../components/grid-acao/grid-acao';
 import { AutocompleteCriavel, AutocompleteItem } from '../../../components/autocomplete-criavel/autocomplete-criavel';
 import { GridPaginationState } from '../../../utils/grid-pagination.state';
 import { formatarDataCadastroModelo, modeloParaAutocomplete } from '../../../utils/modelo-autocomplete.util';
+import { unificarNomesMarca } from '../../../utils/marca.util';
 import {
   expandirIdsPorCompatibilidadeDePeca,
   MODELO_LIMITE_LISTA,
@@ -226,7 +227,7 @@ export class PecasLista implements OnInit {
         if (m) set.add(m);
       }
     }
-    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return unificarNomesMarca([...set]);
   }
 
   carregarMarcasCatalogo(): void {

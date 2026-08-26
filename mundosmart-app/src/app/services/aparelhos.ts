@@ -4,6 +4,7 @@ import { Observable, of, tap, timeout, catchError, throwError, map } from 'rxjs'
 import { ModeloAparelho, MarcaAparelho, ModeloOperacaoResponse, ModeloReferenciaResponse, ModeloServicosValoresResponse } from '../models/bling.models';
 import { environment } from '../../environments/environment';
 import { MODELO_LIMITE_AUTOCOMPLETE_API } from '../config/aparelhos.config';
+import { unificarMarcas } from '../utils/marca.util';
 import { osSituacaoFinalizada } from '../pages/ordens-servico/os-situacao.util';
 
 export interface ModeloFiltros {
@@ -39,7 +40,9 @@ export class AparelhosService {
     let params = new HttpParams().set('limite', limite.toString());
     if (termo?.trim()) params = params.set('termo', termo.trim());
     if (tipoDispositivo) params = params.set('tipoDispositivo', tipoDispositivo);
-    return this.http.get<MarcaAparelho[]>(`${this.apiUrl}/marcas`, { params });
+    return this.http.get<MarcaAparelho[]>(`${this.apiUrl}/marcas`, { params }).pipe(
+      map(marcas => unificarMarcas(marcas)),
+    );
   }
 
   listarModelos(filtros?: ModeloFiltros): Observable<ModeloAparelho[]> {

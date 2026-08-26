@@ -9,6 +9,7 @@ import { AparelhosService } from '../../../services/aparelhos';
 import { CategoriasPecaService } from '../../../services/categorias-peca';
 import { CATEGORIAS_PECA, categoriaExpandeCoberturaPorCompatibilidade, categoriaUsaCoresPorModelo, inferirCategoriaPeca } from '../../../config/peca-categoria.config';
 import { formatarDataCadastroModelo } from '../../../utils/modelo-autocomplete.util';
+import { unificarNomesMarca } from '../../../utils/marca.util';
 import { CorEstoqueModelo, ModeloAparelho, ModeloCompativel, PecaEstoque, VariacaoServico } from '../../../models/bling.models';
 import { expandirIdsPorCompatibilidadeDePeca, MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
 import { avisarErroUsuario } from '../../../services/user-feedback.service';
@@ -191,7 +192,7 @@ export class PecasForm implements OnInit, OnDestroy {
     for (const m of this.peca.modelosCompativeis ?? []) {
       if (m.marcaNome?.trim()) marcas.add(m.marcaNome.trim());
     }
-    return [...marcas].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return unificarNomesMarca([...marcas]);
   }
 
   get marcaVinculada(): string {

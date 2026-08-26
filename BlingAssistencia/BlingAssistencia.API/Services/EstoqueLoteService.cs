@@ -11,7 +11,7 @@ namespace MundoSmart.BlingAssistencia.API.Services;
 public interface IEstoqueLoteService
 {
     Task EnsureIndexesAsync(CancellationToken cancellationToken = default);
-    Task<List<PedidoCompraEstoque>> ListarPedidosAsync(int limite = 100);
+    Task<List<PedidoCompraEstoque>> ListarPedidosAsync(int limite = 500);
     Task<PedidoCompraDetalheResponse?> ObterPedidoAsync(string id);
     Task<PedidoCompraDetalheResponse> RegistrarPedidoAsync(RegistrarPedidoCompraRequest request);
     Task<List<LoteEstoque>> ListarLotesAsync(string? pecaId = null, bool somenteComSaldo = false);
@@ -152,15 +152,21 @@ public class EstoqueLoteService : IEstoqueLoteService
             cancellationToken: cancellationToken);
     }
 
-    public async Task<List<PedidoCompraEstoque>> ListarPedidosAsync(int limite = 100)
+    public async Task<List<PedidoCompraEstoque>> ListarPedidosAsync(int limite = 500)
     {
         var pedidos = await _pedidos.Find(_ => true).ToListAsync();
         return pedidos
-            .OrderByDescending(x => x.AtualizadoEm != default ? x.AtualizadoEm : x.CriadoEm)
-            .ThenByDescending(x => x.DataPedido)
-            .ThenByDescending(x => x.CriadoEm)
+            .OrderByDescending(DataOrdenacaoPedido)
+            .ThenByDescending(x => x.NumeroPedido)
             .Take(Math.Clamp(limite, 1, 500))
             .ToList();
+    }
+
+    private static DateTime DataOrdenacaoPedido(PedidoCompraEstoque x)
+    {
+        var criado = x.CriadoEm.Year >= 2000 ? x.CriadoEm : DateTime.MinValue;
+        var data = x.DataPedido.Year >= 2000 ? x.DataPedido : DateTime.MinValue;
+        return criado > data ? criado : data;
     }
 
     public async Task<PedidoCompraDetalheResponse?> ObterPedidoAsync(string id)

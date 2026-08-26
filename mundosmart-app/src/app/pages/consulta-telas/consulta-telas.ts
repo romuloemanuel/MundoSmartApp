@@ -7,6 +7,7 @@ import { AparelhosService } from '../../services/aparelhos';
 import { ModeloAparelho, PecaEstoque } from '../../models/bling.models';
 import { GridPaginator } from '../../components/grid-paginator/grid-paginator';
 import { GridPaginationState } from '../../utils/grid-pagination.state';
+import { consultaTextoCombina } from '../../utils/consulta-alias.util';
 import {
   ehCategoriaTela,
   categoriaExpandeCoberturaPorCompatibilidade,
@@ -74,7 +75,7 @@ export class ConsultaTelasPage implements OnInit {
   }
 
   get hint(): string {
-    return 'Digite o aparelho ou a marca (ex.: G84, A54, iPhone 15)';
+    return 'SM Samsung · MT Motorola · MI Poco/Redmi — ou o modelo (G84, A54)';
   }
 
   get gruposPaginados(): ConsultaTelaGrupo[] {
@@ -345,7 +346,7 @@ export class ConsultaTelasPage implements OnInit {
       .filter(g => {
         if (!t) return true;
         const hay = this.normalizar(`${g.marca} ${g.modelo} ${g.telas.map(x => x.categoria).join(' ')}`);
-        return hay.includes(t) || t.split(/\s+/).every(p => hay.includes(p));
+        return consultaTextoCombina(hay, t);
       });
     this.grid.reset();
   }

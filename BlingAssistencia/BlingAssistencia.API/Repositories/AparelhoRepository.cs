@@ -76,8 +76,11 @@ public class AparelhoRepository : IAparelhoRepository
         ], cancellationToken: cancellationToken);
     }
 
-    public Task<List<MarcaAparelho>> ListarMarcasAsync(string? termo = null, string? tipoDispositivo = null, int limite = 100)
-        => BuscarMarcasInternal(termo, tipoDispositivo, limite);
+    public async Task<List<MarcaAparelho>> ListarMarcasAsync(string? termo = null, string? tipoDispositivo = null, int limite = 100)
+    {
+        var lista = await BuscarMarcasInternal(termo, tipoDispositivo, Math.Clamp(limite, 1, 500));
+        return UnificarMarcasPorNome(lista);
+    }
 
     public async Task<MarcaAparelho?> ObterMarcaAsync(string id)
     {
@@ -263,6 +266,18 @@ public class AparelhoRepository : IAparelhoRepository
 
         var limiteBusca = Math.Min(Math.Max(limite * 4, limite), LimiteModelosMax * 4);
         var t = termo.Trim();
+
+        if (ConsultaMarcaAlias.TryResolver(t, out var marcasAlias, out var linhasAlias, out var restoAlias))
+        {
+            var filtroAlias = ConsultaMarcaAlias.FiltroModelos(marcasAlias, linhasAlias, restoAlias);
+            var porAlias = await _modelos.Find(
+                    Builders<ModeloAparelho>.Filter.And(filtrosBase, filtroAlias))
+                .Limit(limiteBusca)
+                .ToListAsync();
+            if (porAlias.Count > 0)
+                return ModeloRelevanciaOrdenacao.Ordenar(porAlias, t, limite);
+        }
+
         var partes = t.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         if (partes.Length >= 2)
@@ -349,13 +364,45 @@ public class AparelhoRepository : IAparelhoRepository
             .ToListAsync();
     }
 
+    private static List<MarcaAparelho> UnificarMarcasPorNome(IEnumerable<MarcaAparelho> marcas)
+    {
+        var cultura = new System.Globalization.CultureInfo("pt-BR");
+        var grupos = new Dictionary<string, MarcaAparelho>(StringComparer.Ordinal);
+        foreach (var marca in marcas)
+        {
+            var nome = Regex.Replace((marca.Nome ?? string.Empty).Trim(), @"\s+", " ");
+            if (string.IsNullOrEmpty(nome)) continue;
+
+            var chave = nome.ToLower(cultura);
+            if (!grupos.TryGetValue(chave, out var atual)
+                || PontuarNomeMarca(nome, cultura) > PontuarNomeMarca(atual.Nome, cultura))
+            {
+                marca.Nome = nome;
+                grupos[chave] = marca;
+            }
+        }
+
+        return grupos.Values
+            .OrderBy(m => m.Nome, StringComparer.Create(cultura, false))
+            .ToList();
+    }
+
+    private static int PontuarNomeMarca(string nome, System.Globalization.CultureInfo cultura)
+    {
+        var upper = nome == nome.ToUpper(cultura);
+        var lower = nome == nome.ToLower(cultura);
+        if (!upper && !lower) return 2;
+        return lower ? 1 : 0;
+    }
+
     private async Task<MarcaAparelho?> BuscarMarcaPorNomeAsync(string nome)
     {
         var nomeTrimmed = nome.Trim();
-        return await _marcas.Find(
+        var matches = await _marcas.Find(
             Builders<MarcaAparelho>.Filter.Regex(x => x.Nome,
-                new MongoDB.Bson.BsonRegularExpression($"^{System.Text.RegularExpressions.Regex.Escape(nomeTrimmed)}$", "i")))
-            .FirstOrDefaultAsync();
+                new MongoDB.Bson.BsonRegularExpression($"^{Regex.Escape(nomeTrimmed)}$", "i")))
+            .ToListAsync();
+        return UnificarMarcasPorNome(matches).FirstOrDefault();
     }
 
     private async Task<ModeloAparelho?> BuscarModeloPorNomeAsync(string nome, string? marcaId)

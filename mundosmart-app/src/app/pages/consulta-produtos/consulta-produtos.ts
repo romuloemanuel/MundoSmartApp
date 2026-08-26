@@ -11,6 +11,7 @@ import {
 import { BlingAuthService } from '../../services/bling-auth';
 import { GridPaginator } from '../../components/grid-paginator/grid-paginator';
 import { GridPaginationState } from '../../utils/grid-pagination.state';
+import { consultaTextoCombina } from '../../utils/consulta-alias.util';
 
 @Component({
   selector: 'app-consulta-produtos',
@@ -21,8 +22,8 @@ import { GridPaginationState } from '../../utils/grid-pagination.state';
 })
 export class ConsultaProdutosPage implements OnInit, OnDestroy {
   readonly categorias: Array<{ id: ConsultaProdutoCategoria; label: string; hint: string }> = [
-    { id: 'capinhas', label: 'Capinhas', hint: 'Digite o aparelho ou a marca' },
-    { id: 'peliculas', label: 'Películas', hint: 'Digite o aparelho ou a marca' },
+    { id: 'capinhas', label: 'Capinhas', hint: 'SM Samsung · MT Motorola · MI Poco/Redmi — ou o modelo' },
+    { id: 'peliculas', label: 'Películas', hint: 'SM Samsung · MT Motorola · MI Poco/Redmi — ou o modelo' },
     { id: 'termicos', label: 'Térmicos', hint: 'Digite a marca ou o modelo' },
   ];
 
@@ -149,7 +150,7 @@ export class ConsultaProdutosPage implements OnInit, OnDestroy {
   get placeholder(): string {
     return this.categoria === 'termicos'
       ? 'Ex.: Stanley, 500ml…'
-      : 'Ex.: G84, A54, iPhone 15…';
+      : 'Ex.: SM, MT, MI, G84, A54…';
   }
 
   get tituloOrigem(): string {
@@ -302,8 +303,7 @@ export class ConsultaProdutosPage implements OnInit, OnDestroy {
     }
     // No celular, 1 caractere já filtra (ex.: "A", "G") — mais ágil no balcão.
     if (t.length >= 1) {
-      const tokens = t.split(/\s+/).filter(x => x.length >= 1);
-      filtrada = filtrada.filter(g => this.grupoCombina(g, t, tokens));
+      filtrada = filtrada.filter(g => this.grupoCombina(g, t));
     }
     this.grupos = filtrada;
     this.grid.reset();
@@ -322,25 +322,14 @@ export class ConsultaProdutosPage implements OnInit, OnDestroy {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  private grupoCombina(g: ConsultaProdutoGrupo, termo: string, tokens: string[]): boolean {
+  private grupoCombina(g: ConsultaProdutoGrupo, termo: string): boolean {
     const perso = g?.permitePersonalizacao ? 'personalizavel personalizacao personalizado' : '';
     const hay = this.normalizar(
       [g?.modelo, g?.marca, g?.nome, perso, ...(g?.cores ?? []).map(c => c?.cor)]
         .filter(Boolean)
         .join(' '),
     );
-    const hayCompact = hay.replace(/\s+/g, '');
-    const termoCompact = termo.replace(/\s+/g, '');
-
-    if (hay.includes(termo) || (termoCompact.length >= 2 && hayCompact.includes(termoCompact))) {
-      return true;
-    }
-    if (tokens.length > 1) {
-      return tokens.every(
-        tok => hay.includes(tok) || hayCompact.includes(tok.replace(/\s+/g, '')),
-      );
-    }
-    return false;
+    return consultaTextoCombina(hay, termo);
   }
 
   private normalizar(valor: string | undefined | null): string {

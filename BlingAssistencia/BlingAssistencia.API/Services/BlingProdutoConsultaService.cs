@@ -359,6 +359,9 @@ public class BlingProdutoConsultaService : IBlingProdutoConsultaService
         var needle = NormalizarBusca(termo);
         if (needle.Length < 2) return true;
 
+        if (ConsultaMarcaAlias.TryResolver(needle, out _, out _, out _))
+            return ConsultaMarcaAlias.TextoCombina(haystack, needle);
+
         if (haystack.Contains(needle, StringComparison.Ordinal))
             return true;
 

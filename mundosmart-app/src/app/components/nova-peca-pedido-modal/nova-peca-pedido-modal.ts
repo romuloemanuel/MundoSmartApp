@@ -13,6 +13,7 @@ import {
   labelPecaCatalogo,
 } from '../../config/peca-categoria.config';
 import { AutocompleteCriavel, AutocompleteItem } from '../autocomplete-criavel/autocomplete-criavel';
+import { CadastroAparelhoModal } from '../cadastro-aparelho-modal/cadastro-aparelho-modal';
 import { modeloParaAutocomplete } from '../../utils/modelo-autocomplete.util';
 import { CorEstoqueModelo, ModeloAparelho, ModeloCompativel, PecaEstoque } from '../../models/bling.models';
 import { PecaCatalogo } from '../../models/estoque.models';
@@ -22,7 +23,7 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
 @Component({
   selector: 'app-nova-peca-pedido-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, AutocompleteCriavel],
+  imports: [CommonModule, FormsModule, AutocompleteCriavel, CadastroAparelhoModal],
   template: `
     <div class="modal-backdrop" (click)="fechar()">
       <div class="modal-box modal-box-wide" (click)="$event.stopPropagation()">
@@ -87,12 +88,24 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
 
           <div class="form-group" *ngIf="!modeloLinha">
             <label>Modelo <span class="campo-obrigatorio">*</span></label>
-            <app-autocomplete-criavel
-              placeholder="Buscar modelo (marca + modelo)..."
-              [buscarFn]="buscarModelosFn"
-              [permitirCriar]="false"
-              (itemSelecionadoChange)="onModeloSelecionado($event)"
-            />
+            <ng-container *ngFor="let k of [modeloAutocompleteKey]">
+              <app-autocomplete-criavel
+                placeholder="Buscar modelo (marca + modelo)..."
+                [buscarFn]="buscarModelosFn"
+                [permitirCriar]="true"
+                [valorInicial]="valorInicialModelo"
+                [valorInicialId]="modeloEscolhido?.id"
+                [valorInicialMarcaId]="modeloEscolhido?.marcaId"
+                [valorInicialMarcaNome]="modeloEscolhido?.marcaNome"
+                (itemSelecionadoChange)="onModeloSelecionado($event)"
+                (solicitarCriar)="abrirCadastroModelo($event)"
+              />
+            </ng-container>
+            <div class="campo-acoes-inline">
+              <button type="button" class="btn-link" (click)="abrirCadastroModelo()">
+                + Cadastrar modelo
+              </button>
+            </div>
           </div>
 
           <div class="form-group" *ngIf="usaCoresPorModelo">
@@ -115,6 +128,13 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
         </div>
       </div>
     </div>
+
+    <app-cadastro-aparelho-modal
+      *ngIf="modalCadastroModeloAberto"
+      [nomeInicial]="nomeModeloNovo"
+      (modeloSalvo)="onModeloSalvoModal($event)"
+      (fechado)="fecharCadastroModelo()"
+    />
   `,
   styles: `
     .modal-backdrop {
@@ -198,6 +218,21 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
       text-align: left;
     }
     .chip-referencia:hover { background: #dbeafe; }
+    .campo-acoes-inline {
+      display: flex;
+      gap: 12px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .btn-link {
+      background: none;
+      border: none;
+      color: #2563EB;
+      font-size: 12px;
+      padding: 0;
+      cursor: pointer;
+      text-decoration: underline;
+    }
   `,
 })
 export class NovaPecaPedidoModal implements OnInit {
@@ -221,8 +256,15 @@ export class NovaPecaPedidoModal implements OnInit {
 
   coresModelo: CorEstoqueModelo[] = [{ cor: '', quantidade: 0 }];
   modeloEscolhido?: ModeloAparelho;
+  modeloAutocompleteKey = 0;
+  modalCadastroModeloAberto = false;
+  nomeModeloNovo = '';
   salvando = false;
   erro = '';
+
+  get valorInicialModelo(): string {
+    return this.modeloEscolhido?.nome ?? '';
+  }
 
   get usaCoresPorModelo(): boolean {
     return categoriaUsaCoresPorModelo(this.peca.categoria);
@@ -271,6 +313,22 @@ export class NovaPecaPedidoModal implements OnInit {
       marcaId: item.marcaId,
       marcaNome: item.marcaNome,
     };
+  }
+
+  abrirCadastroModelo(nome = ''): void {
+    this.nomeModeloNovo = nome.trim();
+    this.modalCadastroModeloAberto = true;
+  }
+
+  fecharCadastroModelo(): void {
+    this.modalCadastroModeloAberto = false;
+    this.nomeModeloNovo = '';
+  }
+
+  onModeloSalvoModal(modelo: ModeloAparelho): void {
+    this.fecharCadastroModelo();
+    this.modeloEscolhido = modelo;
+    this.modeloAutocompleteKey++;
   }
 
   labelReferencia(p: PecaCatalogo): string {

@@ -5,6 +5,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable, of, TimeoutError, timeout } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { modeloParaAutocomplete } from '../../utils/modelo-autocomplete.util';
+import { unificarNomesMarca } from '../../utils/marca.util';
 import { EstoqueService } from '../../services/estoque';
 import { AparelhosService } from '../../services/aparelhos';
 import { CategoriasPecaService } from '../../services/categorias-peca';
@@ -50,6 +51,7 @@ import {
 import { ModeloAparelho, ModeloCompativel, PecaEstoque } from '../../models/bling.models';
 import { MODELO_LIMITE_LISTA, TIPOS_TELA, mesmoTipoTelaArquitetura } from '../../config/aparelhos.config';
 import { NovaPecaPedidoModal } from '../../components/nova-peca-pedido-modal/nova-peca-pedido-modal';
+import { CadastroAparelhoModal } from '../../components/cadastro-aparelho-modal/cadastro-aparelho-modal';
 import { ItemPedidoLoteModal } from '../../components/item-pedido-lote-modal/item-pedido-lote-modal';
 import { AutocompleteCriavel, AutocompleteItem } from '../../components/autocomplete-criavel/autocomplete-criavel';
 import { GridPaginator } from '../../components/grid-paginator/grid-paginator';
@@ -89,7 +91,7 @@ interface EstoqueGrupoMarca {
 @Component({
   selector: 'app-estoque',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, NovaPecaPedidoModal, ItemPedidoLoteModal, AutocompleteCriavel, GridPaginator, EstoquePageNav],
+  imports: [CommonModule, FormsModule, RouterLink, NovaPecaPedidoModal, CadastroAparelhoModal, ItemPedidoLoteModal, AutocompleteCriavel, GridPaginator, EstoquePageNav],
   templateUrl: './estoque.html',
   styles: [`
     .estoque-painel {
@@ -113,22 +115,27 @@ interface EstoqueGrupoMarca {
       background: #fef3c7;
       color: #92400e;
     }
-    .saidas-filtros {
+    .saidas-filtros,
+    .pedidos-filtros {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       align-items: flex-end;
       margin-bottom: 14px;
     }
-    .saidas-filtros .form-group {
+    .saidas-filtros .form-group,
+    .pedidos-filtros .form-group {
       margin: 0;
       min-width: 140px;
     }
-    .saidas-filtros .form-group.busca {
+    .saidas-filtros .form-group.busca,
+    .pedidos-filtros .form-group.busca {
       flex: 1 1 220px;
       min-width: 200px;
     }
-    .saidas-filtros label {
+    .pedidos-filtros .form-group.curto { min-width: 110px; max-width: 130px; }
+    .saidas-filtros label,
+    .pedidos-filtros label {
       display: block;
       font-size: 11px;
       font-weight: 600;
@@ -136,7 +143,9 @@ interface EstoqueGrupoMarca {
       margin-bottom: 4px;
     }
     .saidas-filtros input,
-    .saidas-filtros select {
+    .saidas-filtros select,
+    .pedidos-filtros input,
+    .pedidos-filtros select {
       width: 100%;
       box-sizing: border-box;
       padding: 8px 10px;
@@ -145,7 +154,8 @@ interface EstoqueGrupoMarca {
       font-size: 13px;
       background: #fff;
     }
-    .saidas-filtros .btn-limpar {
+    .saidas-filtros .btn-limpar,
+    .pedidos-filtros .btn-limpar {
       background: #fff;
       border: 1px solid #cbd5e1;
       color: #475569;
@@ -265,7 +275,9 @@ interface EstoqueGrupoMarca {
       gap: 4px;
       align-items: stretch;
     }
-    .campo-com-acao select { flex: 1; min-width: 0; }
+    .campo-com-acao select,
+    .campo-com-acao app-autocomplete-criavel { flex: 1; min-width: 0; }
+    .campo-com-acao app-autocomplete-criavel { display: block; }
     .btn-icon-mais {
       width: 28px;
       min-width: 28px;
@@ -283,9 +295,9 @@ interface EstoqueGrupoMarca {
     .btn-icon-mais:hover { background: #dbeafe; }
     .form-group-cat { width: 128px; }
     .form-group-modelo {
-      flex: 1 1 180px;
-      min-width: 160px;
-      max-width: 260px;
+      flex: 1 1 200px;
+      min-width: 180px;
+      max-width: 300px;
       overflow: visible;
       position: relative;
     }
@@ -499,6 +511,15 @@ export class EstoquePage implements OnInit {
   salvandoRelatorio = false;
 
   pedidos: PedidoCompraEstoque[] = [];
+  readonly gridPedidos = new GridPaginationState();
+  pedidoFiltroCodigo = '';
+  pedidoFiltroFornecedor = '';
+  pedidoFiltroInicio = '';
+  pedidoFiltroFim = '';
+  pedidoFiltroUnidadesMin = '';
+  pedidoFiltroUnidadesMax = '';
+  pedidoFiltroValorMin = '';
+  pedidoFiltroValorMax = '';
   pedidoDetalhe?: PedidoCompraDetalhe;
   loteEditandoId = '';
   loteUnidadesJaSaidas = 0;
@@ -609,6 +630,9 @@ export class EstoquePage implements OnInit {
   itensPedido: ItemPedidoCompraUi[] = [this.itemVazio()];
   modalNovaPecaAberto = false;
   itemPedidoNovaPeca?: ItemPedidoCompraUi;
+  modalCadastroModeloAberto = false;
+  nomeModeloNovo = '';
+  itemPedidoCadastroModelo?: ItemPedidoCompraUi;
 
   // Nova saída
   saidaPecaId = '';
@@ -644,6 +668,7 @@ export class EstoquePage implements OnInit {
       this.categoriasFiltroEstoque = nomes;
     });
     this.carregarMarcasCatalogo();
+    this.gridPedidos.pageSize = 10;
     const abaQuery = this.route.snapshot.queryParamMap.get('aba') as AbaEstoque | null;
     const abasValidas: AbaEstoque[] = [
       'estoque', 'pedidos', 'saidas', 'reposicao', 'financeiro', 'garantia', 'novo-pedido', 'nova-saida',
@@ -656,10 +681,9 @@ export class EstoquePage implements OnInit {
   carregarMarcasCatalogo(): void {
     this.aparelhosService.listarMarcas().subscribe({
       next: marcas => {
-        this.marcasCatalogo = marcas
-          .map(m => m.nome?.trim())
-          .filter((n): n is string => !!n)
-          .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        this.marcasCatalogo = unificarNomesMarca(
+          marcas.map(m => m.nome),
+        );
       },
       error: () => { this.marcasCatalogo = []; },
     });
@@ -731,7 +755,7 @@ export class EstoquePage implements OnInit {
       const marca = this.marcaDaPeca(p);
       if (marca !== 'Sem marca') marcas.add(marca);
     }
-    return [...marcas].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return unificarNomesMarca([...marcas]);
   }
 
   get modelosFiltrados(): ModeloAparelho[] {
@@ -1144,9 +1168,128 @@ export class EstoquePage implements OnInit {
   carregarPedidos(): void {
     this.carregando = true;
     this.service.listarPedidos().subscribe({
-      next: p => { this.pedidos = p; this.carregando = false; },
+      next: p => {
+        this.pedidos = this.ordenarPedidos(p);
+        this.gridPedidos.reset();
+        this.carregando = false;
+      },
       error: () => { this.erro = 'Erro ao carregar pedidos.'; this.carregando = false; },
     });
+  }
+
+  get fornecedoresPedidosFiltro(): string[] {
+    const vistos = new Map<string, string>();
+    for (const p of this.pedidos) {
+      const nome = (p.fornecedor ?? '').trim();
+      if (!nome) continue;
+      const chave = nome.toLowerCase();
+      if (!vistos.has(chave)) vistos.set(chave, nome);
+    }
+    return [...vistos.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }
+
+  get filtrosPedidosAtivos(): number {
+    let n = 0;
+    if (this.pedidoFiltroCodigo.trim()) n++;
+    if (this.pedidoFiltroFornecedor.trim()) n++;
+    if (this.pedidoFiltroInicio) n++;
+    if (this.pedidoFiltroFim) n++;
+    if (this.pedidoFiltroUnidadesMin.trim()) n++;
+    if (this.pedidoFiltroUnidadesMax.trim()) n++;
+    if (this.pedidoFiltroValorMin.trim()) n++;
+    if (this.pedidoFiltroValorMax.trim()) n++;
+    return n;
+  }
+
+  get pedidosFiltrados(): PedidoCompraEstoque[] {
+    const codigo = this.pedidoFiltroCodigo.trim().toLowerCase();
+    const fornecedor = this.pedidoFiltroFornecedor.trim().toLowerCase();
+    const unidadesMin = this.parseNumeroFiltro(this.pedidoFiltroUnidadesMin);
+    const unidadesMax = this.parseNumeroFiltro(this.pedidoFiltroUnidadesMax);
+    const valorMin = this.parseNumeroFiltro(this.pedidoFiltroValorMin);
+    const valorMax = this.parseNumeroFiltro(this.pedidoFiltroValorMax);
+
+    const filtrados = this.pedidos.filter(p => {
+      if (codigo && !(p.numeroPedido ?? '').toLowerCase().includes(codigo)) return false;
+      if (fornecedor && !(p.fornecedor ?? '').toLowerCase().includes(fornecedor)) return false;
+      if (!this.pedidoNoPeriodo(p.dataPedido, this.pedidoFiltroInicio, this.pedidoFiltroFim)) return false;
+      const unidades = p.totalUnidades ?? 0;
+      if (unidadesMin != null && unidades < unidadesMin) return false;
+      if (unidadesMax != null && unidades > unidadesMax) return false;
+      const valor = p.valorTotal ?? 0;
+      if (valorMin != null && valor < valorMin) return false;
+      if (valorMax != null && valor > valorMax) return false;
+      return true;
+    });
+    return this.ordenarPedidos(filtrados);
+  }
+
+  get pedidosPaginados(): PedidoCompraEstoque[] {
+    return this.gridPedidos.paginate(this.pedidosFiltrados);
+  }
+
+  onFiltroPedidosChange(): void {
+    this.gridPedidos.reset();
+  }
+
+  limparFiltrosPedidos(): void {
+    this.pedidoFiltroCodigo = '';
+    this.pedidoFiltroFornecedor = '';
+    this.pedidoFiltroInicio = '';
+    this.pedidoFiltroFim = '';
+    this.pedidoFiltroUnidadesMin = '';
+    this.pedidoFiltroUnidadesMax = '';
+    this.pedidoFiltroValorMin = '';
+    this.pedidoFiltroValorMax = '';
+    this.gridPedidos.reset();
+  }
+
+  onPedidosPageChange(page: number): void {
+    this.gridPedidos.onPageChange(page);
+  }
+
+  onPedidosPageSizeChange(size: number): void {
+    this.gridPedidos.onPageSizeChange(size);
+  }
+
+  private ordenarPedidos(lista: PedidoCompraEstoque[]): PedidoCompraEstoque[] {
+    return [...lista].sort((a, b) => {
+      const diff = this.instanteCadastroPedido(b) - this.instanteCadastroPedido(a);
+      if (diff !== 0) return diff;
+      return (b.numeroPedido ?? '').localeCompare(a.numeroPedido ?? '', 'pt-BR', { numeric: true });
+    });
+  }
+
+  private instanteCadastroPedido(p: PedidoCompraEstoque): number {
+    const minValido = Date.parse('2000-01-01T00:00:00Z');
+    const criado = Date.parse(p.criadoEm ?? '');
+    const data = Date.parse(p.dataPedido ?? '');
+    const criadoOk = !Number.isNaN(criado) && criado >= minValido;
+    const dataOk = !Number.isNaN(data) && data >= minValido;
+    if (criadoOk && dataOk) return Math.max(criado, data);
+    if (criadoOk) return criado;
+    if (dataOk) return data;
+    return 0;
+  }
+
+  private parseNumeroFiltro(valor: string): number | null {
+    const n = Number(String(valor ?? '').replace(',', '.'));
+    return Number.isFinite(n) && String(valor).trim() !== '' ? n : null;
+  }
+
+  private pedidoNoPeriodo(dataPedido: string | undefined, de: string, ate: string): boolean {
+    if (!de && !ate) return true;
+    const t = Date.parse(dataPedido ?? '');
+    if (Number.isNaN(t)) return false;
+    if (de) {
+      const ini = Date.parse(`${de}T00:00:00`);
+      if (!Number.isNaN(ini) && t < ini) return false;
+    }
+    if (ate) {
+      const fim = Date.parse(`${ate}T23:59:59.999`);
+      if (!Number.isNaN(fim) && t > fim) return false;
+    }
+    return true;
   }
 
   verPedido(id: string): void {
@@ -2085,6 +2228,31 @@ export class EstoquePage implements OnInit {
     this.resolverPecaPedido(item);
   }
 
+  abrirCadastroModeloPedido(item: ItemPedidoCompraUi, nome = ''): void {
+    this.itemPedidoCadastroModelo = item;
+    this.nomeModeloNovo = nome.trim();
+    this.modalCadastroModeloAberto = true;
+  }
+
+  fecharCadastroModeloPedido(): void {
+    this.modalCadastroModeloAberto = false;
+    this.nomeModeloNovo = '';
+    this.itemPedidoCadastroModelo = undefined;
+  }
+
+  onModeloPedidoSalvoModal(modelo: ModeloAparelho): void {
+    const item = this.itemPedidoCadastroModelo;
+    this.fecharCadastroModeloPedido();
+    if (!item || !modelo.id) return;
+
+    if (!this.modelosPedido.some(m => m.id === modelo.id)) {
+      this.modelosPedido = [...this.modelosPedido, modelo];
+    }
+
+    this.onModeloPedidoAutocomplete(item, modeloParaAutocomplete(modelo));
+    item.modeloAutocompleteKey = (item.modeloAutocompleteKey ?? 0) + 1;
+  }
+
   carregarModelosPedido(): void {
     this.aparelhosService.listarModelos({ limite: MODELO_LIMITE_LISTA }).subscribe({
       next: m => {
@@ -2425,7 +2593,7 @@ export class EstoquePage implements OnInit {
 
     this.service.listarPedidos().subscribe({
       next: p => {
-        this.pedidos = p;
+        this.pedidos = this.ordenarPedidos(p);
         if (!this.pedidoNumero.trim()) {
           this.pedidoNumero = this.gerarNumeroPedido(p);
         }

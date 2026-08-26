@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AparelhosService } from '../../services/aparelhos';
-import { ModeloAparelho } from '../../models/bling.models';
+import { MarcaAparelho, ModeloAparelho } from '../../models/bling.models';
 import { TIPOS_DISPOSITIVO, TIPOS_TELA } from '../../config/aparelhos.config';
 import { avisarErroUsuario } from '../../services/user-feedback.service';
 
@@ -11,7 +11,7 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="modal-backdrop" (click)="fechar()">
+    <div class="modal-backdrop" (click)="$event.stopPropagation(); fechar()">
       <div class="modal-box modal-box-wide" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>Novo Modelo</h3>
@@ -24,7 +24,18 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
           <div class="form-row">
             <div class="form-group">
               <label>Marca <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
-              <input [(ngModel)]="modelo.marcaNome" name="marcaNome" placeholder="Ex: Samsung, iPhone..." />
+              <select
+                [(ngModel)]="modelo.marcaNome"
+                name="marcaNome"
+                (ngModelChange)="onMarcaChange($event)"
+                [disabled]="carregandoMarcas"
+              >
+                <option value="">{{ carregandoMarcas ? 'Carregando...' : 'Selecione...' }}</option>
+                <option *ngFor="let m of marcas" [value]="m.nome">{{ m.nome }}</option>
+              </select>
+              <p class="modal-hint" *ngIf="!carregandoMarcas && marcas.length === 0">
+                Nenhuma marca cadastrada no catálogo.
+              </p>
             </div>
             <div class="form-group" style="flex:2">
               <label>Nome do modelo <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
@@ -67,7 +78,7 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.55);
-      z-index: 10000;
+      z-index: 10100;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -173,6 +184,7 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
       margin: 0 0 12px;
     }
     .campo-obrigatorio { color: #dc2626; }
+    .modal-hint { font-size: 12px; color: #64748b; margin: 6px 0 0; }
   `],
 })
 export class CadastroAparelhoModal implements OnInit {
@@ -183,6 +195,8 @@ export class CadastroAparelhoModal implements OnInit {
   @Output() modeloSalvo = new EventEmitter<ModeloAparelho>();
 
   modelo: ModeloAparelho = { nome: '', marcaNome: '', tipoDispositivo: 'Celular', aparelhosCompativeis: [] };
+  marcas: MarcaAparelho[] = [];
+  carregandoMarcas = false;
   salvando = false;
   erro = '';
   readonly tiposDispositivo = TIPOS_DISPOSITIVO;
@@ -193,6 +207,27 @@ export class CadastroAparelhoModal implements OnInit {
   ngOnInit(): void {
     this.modelo.nome = this.nomeInicial;
     this.modelo.tipoDispositivo = this.tipoDispositivoInicial || 'Celular';
+    this.carregarMarcas();
+  }
+
+  onMarcaChange(nome: string): void {
+    const marca = this.marcas.find(m => m.nome === nome);
+    this.modelo.marcaId = marca?.id;
+    this.modelo.marcaNome = nome?.trim() || '';
+  }
+
+  private carregarMarcas(): void {
+    this.carregandoMarcas = true;
+    this.service.listarMarcas().subscribe({
+      next: marcas => {
+        this.marcas = marcas;
+        this.carregandoMarcas = false;
+      },
+      error: () => {
+        this.marcas = [];
+        this.carregandoMarcas = false;
+      },
+    });
   }
 
   salvar(): void {
