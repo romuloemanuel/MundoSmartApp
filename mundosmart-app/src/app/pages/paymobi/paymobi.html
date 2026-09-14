@@ -91,8 +91,13 @@
     </div>
     <div class="card">
       <span>Custo dos aparelhos</span>
-      <strong>{{ moeda(resumo.custoAparelhosOperacao) }}</strong>
-      <em>o mesmo valor da despesa em aparelhos · sem cancelados e sem perdidos definidos · o filtro não altera</em>
+      <strong>{{ moeda(resumo.custoLiquido) }}</strong>
+      <em>
+        {{ resumo.aparelhosVendidos }}
+        {{ resumo.aparelhosVendidos === 1 ? 'aparelho' : 'aparelhos' }}
+        · compra + {{ moeda(acrescimoAparelho) }} + chave
+        · o filtro não altera
+      </em>
     </div>
     <div class="card card-entrada">
       <span>Receita</span>
@@ -164,7 +169,7 @@
     <div class="card card-entrada">
       <span>Total geral a receber</span>
       <strong>{{ moeda(resumo.devidoAtivos) }}</strong>
-      <em>{{ resumo.contratosAtivos }} contratos ativos · perdido não entra no a receber</em>
+      <em>{{ resumo.contratosAtivos }} contratos ativos · inclusive Perdido · o prejuízo do aparelho fica no card Perdidos</em>
     </div>
     <div class="card" [class.lucro]="resumo.resultadoPagos > 0" [class.prejuizo]="resumo.resultadoPagos < 0">
       <span>Resultado dos pagos</span>
@@ -182,7 +187,7 @@
       <em>
         {{ resumo.contratosPerdidos }}
         {{ resumo.contratosPerdidos === 1 ? 'contrato' : 'contratos' }}
-        · já recebido − custo do aparelho (compra + R$ 20 + chave)
+        · prejuízo do aparelho (já recebido − custo), não o saldo das parcelas
         · só status Perdido marcado na lista
         · o mesmo valor entra na despesa ou na receita
       </em>
@@ -210,7 +215,8 @@
     <p class="caixa-cobranca-hint">
       Só vendas em cobrança (sem quitadas nem canceladas).
       Os totais seguem a PayMobi: só boletos gerados, sem parcela repetida.
-      Perdido é só o que a loja marcar. Nesse grupo vale o prejuízo real do aparelho, não o que ainda faltava no contrato.
+      Perdido é o prejuízo do aparelho (não reaver e não pagar esse custo).
+      O saldo das parcelas desses contratos continua no total a receber.
     </p>
     <div class="caixa-cobranca-itens">
       <div class="item-receber item-total">
@@ -219,8 +225,9 @@
         <em>
           {{ resumo.contratosAtivos }}
           {{ resumo.contratosAtivos === 1 ? 'contrato ativo' : 'contratos ativos' }}
-          · sem perdido {{ moeda(resumo.devidoEsperado) }}
-          · prejuízo perdido {{ moeda(resumo.devidoPerdido) }}
+          · inclusive Perdido
+          · esperado sem Perdido {{ moeda(resumo.devidoEsperado) }}
+          · prejuízo do aparelho Perdido {{ moeda(resumo.devidoPerdido) }}
         </em>
       </div>
       <div class="item-pago">
@@ -746,7 +753,7 @@
             <div class="sub" *ngIf="linha.valorEntrada > 0">receita</div>
           </td>
           <td>
-            <ng-container *ngIf="linha.statusCobranca === 'perdido'; else devidoNormal">
+            <ng-container *ngIf="ehPerdido(linha); else devidoNormal">
               {{ moeda(linha.prejuizoAparelho) }}
               <div class="sub">prejuízo real do aparelho</div>
               <div class="sub" *ngIf="!linha.contaCusto">informe o custo</div>
@@ -777,19 +784,19 @@
             </label>
           </td>
           <td class="col-falta">
-            <div *ngIf="linha.statusCobranca === 'perdido'" class="negativo">
+            <div *ngIf="ehPerdido(linha)" class="negativo">
               {{ moeda(linha.prejuizoAparelho) }}
               <div class="sub">prejuízo do aparelho</div>
             </div>
             <div
-              *ngIf="linha.statusCobranca !== 'perdido' && linha.status !== 'cancelada' && linha.faltaPagar > 0"
+              *ngIf="!ehPerdido(linha) && linha.status !== 'cancelada' && linha.faltaPagar > 0"
               class="falta-pagar"
             >
               {{ moeda(linha.faltaPagar) }}
               <div class="sub falta-pagar-qtd">{{ linha.parcelasAtraso }} {{ linha.parcelasAtraso === 1 ? 'parcela' : 'parcelas' }}</div>
             </div>
             <div
-              *ngIf="linha.statusCobranca !== 'perdido' && (linha.status === 'cancelada' || linha.faltaPagar <= 0)"
+              *ngIf="!ehPerdido(linha) && (linha.status === 'cancelada' || linha.faltaPagar <= 0)"
               class="positivo"
             >
               {{ linha.status === 'cancelada' ? '—' : 'ok' }}
@@ -833,10 +840,10 @@
           <td>
             <select
               class="status-cobranca"
-              [ngModel]="linha.statusCobranca"
+              [ngModel]="linha.venda.statusCobranca || linha.statusCobranca"
               [name]="'statusCobranca-' + linha.venda.id"
               (ngModelChange)="salvarStatusCobranca(linha, $event)"
-              [attr.data-cobranca]="linha.statusCobranca"
+              [attr.data-cobranca]="linha.venda.statusCobranca || linha.statusCobranca"
             >
               <option *ngFor="let s of statusCobrancaOpcoes" [ngValue]="s.id">{{ s.rotulo }}</option>
             </select>

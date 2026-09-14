@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { PaymobiStatus, PaymobiStatusCobranca } from './paymobi-vendas.service';
-import { PaymobiLinhaView, soDigitos } from './paymobi-calculo.service';
+import { PaymobiLinhaView, soDigitos, statusCobrancaSalvo } from './paymobi-calculo.service';
 
 export interface PaymobiFiltrosEstado {
   status: PaymobiStatus | 'todos' | 'ativos';
@@ -61,7 +61,7 @@ export class PaymobiFiltrosService {
       const atrasoAte = qtdFiltro(f.parcelasAtrasoAte);
       if (atrasoDe != null && l.parcelasAtraso < atrasoDe) return false;
       if (atrasoAte != null && l.parcelasAtraso > atrasoAte) return false;
-      if (f.cobranca !== 'todos' && l.statusCobranca !== f.cobranca) return false;
+      if (f.cobranca !== 'todos' && statusCobrancaSalvo(l) !== f.cobranca) return false;
       if (nome && !(v.clienteNome ?? '').toLowerCase().includes(nome)) return false;
       if (cpf && !soDigitos(v.clienteCpf).includes(cpf)) return false;
       if (tel && !soDigitos(v.clienteTelefone).includes(tel)) return false;

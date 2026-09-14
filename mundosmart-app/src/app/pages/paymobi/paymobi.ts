@@ -19,6 +19,7 @@ import {
   PaymobiLinhaView,
   PaymobiResumoView,
   PAYMOBI_RESUMO_VAZIO,
+  cobrancaPerdida,
 } from '../../services/paymobi-calculo.service';
 import {
   FILTROS_VAZIOS,
@@ -77,6 +78,7 @@ export class PaymobiPage implements OnInit {
   custoPlataformaMensal = 200;
   painelAtivosAberto = false;
   painelRetornoAberto = false;
+  private statusCobrancaPedido = new Map<string, number>();
 
   constructor(
     private api: PaymobiVendasService,
@@ -96,7 +98,7 @@ export class PaymobiPage implements OnInit {
   }
 
   trackLinha(_: number, linha: PaymobiLinhaView): string {
-    return linha.venda.id || linha.chaveCliente + linha.venda.aparelhoImei;
+    return `${linha.venda.id || linha.chaveCliente}|${linha.venda.statusCobranca || linha.statusCobranca}`;
   }
 
   trackBoleto(_: number, b: PaymobiBoleto): string {
@@ -289,13 +291,32 @@ export class PaymobiPage implements OnInit {
     });
   }
 
+  ehPerdido(linha: PaymobiLinhaView): boolean {
+    return cobrancaPerdida(linha);
+  }
+
   salvarStatusCobranca(linha: PaymobiLinhaView, status: PaymobiStatusCobranca): void {
-    const v = linha.venda;
-    if (!v.id) return;
-    v.statusCobranca = status;
-    this.api.atualizar(v.id, { ...v, statusCobranca: status }).subscribe({
-      next: atual => this.substituir(atual),
-      error: err => avisarErroUsuario(msgApi(err, 'Não foi possível salvar o status da cobrança.')),
+    const id = linha.venda.id;
+    if (!id) return;
+    const atual = ((linha.venda.statusCobranca || linha.statusCobranca || 'ok') as PaymobiStatusCobranca);
+    if (atual === status) return;
+    const seq = (this.statusCobrancaPedido.get(id) || 0) + 1;
+    this.statusCobrancaPedido.set(id, seq);
+    this.vendas = this.vendas.map(x => x.id === id ? { ...x, statusCobranca: status } : x);
+    this.atualizarPainel();
+    const gravar = this.vendas.find(x => x.id === id);
+    if (!gravar) return;
+    this.api.atualizar(id, { ...gravar, statusCobranca: status }).subscribe({
+      next: salvo => {
+        if (this.statusCobrancaPedido.get(id) !== seq) return;
+        this.substituir({ ...salvo, statusCobranca: status });
+      },
+      error: err => {
+        if (this.statusCobrancaPedido.get(id) !== seq) return;
+        this.vendas = this.vendas.map(x => x.id === id ? { ...x, statusCobranca: atual } : x);
+        this.atualizarPainel();
+        avisarErroUsuario(msgApi(err, 'Não foi possível salvar o status da cobrança.'));
+      },
     });
   }
 
