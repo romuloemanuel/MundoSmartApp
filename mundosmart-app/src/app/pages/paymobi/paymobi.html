@@ -570,6 +570,11 @@
                 [title]="linha.parcelasAtraso + ' parcela(s) em atraso'"
               >{{ linha.parcelasAtraso }}</span>
               <span
+                *ngIf="linha.parcelasErro > 0"
+                class="bola-erro"
+                [title]="linha.parcelasErro + ' parcela(s) não veio da PayMobi'"
+              >{{ linha.parcelasErro }}</span>
+              <span
                 class="bola-pago"
                 [title]="linha.parcelasPagas + ' boleto(s) pago(s)'"
               >{{ linha.parcelasPagas }}</span>
@@ -586,7 +591,15 @@
             <div class="sub" *ngIf="linha.venda.clienteCpf">{{ linha.venda.clienteCpf }}</div>
           </td>
           <td>
-            {{ linha.aparelho }}
+            <input
+              class="modelo-inline"
+              [(ngModel)]="linha.venda.aparelhoModelo"
+              [name]="'modelo-' + linha.venda.id"
+              placeholder="Modelo"
+              (blur)="salvarModeloAparelho(linha)"
+            />
+            <div class="sub" *ngIf="linha.venda.aparelhoMarca">{{ linha.venda.aparelhoMarca }}</div>
+            <div class="sub" *ngIf="linha.venda.aparelhoCor">{{ linha.venda.aparelhoCor }}</div>
             <div class="sub" *ngIf="linha.venda.aparelhoImei">IMEI {{ linha.venda.aparelhoImei }}</div>
           </td>
           <td>
@@ -794,14 +807,46 @@
         </p>
               <p class="lista-titulo">Boletos deste IMEI{{ linha.venda.aparelhoImei ? ' (' + linha.venda.aparelhoImei + ')' : '' }}</p>
               <p class="muted" *ngIf="!linha.boletosImei.length">Nenhum boleto da PayMobi neste aparelho.</p>
+              <p class="aviso-parcela-erro" *ngIf="linha.parcelasErro > 0">
+                {{ linha.parcelasErro === 1 ? '1 parcela não veio da PayMobi.' : linha.parcelasErro + ' parcelas não vieram da PayMobi.' }}
+                Confira o valor e marque como pago se a cliente pagou.
+              </p>
               <ul class="boletos-imei" *ngIf="linha.boletosImei.length">
-                <li *ngFor="let b of linha.boletosImei; trackBy: trackBoleto" [attr.data-status]="rotuloBoleto(b)">
+                <li *ngFor="let b of linha.boletosImei; trackBy: trackBoleto" [attr.data-status]="classeBoleto(b)">
                   <span>
                     {{ b.numero ? b.numero + 'ª' : '' }}
-                    {{ dataCurta(b.vencimento) }} — {{ moeda(b.valor) }}
+                    {{ dataCurta(b.vencimento) }}
+                    <ng-container *ngIf="!boletoEmErro(b)"> — {{ moeda(b.valor) }}</ng-container>
                   </span>
                   <span class="sub">{{ rotuloBoleto(b) }}</span>
+                  <ng-container *ngIf="boletoEmErro(b)">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      class="parcela-erro-valor"
+                      [(ngModel)]="b.valor"
+                      [name]="'parcelaErro-' + linha.venda.id + '-' + b.numero"
+                      placeholder="Valor"
+                    />
+                    <button
+                      type="button"
+                      class="btn-primario"
+                      (click)="confirmarParcelaPaga(linha, b)"
+                      [disabled]="salvando"
+                    >
+                      Marcar como pago
+                    </button>
+                  </ng-container>
                   <a *ngIf="b.link" [href]="b.link" target="_blank" rel="noopener">Abrir boleto</a>
+                  <button
+                    *ngIf="boletoDaLoja(b) && b.id"
+                    type="button"
+                    class="btn-perigo"
+                    (click)="desfazerParcelaLoja(linha, b)"
+                  >
+                    Desfazer
+                  </button>
                 </li>
               </ul>
               <p class="lista-titulo">Recebimentos manuais desta venda</p>

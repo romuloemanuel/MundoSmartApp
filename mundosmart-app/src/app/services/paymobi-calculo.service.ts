@@ -30,6 +30,7 @@ export interface PaymobiLinhaView {
   bloqueado: boolean;
   parcelasAtraso: number;
   parcelasPagas: number;
+  parcelasErro: number;
   boletosImei: PaymobiBoleto[];
   boletosContabeis: PaymobiBoleto[];
   semBoletosPaymobi: boolean;
@@ -251,10 +252,28 @@ export class PaymobiCalculoService {
 
   rotuloBoleto(b: PaymobiBoleto, hoje = hojeBrasil()): string {
     const s = situacaoBoleto(b, hoje);
-    if (s === 'pago') return 'Pago';
+    if (s === 'erro') return 'Não veio da PayMobi';
+    if (s === 'pago') return b.manual ? 'Pago na loja' : 'Pago';
     if (s === 'atrasado') return 'Em atraso';
     if (s === 'aberto') return 'Em aberto';
     return b.status || '—';
+  }
+
+  classeBoleto(b: PaymobiBoleto, hoje = hojeBrasil()): string {
+    const s = situacaoBoleto(b, hoje);
+    if (s === 'erro') return 'Erro';
+    if (s === 'pago') return b.manual ? 'Pago na loja' : 'Pago';
+    if (s === 'atrasado') return 'Em atraso';
+    if (s === 'aberto') return 'Em aberto';
+    return 'outro';
+  }
+
+  boletoEmErro(b: PaymobiBoleto, hoje = hojeBrasil()): boolean {
+    return situacaoBoleto(b, hoje) === 'erro';
+  }
+
+  boletoDaLoja(b: PaymobiBoleto): boolean {
+    return !!b.manual;
   }
 
   moeda(n: number): string {
@@ -304,11 +323,15 @@ export class PaymobiCalculoService {
     const valorDevido = semBoletos
       ? devidoGuardado
       : boletos
-          .filter(b => situacaoBoleto(b, hoje) !== 'pago')
+          .filter(b => {
+            const s = situacaoBoleto(b, hoje);
+            return s !== 'pago' && s !== 'erro';
+          })
           .reduce((acc, b) => acc + (Number(b.valor) || 0), 0);
     const parcelasAtraso = agenda.parcelasAtraso;
     const faltaPagar = agenda.faltaPagar;
     const parcelasPagas = agenda.parcelasPagas;
+    const parcelasErro = boletos.filter(b => situacaoBoleto(b, hoje) === 'erro').length;
     const totalRecebido = valorEntrada + totalBoletosPagos;
     const valorRevenda = Number(v.valorRevenda) || 0;
     const receita = v.status === 'cancelada' ? valorEntrada + totalBoletosPagos + valorRevenda : totalRecebido;
@@ -342,6 +365,7 @@ export class PaymobiCalculoService {
       meses,
       parcelasAtraso,
       parcelasPagas,
+      parcelasErro,
       quitou,
     };
   }
@@ -389,6 +413,7 @@ export class PaymobiCalculoService {
       bloqueado: !!v.aparelhoBloqueado,
       parcelasAtraso: b.parcelasAtraso,
       parcelasPagas: b.parcelasPagas,
+      parcelasErro: b.parcelasErro,
       boletosImei: b.boletosImei,
       boletosContabeis: b.boletos,
       semBoletosPaymobi: b.semBoletos,
@@ -592,6 +617,7 @@ interface LinhaBase {
   meses: number;
   parcelasAtraso: number;
   parcelasPagas: number;
+  parcelasErro: number;
   quitou: boolean;
 }
 
@@ -624,8 +650,9 @@ function boletoGerado(b: PaymobiBoleto): boolean {
   return !!(b.link && String(b.link).trim());
 }
 
-function situacaoBoleto(b: PaymobiBoleto, hoje: string): 'pago' | 'atrasado' | 'aberto' | 'outro' {
+function situacaoBoleto(b: PaymobiBoleto, hoje: string): 'pago' | 'atrasado' | 'aberto' | 'erro' | 'outro' {
   const s = (b.status ?? '').toLowerCase();
+  if (s === 'ausente' || s === 'erro' || s === 'missing') return 'erro';
   if (s === 'paid' || s === 'pago') return 'pago';
   const vencido = !!b.vencimento && b.vencimento.slice(0, 10) < hoje;
   if (s === 'overdue' || s === 'late' || s === 'atrasado' || s === 'atrasada' || vencido) return 'atrasado';
@@ -695,7 +722,9 @@ function atrasoPeloContrato(
   let parcelasAtraso = 0;
   for (let n = 1; n <= qtd; n++) {
     if (paga(n)) continue;
-    const venc = (porNumero.get(n)?.vencimento ?? '').slice(0, 10) || somarMeses(primeira, n - 1);
+    const atual = porNumero.get(n);
+    if (atual && situacaoBoleto(atual, hoje) === 'erro') continue;
+    const venc = (atual?.vencimento ?? '').slice(0, 10) || somarMeses(primeira, n - 1);
     if (venc && venc < hoje) parcelasAtraso++;
   }
   const faltaPagar = valorParcela > 0
@@ -771,7 +800,16 @@ function completarAgenda(v: PaymobiVenda, lista: PaymobiBoleto[]): PaymobiBoleto
   };
   for (let n = 1; n <= qtd; n++) {
     if (porNumero.has(n)) continue;
-    if (paga(n - 1) && paga(n + 1)) continue;
+    if (paga(n - 1) && paga(n + 1)) {
+      out.push({
+        numero: n,
+        vencimento: somarMeses(primeira, n - 1),
+        valor,
+        status: 'ausente',
+        imei,
+      });
+      continue;
+    }
     out.push({
       numero: n,
       vencimento: somarMeses(primeira, n - 1),

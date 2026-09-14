@@ -17,6 +17,8 @@ public interface IPaymobiVendaRepository
     Task ExcluirAsync(string id, CancellationToken cancellationToken = default);
     Task<PaymobiVendaData?> AdicionarCobrancaAsync(string id, PaymobiCobrancaData cobranca, CancellationToken cancellationToken = default);
     Task<PaymobiVendaData?> RemoverCobrancaAsync(string vendaId, string cobrancaId, CancellationToken cancellationToken = default);
+    Task<PaymobiVendaData?> ConfirmarParcelaPagaAsync(string id, PaymobiConfirmarParcelaRequest pedido, CancellationToken cancellationToken = default);
+    Task<PaymobiVendaData?> RemoverParcelaManualAsync(string vendaId, string boletoId, CancellationToken cancellationToken = default);
     Task UpsertDaPaymobiAsync(PaymobiVendaData item, CancellationToken cancellationToken = default);
     Task<int> AplicarCustoAparelhoAsync(decimal custo, bool somenteSemCusto, CancellationToken cancellationToken = default);
     Task<int> AplicarStatusCobrancaPadraoAsync(CancellationToken cancellationToken = default);
@@ -59,6 +61,8 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         var n = 0;
         foreach (var item in lista)
         {
+            if (!AparelhoCodigoComercial.PareceCodigoFabrica(item.AparelhoModelo))
+                continue;
             var novo = AparelhoCodigoComercial.Nome(item.AparelhoModelo);
             if (string.Equals(novo, item.AparelhoModelo, StringComparison.Ordinal))
                 continue;
@@ -241,6 +245,68 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         return existente;
     }
 
+    public async Task<PaymobiVendaData?> ConfirmarParcelaPagaAsync(
+        string id,
+        PaymobiConfirmarParcelaRequest pedido,
+        CancellationToken cancellationToken = default)
+    {
+        var existente = await ObterAsync(id, cancellationToken);
+        if (existente is null) return null;
+        var numero = pedido.Numero;
+        if (numero <= 0)
+            throw new ArgumentException("Informe o número da parcela.");
+        var valor = decimal.Round(pedido.Valor, 2);
+        if (valor <= 0)
+            valor = existente.ValorParcela;
+        if (valor <= 0)
+            throw new ArgumentException("Informe o valor pago nesta parcela.");
+
+        existente.Boletos ??= [];
+        var jaPagaPaymobi = existente.Boletos.FirstOrDefault(b =>
+            b.Numero == numero && !b.Manual && (b.Status is "paid" or "pago"));
+        if (jaPagaPaymobi is not null)
+            return existente;
+
+        var manual = existente.Boletos.FirstOrDefault(b => b.Numero == numero && b.Manual);
+        if (manual is null)
+        {
+            manual = new PaymobiBoletoData
+            {
+                Id = ObjectId.GenerateNewId().ToString(),
+                Numero = numero,
+                Imei = string.IsNullOrWhiteSpace(pedido.Imei) ? existente.AparelhoImei : pedido.Imei.Trim(),
+            };
+            existente.Boletos.Add(manual);
+        }
+        manual.Valor = valor;
+        manual.Status = "paid";
+        manual.Manual = true;
+        manual.PagoEm = DateTime.UtcNow;
+        manual.Vencimento = pedido.Vencimento?.Date
+            ?? manual.Vencimento
+            ?? existente.DataVenda.AddMonths(numero);
+        existente.Status = RecalcularStatus(existente);
+        existente.AtualizadoEm = DateTime.UtcNow;
+        await _col.ReplaceOneAsync(x => x.Id == id, existente, cancellationToken: cancellationToken);
+        return existente;
+    }
+
+    public async Task<PaymobiVendaData?> RemoverParcelaManualAsync(
+        string vendaId,
+        string boletoId,
+        CancellationToken cancellationToken = default)
+    {
+        var existente = await ObterAsync(vendaId, cancellationToken);
+        if (existente is null) return null;
+        existente.Boletos = existente.Boletos
+            .Where(b => !(b.Manual && b.Id == boletoId))
+            .ToList();
+        existente.Status = RecalcularStatus(existente);
+        existente.AtualizadoEm = DateTime.UtcNow;
+        await _col.ReplaceOneAsync(x => x.Id == vendaId, existente, cancellationToken: cancellationToken);
+        return existente;
+    }
+
     private static PaymobiVendaData Normalizar(PaymobiVendaData item)
     {
         var nome = (item.ClienteNome ?? "").Trim();
@@ -328,7 +394,7 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         if (!string.IsNullOrWhiteSpace(item.ClienteEmail))
             existente.ClienteEmail = item.ClienteEmail;
         existente.AparelhoMarca = item.AparelhoMarca;
-        existente.AparelhoModelo = item.AparelhoModelo;
+        existente.AparelhoModelo = ModeloAposImportacao(existente.AparelhoModelo, item.AparelhoModelo);
         existente.AparelhoCor = item.AparelhoCor;
         existente.AparelhoImei = item.AparelhoImei;
         existente.ValorVenda = item.ValorVenda;
@@ -436,6 +502,18 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         return n;
     }
 
+    /// <summary>
+    /// Nome editado na loja permanece. Só troca se ainda for código de fábrica.
+    /// </summary>
+    private static string ModeloAposImportacao(string? guardado, string? importado)
+    {
+        var atual = (guardado ?? "").Trim();
+        var novo = (importado ?? "").Trim();
+        if (atual.Length == 0) return novo;
+        if (!AparelhoCodigoComercial.PareceCodigoFabrica(atual)) return atual;
+        return novo;
+    }
+
     private static List<PaymobiBoletoData> MesclarBoletos(
         List<PaymobiBoletoData>? atuais,
         List<PaymobiBoletoData>? novos)
@@ -445,11 +523,18 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         if (novos.Count == 0) return atuais;
 
         var ids = novos.Select(b => b.Id).Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet();
-        var pagosAntigos = atuais.Where(b =>
-            (b.Status is "paid" or "pago")
-            && !string.IsNullOrWhiteSpace(b.Id)
-            && !ids.Contains(b.Id));
-        return [.. novos, .. pagosAntigos];
+        var pagosPaymobi = novos
+            .Where(b => b.Status is "paid" or "pago" && b.Numero > 0)
+            .Select(b => b.Numero)
+            .ToHashSet();
+        var extras = atuais.Where(b =>
+        {
+            if (b.Status is not ("paid" or "pago")) return false;
+            if (b.Manual && b.Numero > 0 && pagosPaymobi.Contains(b.Numero)) return false;
+            if (!string.IsNullOrWhiteSpace(b.Id) && ids.Contains(b.Id)) return false;
+            return b.Manual || !string.IsNullOrWhiteSpace(b.Id);
+        });
+        return [.. novos, .. extras];
     }
 
     private static decimal SomaBoletosPagos(IEnumerable<PaymobiBoletoData>? boletos)

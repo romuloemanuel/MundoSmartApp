@@ -146,4 +146,34 @@ public class PaymobiVendasController : ControllerBase
         var atualizado = await _repo.RemoverCobrancaAsync(id, cobrancaId, cancellationToken);
         return atualizado is null ? NotFound() : Ok(atualizado);
     }
+
+    [HttpPost("vendas/{id}/parcelas/{numero:int}/pago")]
+    public async Task<IActionResult> ConfirmarParcelaPaga(
+        string id,
+        int numero,
+        [FromBody] PaymobiConfirmarParcelaRequest? body,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var pedido = body ?? new PaymobiConfirmarParcelaRequest();
+            if (pedido.Numero <= 0) pedido.Numero = numero;
+            var atualizado = await _repo.ConfirmarParcelaPagaAsync(id, pedido, cancellationToken);
+            return atualizado is null ? NotFound() : Ok(atualizado);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
+    [HttpDelete("vendas/{id}/parcelas-manuais/{boletoId}")]
+    public async Task<IActionResult> RemoverParcelaManual(
+        string id,
+        string boletoId,
+        CancellationToken cancellationToken)
+    {
+        var atualizado = await _repo.RemoverParcelaManualAsync(id, boletoId, cancellationToken);
+        return atualizado is null ? NotFound() : Ok(atualizado);
+    }
 }

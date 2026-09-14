@@ -33,6 +33,7 @@ export interface PaymobiBoleto {
   imei?: string;
   link?: string;
   pagoEm?: string;
+  manual?: boolean;
 }
 
 export interface PaymobiCobranca {
@@ -139,6 +140,17 @@ export class PaymobiVendasService {
 
   removerCobranca(id: string, cobrancaId: string): Observable<PaymobiVenda> {
     return this.http.delete<PaymobiVenda>(`${this.api}/${id}/cobrancas/${cobrancaId}`);
+  }
+
+  confirmarParcelaPaga(
+    id: string,
+    body: { numero: number; valor: number; vencimento?: string; imei?: string },
+  ): Observable<PaymobiVenda> {
+    return this.http.post<PaymobiVenda>(`${this.api}/${id}/parcelas/${body.numero}/pago`, body);
+  }
+
+  removerParcelaManual(id: string, boletoId: string): Observable<PaymobiVenda> {
+    return this.http.delete<PaymobiVenda>(`${this.api}/${id}/parcelas-manuais/${boletoId}`);
   }
 
   config(): Observable<PaymobiConfig> {

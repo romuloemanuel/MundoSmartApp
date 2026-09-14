@@ -62,12 +62,19 @@
   grid-template-columns: 1fr 1fr auto;
 }
 
-.custo-inline {
+.custo-inline,
+.modelo-inline {
   width: 7.5rem;
   padding: 5px 6px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 13px;
+}
+
+.modelo-inline {
+  width: 100%;
+  min-width: 8rem;
+  max-width: 14rem;
 }
 
 .hint {
@@ -704,7 +711,8 @@
 }
 
 .bola-atraso,
-.bola-pago {
+.bola-pago,
+.bola-erro {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -724,6 +732,10 @@
 
 .bola-pago {
   background: #2563eb;
+}
+
+.bola-erro {
+  background: #d97706;
 }
 
 .selo-bloqueado {
@@ -784,4 +796,33 @@
 
 .boletos-imei li[data-status='Pago'] {
   color: #15803d;
+}
+
+.boletos-imei li[data-status='Pago na loja'] {
+  color: #15803d;
+}
+
+.boletos-imei li[data-status='Erro'] {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.aviso-parcela-erro {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  font-size: 13px;
+}
+
+.parcela-erro-valor {
+  width: 110px;
+  padding: 4px 8px;
+  border: 1px solid #d97706;
+  border-radius: 6px;
 }

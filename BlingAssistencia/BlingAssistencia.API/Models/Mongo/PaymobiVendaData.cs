@@ -111,6 +111,18 @@ public class PaymobiBoletoData
     [BsonIgnoreIfNull]
     [BsonElement("pagoEm")]
     public DateTime? PagoEm { get; set; }
+
+    [BsonIgnoreIfDefault]
+    [BsonElement("manual")]
+    public bool Manual { get; set; }
+}
+
+public class PaymobiConfirmarParcelaRequest
+{
+    public int Numero { get; set; }
+    public decimal Valor { get; set; }
+    public DateTime? Vencimento { get; set; }
+    public string? Imei { get; set; }
 }
 
 public class PaymobiCobrancaData

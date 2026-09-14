@@ -107,7 +107,23 @@ export class PaymobiPage implements OnInit {
   }
 
   trackBoleto(_: number, b: PaymobiBoleto): string {
-    return b.id || `${b.numero}-${b.vencimento}-${b.valor}`;
+    return b.id || `n-${b.numero ?? 0}-${b.vencimento ?? ''}`;
+  }
+
+  rotuloBoleto(b: PaymobiBoleto): string {
+    return this.calculo.rotuloBoleto(b);
+  }
+
+  classeBoleto(b: PaymobiBoleto): string {
+    return this.calculo.classeBoleto(b);
+  }
+
+  boletoEmErro(b: PaymobiBoleto): boolean {
+    return this.calculo.boletoEmErro(b);
+  }
+
+  boletoDaLoja(b: PaymobiBoleto): boolean {
+    return this.calculo.boletoDaLoja(b);
   }
 
   get linhaParcelas(): PaymobiLinhaView | null {
@@ -119,10 +135,6 @@ export class PaymobiPage implements OnInit {
   fecharModalTecla(): void {
     if (this.editando) this.cancelar();
     else if (this.abertaId) this.fecharParcelas();
-  }
-
-  rotuloBoleto(b: PaymobiBoleto): string {
-    return this.calculo.rotuloBoleto(b);
   }
 
   moeda(n: number): string {
@@ -240,6 +252,17 @@ export class PaymobiPage implements OnInit {
         avisarSucessoUsuario('Venda concretizada. Informe o custo de compra do aparelho; a chave entra à parte.');
       },
       error: err => avisarErroUsuario(msgApi(err, 'Não foi possível concretizar a venda.')),
+    });
+  }
+
+  salvarModeloAparelho(linha: PaymobiLinhaView): void {
+    const v = linha.venda;
+    if (!v.id) return;
+    const modelo = (v.aparelhoModelo ?? '').trim();
+    v.aparelhoModelo = modelo;
+    this.api.atualizar(v.id, { ...v, aparelhoModelo: modelo }).subscribe({
+      next: atual => this.substituir(atual),
+      error: err => avisarErroUsuario(msgApi(err, 'Não foi possível salvar o modelo do aparelho.')),
     });
   }
 
@@ -397,6 +420,52 @@ export class PaymobiPage implements OnInit {
   fecharParcelas(): void {
     this.abertaId = null;
     this.cdr.markForCheck();
+  }
+
+  confirmarParcelaPaga(linha: PaymobiLinhaView, b: PaymobiBoleto): void {
+    const v = linha.venda;
+    if (!v.id) return;
+    const numero = Number(b.numero) || 0;
+    const valor = Number(b.valor);
+    if (numero <= 0) {
+      avisarErroUsuario('Parcela sem número.');
+      return;
+    }
+    if (!(valor > 0)) {
+      avisarErroUsuario('Informe o valor pago nesta parcela.');
+      return;
+    }
+    this.salvando = true;
+    this.cdr.markForCheck();
+    this.api.confirmarParcelaPaga(v.id, {
+      numero,
+      valor,
+      vencimento: (b.vencimento ?? '').slice(0, 10) || undefined,
+      imei: v.aparelhoImei,
+    }).subscribe({
+      next: atual => {
+        this.salvando = false;
+        avisarSucessoUsuario(`Parcela ${numero} marcada como paga.`);
+        this.substituir(atual);
+      },
+      error: err => {
+        this.salvando = false;
+        this.cdr.markForCheck();
+        avisarErroUsuario(msgApi(err, 'Não foi possível marcar a parcela como paga.'));
+      },
+    });
+  }
+
+  desfazerParcelaLoja(linha: PaymobiLinhaView, b: PaymobiBoleto): void {
+    const v = linha.venda;
+    if (!v.id || !b.id) return;
+    this.api.removerParcelaManual(v.id, b.id).subscribe({
+      next: atual => {
+        avisarSucessoUsuario('Pagamento informado na loja removido.');
+        this.substituir(atual);
+      },
+      error: err => avisarErroUsuario(msgApi(err, 'Não foi possível desfazer.')),
+    });
   }
 
   registrarCobranca(linha: PaymobiLinhaView): void {
