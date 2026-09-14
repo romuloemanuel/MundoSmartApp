@@ -36,6 +36,7 @@ export interface ComissaoOsItem {
   tecnicoNome?: string;
   clienteNome?: string;
   equipamento?: string;
+  situacao?: string;
   dataConclusao?: string;
   valorTotal: number;
   juros: number;
@@ -50,6 +51,10 @@ export interface ComissaoPorTecnico {
   totalJuros: number;
   totalPecas: number;
   totalLiquido: number;
+  quantidadeAguardandoCliente: number;
+  totalLiquidoAguardandoCliente: number;
+  quantidadeAndamentoComPreco: number;
+  totalLiquidoAndamentoComPreco: number;
 }
 
 export interface ComissaoRelatorio {
@@ -62,8 +67,15 @@ export interface ComissaoRelatorio {
   totalJuros: number;
   totalPecas: number;
   totalLiquido: number;
+  quantidadeAguardandoCliente: number;
+  totalLiquidoAguardandoCliente: number;
+  quantidadeAndamentoComPreco: number;
+  totalLiquidoAndamentoComPreco: number;
+  totalLiquidoPrevisaoMes: number;
   porTecnico: ComissaoPorTecnico[];
   ordens: ComissaoOsItem[];
+  aguardandoCliente: ComissaoOsItem[];
+  andamentoComPreco: ComissaoOsItem[];
 }
 
 export interface OsHistoricoResumo {

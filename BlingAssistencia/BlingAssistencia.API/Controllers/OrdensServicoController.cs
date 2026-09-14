@@ -70,43 +70,32 @@ public class OrdensServicoController : ControllerBase
             incluirSemTecnico,
             lojaFiltro);
 
-        var ordens = new List<ComissaoOsItem>(locais.Count);
-        foreach (var local in locais)
-        {
-            var valorTotal = local.ValorTotalAcordado ?? local.ValorTotal ?? 0m;
-            var juros = local.Juros is > 0 ? local.Juros.Value : 0m;
-            var valorPecas = CalcularCustoPecas(local.Itens);
-            var liquido = valorTotal - juros - valorPecas;
+        var previsaoLocais = await _localRepo.ListarPrevisaoComissaoAsync(
+            tecnicos,
+            incluirSemTecnico,
+            lojaFiltro);
 
-            ordens.Add(new ComissaoOsItem
-            {
-                Id = local.BlingId,
-                Numero = local.OsNumero,
-                LojaOrigem = OsLojaHelper.Normalizar(local.LojaOrigem),
-                TecnicoNome = string.IsNullOrWhiteSpace(local.TecnicoNome) ? "(sem técnico)" : local.TecnicoNome.Trim(),
-                ClienteNome = local.ContatoNome,
-                Equipamento = local.Equipamento ?? local.ModeloNome,
-                DataConclusao = local.DataConclusao,
-                ValorTotal = valorTotal,
-                Juros = juros,
-                ValorPecas = valorPecas,
-                ValorLiquido = liquido,
-            });
-        }
+        var ordens = locais.Select(MapearComissaoItem).ToList();
+        var previsao = previsaoLocais.Select(MapearComissaoItem).ToList();
 
-        var porTecnico = ordens
-            .GroupBy(o => o.TecnicoNome, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new ComissaoPorTecnico
+        var aguardandoCliente = previsao
+            .Where(o => string.Equals(
+                OsSituacaoHelper.Normalizar(o.Situacao),
+                OsSituacaoHelper.AguardandoCliente,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var andamentoComPreco = previsao
+            .Where(o =>
             {
-                TecnicoNome = g.First().TecnicoNome ?? "(sem técnico)",
-                QuantidadeOs = g.Count(),
-                TotalValor = g.Sum(x => x.ValorTotal),
-                TotalJuros = g.Sum(x => x.Juros),
-                TotalPecas = g.Sum(x => x.ValorPecas),
-                TotalLiquido = g.Sum(x => x.ValorLiquido),
+                var sit = OsSituacaoHelper.Normalizar(o.Situacao);
+                var emCurso = string.Equals(sit, OsSituacaoHelper.Aberto, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(sit, OsSituacaoHelper.EmTeste, StringComparison.OrdinalIgnoreCase);
+                return emCurso && o.ValorTotal > 0;
             })
             .ToList();
+
+        var porTecnico = MontarPorTecnico(ordens, aguardandoCliente, andamentoComPreco);
 
         return Ok(new ComissaoRelatorioResponse
         {
@@ -124,9 +113,77 @@ public class OrdensServicoController : ControllerBase
             TotalJuros = ordens.Sum(x => x.Juros),
             TotalPecas = ordens.Sum(x => x.ValorPecas),
             TotalLiquido = ordens.Sum(x => x.ValorLiquido),
+            QuantidadeAguardandoCliente = aguardandoCliente.Count,
+            TotalLiquidoAguardandoCliente = aguardandoCliente.Sum(x => x.ValorLiquido),
+            QuantidadeAndamentoComPreco = andamentoComPreco.Count,
+            TotalLiquidoAndamentoComPreco = andamentoComPreco.Sum(x => x.ValorLiquido),
+            TotalLiquidoPrevisaoMes = aguardandoCliente.Sum(x => x.ValorLiquido)
+                + andamentoComPreco.Sum(x => x.ValorLiquido),
             PorTecnico = porTecnico,
             Ordens = ordens,
+            AguardandoCliente = aguardandoCliente,
+            AndamentoComPreco = andamentoComPreco,
         });
+    }
+
+    private static ComissaoOsItem MapearComissaoItem(OsLocalData local)
+    {
+        var valorTotal = local.ValorAVista ?? local.ValorTotalAcordado ?? local.ValorTotal ?? 0m;
+        var juros = local.Juros is > 0 ? local.Juros.Value : 0m;
+        var valorPecas = CalcularCustoPecas(local.Itens);
+        return new ComissaoOsItem
+        {
+            Id = local.BlingId,
+            Numero = local.OsNumero,
+            LojaOrigem = OsLojaHelper.Normalizar(local.LojaOrigem),
+            TecnicoNome = string.IsNullOrWhiteSpace(local.TecnicoNome) ? "(sem técnico)" : local.TecnicoNome.Trim(),
+            ClienteNome = local.ContatoNome,
+            Equipamento = local.Equipamento ?? local.ModeloNome,
+            Situacao = OsSituacaoHelper.Normalizar(local.Situacao),
+            DataConclusao = local.DataConclusao,
+            ValorTotal = valorTotal,
+            Juros = juros,
+            ValorPecas = valorPecas,
+            ValorLiquido = valorTotal - juros - valorPecas,
+        };
+    }
+
+    private static List<ComissaoPorTecnico> MontarPorTecnico(
+        List<ComissaoOsItem> concluidas,
+        List<ComissaoOsItem> aguardandoCliente,
+        List<ComissaoOsItem> andamentoComPreco)
+    {
+        var nomes = concluidas.Select(o => o.TecnicoNome)
+            .Concat(aguardandoCliente.Select(o => o.TecnicoNome))
+            .Concat(andamentoComPreco.Select(o => o.TecnicoNome))
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        ComissaoOsItem[] DoTecnico(IEnumerable<ComissaoOsItem> lista, string nome) =>
+            lista.Where(o => string.Equals(o.TecnicoNome, nome, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+        return nomes.Select(nome =>
+        {
+            var chave = nome ?? "(sem técnico)";
+            var ok = DoTecnico(concluidas, chave);
+            var loja = DoTecnico(aguardandoCliente, chave);
+            var andamento = DoTecnico(andamentoComPreco, chave);
+            return new ComissaoPorTecnico
+            {
+                TecnicoNome = chave,
+                QuantidadeOs = ok.Length,
+                TotalValor = ok.Sum(x => x.ValorTotal),
+                TotalJuros = ok.Sum(x => x.Juros),
+                TotalPecas = ok.Sum(x => x.ValorPecas),
+                TotalLiquido = ok.Sum(x => x.ValorLiquido),
+                QuantidadeAguardandoCliente = loja.Length,
+                TotalLiquidoAguardandoCliente = loja.Sum(x => x.ValorLiquido),
+                QuantidadeAndamentoComPreco = andamento.Length,
+                TotalLiquidoAndamentoComPreco = andamento.Sum(x => x.ValorLiquido),
+            };
+        }).ToList();
     }
 
     private static decimal CalcularCustoPecas(List<BlingOrdemServicoItem>? itens)

@@ -1,0 +1,841 @@
+<div class="page paymobi-page">
+  <div class="page-header">
+    <h2>Vendas no boleto</h2>
+    <div class="acoes-topo">
+      <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/paymobi">Configuração</a>
+      <button type="button" (click)="buscarNaPaymobi()" [disabled]="sincronizando">
+        {{ sincronizando ? 'Buscando…' : 'Buscar vendas' }}
+      </button>
+      <button type="button" class="btn-primario" (click)="nova()">+ Nova venda</button>
+    </div>
+  </div>
+
+  <p class="hint">
+    Lucro líquido = receita − despesa.
+    <strong>Receita:</strong> entrada + boletos pagos dos contratos que seguem.
+    Se o cancelamento der negativo, o valor entra somado na despesa.
+    Se der positivo, entra somado na receita.
+    <strong>Despesa:</strong> custo dos aparelhos (já com {{ moeda(acrescimoAparelho) }} + chave em cada linha)
+    + plataforma (mensal × meses desde a primeira venda)
+    + prejuízo de cancelamento.
+    Se a PayMobi não trouxer boleto (CNPJ antigo), usamos o <strong>devido</strong> da linha:
+    boletos pagos ≈ financiado − devido.
+    A plataforma mensal só é rateada acima de {{ percentualLucro * 100 }}% do custo
+    e com pelo menos {{ moeda(margemErroLucro) }} de margem.
+    Cobrança: atrasos entram como <strong>Perdido</strong> e os demais como <strong>OK</strong>.
+    Se entrar pagamento ou renegociação na PayMobi, use <strong>Buscar vendas</strong> ou aguarde a busca automática (a cada 1 hora): o contrato sai de Perdido.
+    Use Em Negociação ou Em Recuperação para acompanhar quem ainda deve, sem contar como perdido.
+    <strong>Perdido</strong> mostra só o prejuízo real do aparelho (custo − já recebido), não o saldo das parcelas.
+  </p>
+
+  <p class="muted" *ngIf="ultimaSincronizacao">
+    Última busca: {{ dataHora(ultimaSincronizacao) }} — {{ ultimoTotalImportado }} vendas.
+    Atualização automática a cada 1 hora.
+  </p>
+  <p class="muted" *ngIf="!senhaConfigurada">
+    A conta da PayMobi ainda não foi configurada.
+    <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/paymobi">Informar e-mail e senha</a>
+  </p>
+
+  <div class="resumo" *ngIf="!carregando">
+    <div class="card">
+      <span>Em cobrança</span>
+      <strong>{{ resumo.emAndamento }}</strong>
+    </div>
+    <div class="card">
+      <span>Pagos (fim do contrato)</span>
+      <strong>{{ resumo.pagos }}</strong>
+    </div>
+    <div class="card">
+      <span>Cancelados / devoluções</span>
+      <strong>{{ resumo.cancelados }}</strong>
+    </div>
+    <div class="card">
+      <span>Com custo informado</span>
+      <strong>{{ resumo.concretizadas }}</strong>
+    </div>
+    <div class="card">
+      <span>Custo dos aparelhos</span>
+      <strong>{{ moeda(custoAparelhosVisiveis) }}</strong>
+      <em>soma do total de cada linha da lista · R$ 20 + chave já entram na linha, não de novo aqui</em>
+    </div>
+    <div class="card card-entrada">
+      <span>Receita</span>
+      <strong>{{ moeda(resumo.receita) }}</strong>
+      <em>
+        entrada + boletos dos contratos que seguem
+        <ng-container *ngIf="resumo.valorLucroCancelamentos > 0">
+          + lucro de cancelamento {{ moeda(resumo.valorLucroCancelamentos) }}
+        </ng-container>
+      </em>
+    </div>
+    <div class="card">
+      <span>Despesa</span>
+      <strong>{{ moeda(resumo.despesa) }}</strong>
+      <em>
+        aparelhos {{ moeda(resumo.custoAparelhosOperacao) }}
+        + plataforma {{ moeda(resumo.plataformaTotal) }}
+        <ng-container *ngIf="resumo.valorPrejuizoCancelamentos > 0">
+        + prejuízo {{ moeda(resumo.valorPrejuizoCancelamentos) }} somado na despesa
+        </ng-container>
+      </em>
+    </div>
+    <div class="card" [class.lucro]="resumo.lucroLiquido > 0" [class.prejuizo]="resumo.lucroLiquido < 0">
+      <span>Lucro líquido</span>
+      <strong>{{ moeda(resumo.lucroLiquido) }}</strong>
+      <em>receita − despesa · inclui quitados e cancelados</em>
+    </div>
+    <div class="card card-entrada">
+      <span>Entradas arrecadadas</span>
+      <strong>{{ moeda(resumo.entradas) }}</strong>
+      <em>receita paga no ato da compra</em>
+    </div>
+    <div class="card">
+      <span>Plataforma mensal</span>
+      <strong>{{ moeda(resumo.plataformaMensal) }}</strong>
+      <em *ngIf="resumo.rateio">{{ moeda(resumo.custoPlataformaMensalPorAparelho) }} × {{ resumo.rateio }} com lucro</em>
+      <em *ngIf="!resumo.rateio">nenhum aparelho na margem de lucro</em>
+    </div>
+    <div class="card">
+      <span>Plataforma nas vendas</span>
+      <strong>{{ moeda(resumo.plataforma) }}</strong>
+      <em>só quem deu lucro na margem</em>
+    </div>
+    <div class="card">
+      <span>Custo total da plataforma</span>
+      <strong>{{ moeda(resumo.plataformaTotal) }}</strong>
+      <em *ngIf="resumo.inicio">
+        desde {{ dataCurta(resumo.inicio) }} · {{ resumo.meses }} {{ resumo.meses === 1 ? 'mês' : 'meses' }}
+        × {{ moeda(resumo.plataformaMensal) }}
+      </em>
+      <em *ngIf="!resumo.inicio">aguardando a primeira venda</em>
+    </div>
+    <div class="card">
+      <span>Aparelhos bloqueados</span>
+      <strong>{{ resumo.bloqueados }}</strong>
+    </div>
+    <div class="card" [class.prejuizo]="resumo.comAtraso > 0">
+      <span>Com boletos em atraso</span>
+      <strong>{{ resumo.comAtraso }}</strong>
+    </div>
+    <div class="card card-entrada">
+      <span>Total geral a receber</span>
+      <strong>{{ moeda(resumo.devidoAtivos) }}</strong>
+      <em>{{ resumo.contratosAtivos }} contratos ativos · perdido não entra no a receber</em>
+    </div>
+    <div class="card" [class.lucro]="resumo.resultadoPagos > 0" [class.prejuizo]="resumo.resultadoPagos < 0">
+      <span>Resultado dos pagos</span>
+      <strong>{{ moeda(resumo.resultadoPagos) }}</strong>
+      <em>{{ resumo.comLucro }} rateiam a plataforma</em>
+    </div>
+    <div class="card" [class.lucro]="resumo.resultadoCancelamentos > 0" [class.prejuizo]="resumo.resultadoCancelamentos < 0">
+      <span>Cancelamentos / devoluções</span>
+      <strong>{{ moeda(resumo.resultadoCancelamentos) }}</strong>
+      <em>entrada + boletos + revenda − custo do aparelho (sem repetir na despesa geral)</em>
+    </div>
+  </div>
+
+  <div class="caixa-cobranca caixa-acordeao" *ngIf="!carregando" [class.aberta]="painelAtivosAberto">
+    <button
+      type="button"
+      class="caixa-acordeao-cabeca"
+      (click)="alternarPainel('ativos')"
+      [attr.aria-expanded]="painelAtivosAberto"
+    >
+      <span class="caixa-acordeao-titulo">
+        <strong>Contratos ativos</strong>
+        <em>
+          {{ resumo.contratosAtivos }}
+          {{ resumo.contratosAtivos === 1 ? 'contrato' : 'contratos' }}
+          · a receber {{ moeda(resumo.devidoAtivos) }}
+        </em>
+      </span>
+      <span class="caixa-acordeao-seta" aria-hidden="true"></span>
+    </button>
+    <div class="caixa-acordeao-corpo" *ngIf="painelAtivosAberto">
+    <p class="caixa-cobranca-hint">
+      Só vendas em cobrança (sem quitadas nem canceladas).
+      Os totais seguem a PayMobi: só boletos gerados, sem parcela repetida.
+      Atrasos entram como Perdido. Nesse grupo vale o prejuízo real do aparelho, não o que ainda faltava no contrato.
+    </p>
+    <div class="caixa-cobranca-itens">
+      <div class="item-receber item-total">
+        <span>Total geral a receber</span>
+        <strong>{{ moeda(resumo.devidoAtivos) }}</strong>
+        <em>
+          {{ resumo.contratosAtivos }}
+          {{ resumo.contratosAtivos === 1 ? 'contrato ativo' : 'contratos ativos' }}
+          · sem perdido {{ moeda(resumo.devidoEsperado) }}
+          · prejuízo perdido {{ moeda(resumo.devidoPerdido) }}
+        </em>
+      </div>
+      <div class="item-pago">
+        <span>Boletos pagos</span>
+        <strong>{{ moeda(resumo.boletosPagos) }}</strong>
+        <em>parcelas geradas já pagas</em>
+      </div>
+      <div class="item-atraso">
+        <span>Valor em atraso</span>
+        <strong>{{ moeda(resumo.boletosAtrasados) }}</strong>
+        <em>boletos gerados vencidos</em>
+      </div>
+      <div class="item-receber">
+        <span>Boletos em aberto</span>
+        <strong>{{ moeda(resumo.boletosAReceber) }}</strong>
+        <em>boletos gerados, sem atraso</em>
+      </div>
+      <div class="item-atraso">
+        <span>Perdido</span>
+        <strong>{{ moeda(resumo.devidoPerdido) }}</strong>
+        <em>
+          prejuízo real do aparelho (custo − já recebido)
+          · {{ percentual(resumo.percentualPerdido) }} dos contratos ativos
+          · {{ resumo.contratosPerdidos }}
+          {{ resumo.contratosPerdidos === 1 ? 'contrato' : 'contratos' }}
+        </em>
+      </div>
+      <div class="item-receber">
+        <span>A receber esperado</span>
+        <strong>{{ moeda(resumo.devidoEsperado) }}</strong>
+        <em>visão otimista · {{ percentual(resumo.percentualOtimista) }} dos contratos ativos · {{ resumo.contratosOtimistas }} contratos</em>
+      </div>
+      <div class="item-previsto" [class.lucro]="resumo.lucroPrevisto > 0" [class.prejuizo]="resumo.lucroPrevisto < 0">
+        <span>Lucro previsto</span>
+        <strong>{{ moeda(resumo.lucroPrevisto) }}</strong>
+        <em>lucro líquido atual + a receber otimista</em>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <div class="caixa-cobranca caixa-retorno caixa-acordeao" *ngIf="!carregando" [class.aberta]="painelRetornoAberto">
+    <button
+      type="button"
+      class="caixa-acordeao-cabeca"
+      (click)="alternarPainel('retorno')"
+      [attr.aria-expanded]="painelRetornoAberto"
+    >
+      <span class="caixa-acordeao-titulo">
+        <strong>Retorno do investimento</strong>
+        <em>
+          hoje {{ percentual(resumo.retornoHojePercentual) }}
+          · realista {{ percentual(resumo.retornoPrevistoPercentual) }}
+          · otimista {{ percentual(resumo.retornoPrevistoOtimistaPercentual) }}
+        </em>
+      </span>
+      <span class="caixa-acordeao-seta" aria-hidden="true"></span>
+    </button>
+    <div class="caixa-acordeao-corpo" *ngIf="painelRetornoAberto">
+    <p class="caixa-cobranca-hint">
+      Retorno = (receita − despesa) ÷ despesa, com a receita e a despesa de todas as vendas (ativos, quitados e cancelados).
+      Os percentuais de contratos (bons pagantes, perdido, otimista) continuam só sobre os ativos.
+      <strong>Realista:</strong> só bons pagantes (em dia, sem perdido).
+      <strong>Otimista:</strong> só o valor em atraso de contrato ativo. Perdido não entra.
+      A receita mensal prevista é a soma das parcelas do grupo de cada visão.
+    </p>
+    <div class="caixa-cobranca-itens">
+      <div class="item-previsto">
+        <span>Despesa investida</span>
+        <strong>{{ moeda(resumo.despesa) }}</strong>
+        <em>todas as vendas · base do percentual de retorno</em>
+      </div>
+      <div class="item-pago">
+        <span>Receita até hoje</span>
+        <strong>{{ moeda(resumo.receita) }}</strong>
+        <em>todas as vendas · entrada + boletos pagos + revenda</em>
+      </div>
+      <div class="item-previsto" [class.lucro]="resumo.retornoHojePercentual > 0" [class.prejuizo]="resumo.retornoHojePercentual < 0">
+        <span>Retorno até hoje</span>
+        <strong>{{ percentual(resumo.retornoHojePercentual) }}</strong>
+        <em>({{ moeda(resumo.receita) }} − {{ moeda(resumo.despesa) }}) ÷ despesa</em>
+      </div>
+    </div>
+    <div class="caixa-retorno-visoes">
+      <div class="visao visao-realista">
+        <h4>Visão realista</h4>
+        <p>Somente bons pagantes.</p>
+        <div class="caixa-cobranca-itens">
+          <div class="item-receber">
+            <span>A receber</span>
+            <strong>{{ moeda(resumo.devidoBomPagante) }}</strong>
+            <em>{{ resumo.contratosBons }} contratos · {{ percentual(resumo.percentualBomPagante) }} dos contratos ativos</em>
+          </div>
+          <div class="item-pago">
+            <span>Receita prevista</span>
+            <strong>{{ moeda(resumo.receita + resumo.devidoBomPagante) }}</strong>
+            <em>hoje + a receber dos bons pagantes</em>
+          </div>
+          <div class="item-previsto" [class.lucro]="resumo.retornoPrevistoPercentual > 0" [class.prejuizo]="resumo.retornoPrevistoPercentual < 0">
+            <span>Retorno previsto</span>
+            <strong>{{ percentual(resumo.retornoPrevistoPercentual) }}</strong>
+            <em>(receita prevista − despesa) ÷ despesa</em>
+          </div>
+          <div class="item-receber">
+            <span>Receita mensal prevista</span>
+            <strong>{{ moeda(resumo.receitaMensalBomPagante) }}</strong>
+            <em>parcela dos {{ resumo.contratosBons }} bons pagantes, todo mês</em>
+          </div>
+          <div class="item-pago">
+            <span>Entra até {{ dataCurta(resumo.fimMes) }}</span>
+            <strong>{{ moeda(resumo.receitaAteFimMesBomPagante) }}</strong>
+            <em>
+              {{ resumo.boletosAteFimMesBomPagante }}
+              {{ resumo.boletosAteFimMesBomPagante === 1 ? 'boleto' : 'boletos' }}
+              de {{ dataCurta(resumo.hoje) }} a {{ dataCurta(resumo.fimMes) }}
+            </em>
+          </div>
+        </div>
+      </div>
+      <div class="visao visao-otimista">
+        <h4>Visão otimista</h4>
+        <p>Só o vencido dos contratos ativos. Perdido não entra.</p>
+        <div class="caixa-cobranca-itens">
+          <div class="item-receber">
+            <span>A receber</span>
+            <strong>{{ moeda(resumo.devidoEsperado) }}</strong>
+            <em>{{ resumo.contratosOtimistas }} contratos · {{ percentual(resumo.percentualOtimista) }} dos contratos ativos</em>
+          </div>
+          <div class="item-pago">
+            <span>Receita prevista</span>
+            <strong>{{ moeda(resumo.receita + resumo.devidoEsperado) }}</strong>
+            <em>hoje + atraso dos ativos, sem perdido</em>
+          </div>
+          <div class="item-previsto" [class.lucro]="resumo.retornoPrevistoOtimistaPercentual > 0" [class.prejuizo]="resumo.retornoPrevistoOtimistaPercentual < 0">
+            <span>Retorno previsto</span>
+            <strong>{{ percentual(resumo.retornoPrevistoOtimistaPercentual) }}</strong>
+            <em>(receita prevista − despesa) ÷ despesa</em>
+          </div>
+          <div class="item-receber">
+            <span>Receita mensal prevista</span>
+            <strong>{{ moeda(resumo.receitaMensalOtimista) }}</strong>
+            <em>parcela dos {{ resumo.contratosOtimistas }} ativos, sem perdido</em>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <div class="filtros-bar">
+    <input [(ngModel)]="filtros.nome" (ngModelChange)="aplicarFiltro()" name="filtroNome" placeholder="Nome da pessoa" />
+    <input [(ngModel)]="filtros.cpf" (ngModelChange)="aplicarFiltro()" name="filtroCpf" placeholder="CPF" />
+    <input [(ngModel)]="filtros.telefone" (ngModelChange)="aplicarFiltro()" name="filtroTelefone" placeholder="Telefone celular" />
+    <input [(ngModel)]="filtros.imei" (ngModelChange)="aplicarFiltro()" name="filtroImei" placeholder="IMEI" />
+    <select [(ngModel)]="filtros.bloqueado" (ngModelChange)="aplicarFiltro()" name="filtroBloqueado">
+      <option [ngValue]="'todos'">Bloqueio (todos)</option>
+      <option [ngValue]="'sim'">Aparelho bloqueado</option>
+      <option [ngValue]="'nao'">Não bloqueado</option>
+    </select>
+    <select [(ngModel)]="filtros.atraso" (ngModelChange)="aplicarFiltro()" name="filtroAtraso">
+      <option [ngValue]="'todos'">Boletos (todos)</option>
+      <option [ngValue]="'com'">Com boletos em atraso</option>
+      <option [ngValue]="'sem'">Sem atraso</option>
+    </select>
+    <label class="filtro-data filtro-qtd-atraso">
+      Parcelas em atraso
+      <span class="data-range">
+        <input
+          type="number"
+          min="0"
+          max="36"
+          step="1"
+          [(ngModel)]="filtros.parcelasAtrasoDe"
+          (ngModelChange)="aplicarFiltro()"
+          name="filtroAtrasoDe"
+          placeholder="De"
+          title="Quantidade mínima de parcelas em atraso"
+        />
+        <span>até</span>
+        <input
+          type="number"
+          min="0"
+          max="36"
+          step="1"
+          [(ngModel)]="filtros.parcelasAtrasoAte"
+          (ngModelChange)="aplicarFiltro()"
+          name="filtroAtrasoAte"
+          placeholder="Até"
+          title="Quantidade máxima de parcelas em atraso"
+        />
+      </span>
+    </label>
+    <select [(ngModel)]="filtros.cobranca" (ngModelChange)="aplicarFiltro()" name="filtroCobranca">
+      <option [ngValue]="'todos'">Cobrança (todos)</option>
+      <option *ngFor="let s of statusCobrancaOpcoes" [ngValue]="s.id">{{ s.rotulo }}</option>
+    </select>
+    <select [(ngModel)]="filtros.status" (ngModelChange)="aplicarFiltro()" name="filtroStatus">
+      <option *ngFor="let s of statusOpcoes" [ngValue]="s.id">{{ s.rotulo }}</option>
+    </select>
+    <select [(ngModel)]="filtros.resultado" (ngModelChange)="aplicarFiltro()" name="filtroResultado">
+      <option [ngValue]="'todos'">Todos os resultados</option>
+      <option [ngValue]="'aguardando'">Aguardando custo</option>
+      <option [ngValue]="'lucro'">Só lucro (rateia plataforma)</option>
+      <option [ngValue]="'prejuizo'">Só prejuízo</option>
+      <option [ngValue]="'cancelamento'">Cancelados / devoluções</option>
+    </select>
+    <button *ngIf="filtrosAtivos" type="button" class="btn-limpar" (click)="limparFiltros()">Limpar</button>
+  </div>
+  <div class="filtros-bar filtros-datas">
+    <label class="filtro-data">
+      Data da venda
+      <span class="data-range">
+        <input type="date" [(ngModel)]="filtros.dataDe" (ngModelChange)="aplicarFiltro()" name="filtroDataDe" />
+        <span>até</span>
+        <input type="date" [(ngModel)]="filtros.dataAte" (ngModelChange)="aplicarFiltro()" name="filtroDataAte" />
+      </span>
+    </label>
+  </div>
+
+  <p *ngIf="carregando" class="muted">Carregando…</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="!carregando && !vendas.length" class="vazio">Nenhuma venda no boleto cadastrada.</p>
+  <p *ngIf="!carregando && vendas.length && !linhasVisiveis.length" class="vazio">Nenhuma venda neste filtro de resultado.</p>
+
+  <div class="paymobi-modal-backdrop" *ngIf="editando" (click)="cancelar()">
+    <form
+      class="paymobi-modal-box paymobi-modal-wide editor"
+      (click)="$event.stopPropagation()"
+      (ngSubmit)="salvar()"
+      (input)="atualizarPreview()"
+      (change)="atualizarPreview()"
+    >
+      <div class="paymobi-modal-header">
+        <h3>{{ editando.id ? 'Editar venda' : 'Nova venda no boleto' }}</h3>
+        <button type="button" class="paymobi-modal-close" (click)="cancelar()" aria-label="Fechar">✕</button>
+      </div>
+      <div class="paymobi-modal-body">
+    <div class="grade">
+      <label>
+        Cliente *
+        <input [(ngModel)]="editando.clienteNome" name="clienteNome" required />
+      </label>
+      <label>
+        CPF/CNPJ
+        <input [(ngModel)]="editando.clienteCpf" name="clienteCpf" />
+      </label>
+      <label>
+        Telefone
+        <input [(ngModel)]="editando.clienteTelefone" name="clienteTelefone" />
+      </label>
+      <label>
+        Data da venda
+        <input type="date" [(ngModel)]="editando.dataVenda" name="dataVenda" />
+      </label>
+      <label>
+        Celular (marca)
+        <input [(ngModel)]="editando.aparelhoMarca" name="aparelhoMarca" placeholder="Opcional" />
+      </label>
+      <label>
+        Modelo
+        <input [(ngModel)]="editando.aparelhoModelo" name="aparelhoModelo" placeholder="Opcional" />
+      </label>
+      <label>
+        Cor
+        <input [(ngModel)]="editando.aparelhoCor" name="aparelhoCor" />
+      </label>
+      <label>
+        IMEI
+        <input [(ngModel)]="editando.aparelhoImei" name="aparelhoImei" />
+      </label>
+      <label>
+        Custo de compra do aparelho
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          [(ngModel)]="editando.valorInvestido"
+          name="valorInvestido"
+          placeholder="Valor pago no aparelho"
+        />
+      </label>
+      <label>
+        Acréscimo do aparelho
+        <input [value]="moeda(preview?.custoAcrescimo ?? 0)" disabled />
+      </label>
+      <label>
+        Custo da chave
+        <input [value]="moeda(preview?.custoChave ?? 0)" disabled />
+      </label>
+      <label>
+        Plataforma (se der lucro)
+        <input [value]="moeda(preview?.custoPlataforma ?? 0)" disabled />
+      </label>
+      <label>
+        Valor da venda no boleto (R$) *
+        <input type="number" min="0" step="0.01" [(ngModel)]="editando.valorVenda" name="valorVenda" />
+      </label>
+      <label>
+        Entrada no ato da compra (R$)
+        <input type="number" min="0" step="0.01" [(ngModel)]="editando.valorEntrada" name="valorEntrada" />
+      </label>
+      <label>
+        Parcelas
+        <input type="number" min="0" max="36" [(ngModel)]="editando.parcelas" name="parcelas" />
+      </label>
+      <label>
+        Valor da parcela (R$)
+        <input type="number" min="0" step="0.01" [(ngModel)]="editando.valorParcela" name="valorParcela" />
+      </label>
+      <label>
+        Situação
+        <select [(ngModel)]="editando.status" name="status">
+          <option *ngFor="let s of statusFormulario" [ngValue]="s.id">{{ s.rotulo }}</option>
+        </select>
+      </label>
+      <label>
+        Cobrança
+        <select [(ngModel)]="editando.statusCobranca" name="statusCobranca">
+          <option *ngFor="let s of statusCobrancaOpcoes" [ngValue]="s.id">{{ s.rotulo }}</option>
+        </select>
+      </label>
+      <ng-container *ngIf="editando.status === 'cancelada'">
+        <label>
+          Boletos já pagos (R$)
+          <input type="number" min="0" step="0.01" [(ngModel)]="editando.valorBoletosPagos" name="valorBoletosPagos" />
+        </label>
+        <label>
+          Revenda na loja (R$)
+          <input type="number" min="0" step="0.01" [(ngModel)]="editando.valorRevenda" name="valorRevenda" />
+        </label>
+        <label>
+          Custo de manutenção (R$)
+          <input type="number" min="0" step="0.01" [(ngModel)]="editando.custoManutencao" name="custoManutencao" />
+        </label>
+      </ng-container>
+      <label class="span2">
+        Observações
+        <input [(ngModel)]="editando.observacoes" name="observacoes" />
+      </label>
+    </div>
+    <p class="lucro-prev" *ngIf="preview?.contaCusto" [class.negativo]="(preview?.lucroLiquido ?? 0) < 0" [class.positivo]="(preview?.lucroLiquido ?? 0) > 0">
+      Receita {{ moeda(preview?.receita ?? 0) }}
+      (entrada {{ moeda(preview?.valorEntrada ?? 0) }}
+      + boletos {{ moeda(preview?.totalBoletosPagos ?? 0) }}
+      <ng-container *ngIf="editando.status === 'cancelada'"> + revenda {{ moeda(preview?.valorRevenda ?? 0) }}</ng-container>)
+      − despesa {{ moeda(preview?.despesa ?? 0) }}
+      (celular {{ moeda(preview?.custoAparelhoTotal ?? 0) }}
+      <ng-container *ngIf="editando.status === 'cancelada'"> + manutenção {{ moeda(preview?.custoManutencao ?? 0) }}</ng-container>
+      + plataforma {{ moeda(preview?.custoPlataforma ?? 0) }}).
+      Lucro líquido: <strong>{{ preview?.rotuloResultado }} {{ moeda(preview?.lucroLiquido ?? 0) }}</strong>
+    </p>
+    <p class="muted" *ngIf="editando && !preview?.contaCusto">
+      Preencha o custo do aparelho para concretizar a venda e calcular lucro ou prejuízo.
+    </p>
+      </div>
+    <div class="paymobi-modal-footer acoes-form">
+      <button type="button" (click)="cancelar()">Cancelar</button>
+      <button type="submit" class="btn-primario" [disabled]="salvando">{{ salvando ? 'Salvando…' : 'Salvar venda' }}</button>
+    </div>
+    </form>
+  </div>
+
+  <div class="tabela-wrap" *ngIf="!carregando && linhasVisiveis.length">
+  <table class="data-grid">
+    <thead>
+      <tr>
+        <th class="col-atraso" title="Boletos pagos e em atraso"></th>
+        <th>Data do contrato</th>
+        <th>Cliente</th>
+        <th>Celular</th>
+        <th>Contrato</th>
+        <th>Encerramento</th>
+        <th>Custo aparelho</th>
+        <th>Revenda / manutenção</th>
+        <th>Plataforma</th>
+        <th>Parcela</th>
+        <th>Entrada</th>
+        <th>Devido</th>
+        <th>Pago até o momento</th>
+        <th>Falta</th>
+        <th>Venda</th>
+        <th>Lucro líquido</th>
+        <th>Cobrança</th>
+        <th>Situação</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <ng-container *ngFor="let linha of linhasVisiveis; trackBy: trackLinha">
+        <tr
+          [class.row-atraso]="linha.parcelasAtraso > 0"
+          [class.row-lucro]="linha.parcelasAtraso <= 0 && linha.contaCusto && linha.faltaLucroMinimo <= 0"
+          [class.row-sem-lucro]="linha.parcelasAtraso <= 0 && !(linha.contaCusto && linha.faltaLucroMinimo <= 0)"
+          [class.row-dois-aparelhos]="linha.qtdAparelhosCliente > 1"
+        >
+          <td class="col-atraso">
+            <span class="bolas-linha">
+              <span
+                *ngIf="linha.parcelasAtraso > 0"
+                class="bola-atraso"
+                [title]="linha.parcelasAtraso + ' parcela(s) em atraso'"
+              >{{ linha.parcelasAtraso }}</span>
+              <span
+                class="bola-pago"
+                [title]="linha.parcelasPagas + ' boleto(s) pago(s)'"
+              >{{ linha.parcelasPagas }}</span>
+              <span *ngIf="linha.bloqueado" class="selo-bloqueado" title="Aparelho bloqueado">B</span>
+            </span>
+          </td>
+          <td>{{ linha.dataVenda }}</td>
+          <td>
+            <strong>{{ linha.venda.clienteNome }}</strong>
+            <div class="sub" *ngIf="linha.qtdAparelhosCliente > 1">
+              {{ linha.qtdAparelhosCliente }} aparelhos — esta linha é só o IMEI {{ linha.venda.aparelhoImei }}
+            </div>
+            <div class="sub" *ngIf="linha.venda.clienteTelefone">{{ linha.venda.clienteTelefone }}</div>
+            <div class="sub" *ngIf="linha.venda.clienteCpf">{{ linha.venda.clienteCpf }}</div>
+          </td>
+          <td>
+            {{ linha.aparelho }}
+            <div class="sub" *ngIf="linha.venda.aparelhoImei">IMEI {{ linha.venda.aparelhoImei }}</div>
+          </td>
+          <td>
+            {{ linha.contrato }}
+            <div class="sub">contrato {{ linha.dataVenda }}</div>
+            <div class="sub" *ngIf="linha.venda.contratoTipo">{{ linha.venda.contratoTipo }}</div>
+          </td>
+          <td>
+            <div
+              [class.encerrado-concluido]="linha.tipoEncerramento === 'concluido'"
+              [class.encerrado-prematuro]="linha.tipoEncerramento === 'prematuro'"
+            >
+              {{ linha.encerradoEm }}
+              <div class="sub">{{ linha.rotuloEncerramento }}</div>
+            </div>
+          </td>
+          <td>
+            <button type="button" class="btn-concretizar" *ngIf="!linha.concretizada" (click)="concretizar(linha)">
+              Informar custo
+            </button>
+            <input
+              *ngIf="linha.concretizada"
+              type="number"
+              min="0"
+              step="0.01"
+              class="custo-inline"
+              [(ngModel)]="linha.venda.valorInvestido"
+              [name]="'custoAparelho-' + linha.venda.id"
+              (blur)="salvarCustoAparelho(linha)"
+            />
+            <div class="sub">despesa</div>
+            <div class="sub">+ {{ moeda(linha.custoAcrescimo) }}</div>
+            <div class="sub">+ chave {{ moeda(linha.custoChave) }}</div>
+            <div class="sub" *ngIf="linha.concretizada"><strong>{{ moeda(linha.custoAparelhoTotal) }}</strong></div>
+          </td>
+          <td>
+            <ng-container *ngIf="linha.status === 'cancelada'; else semDevolucao">
+              <label class="mini" *ngIf="linha.precisaInformarBoletosPagos">
+                Boletos pagos
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="custo-inline"
+                  [(ngModel)]="linha.venda.valorBoletosPagos"
+                  [name]="'boletosPagos-' + linha.venda.id"
+                  (blur)="salvarDevolucao(linha)"
+                />
+              </label>
+              <label class="mini">
+                Revenda
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="custo-inline"
+                  [(ngModel)]="linha.venda.valorRevenda"
+                  [name]="'revenda-' + linha.venda.id"
+                  (blur)="salvarDevolucao(linha)"
+                />
+              </label>
+              <label class="mini">
+                Manutenção
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="custo-inline"
+                  [(ngModel)]="linha.venda.custoManutencao"
+                  [name]="'manutencao-' + linha.venda.id"
+                  (blur)="salvarDevolucao(linha)"
+                />
+              </label>
+            </ng-container>
+            <ng-template #semDevolucao>—</ng-template>
+          </td>
+          <td>
+            {{ moeda(linha.custoPlataforma) }}
+            <div class="sub">despesa</div>
+            <div class="sub" *ngIf="linha.deuLucroParaRateio">
+              {{ moeda(resumo.custoPlataformaMensalPorAparelho) }} × {{ linha.mesesPlataforma }} {{ linha.mesesPlataforma === 1 ? 'mês' : 'meses' }}
+            </div>
+            <div class="sub" *ngIf="linha.concretizada && !linha.deuLucroParaRateio">
+              não rateia
+            </div>
+          </td>
+          <td>{{ linha.valorParcela > 0 ? moeda(linha.valorParcela) : '—' }}</td>
+          <td>
+            {{ linha.valorEntrada > 0 ? moeda(linha.valorEntrada) : '—' }}
+            <div class="sub" *ngIf="linha.valorEntrada > 0">receita</div>
+          </td>
+          <td>
+            <ng-container *ngIf="linha.statusCobranca === 'perdido'; else devidoNormal">
+              {{ moeda(linha.prejuizoAparelho) }}
+              <div class="sub">prejuízo real do aparelho</div>
+              <div class="sub" *ngIf="!linha.contaCusto">informe o custo</div>
+            </ng-container>
+            <ng-template #devidoNormal>
+              {{ moeda(linha.valorDevido) }}
+              <div class="sub" *ngIf="linha.venda.parcelas">{{ linha.venda.parcelas }}x</div>
+              <div class="sub" *ngIf="linha.semBoletosPaymobi">sem boletos · valor guardado</div>
+            </ng-template>
+          </td>
+          <td>
+            {{ moeda(linha.totalRecebido) }}
+            <div class="sub" *ngIf="linha.valorEntrada > 0">entrada {{ moeda(linha.valorEntrada) }}</div>
+            <div class="sub" *ngIf="linha.totalBoletosPagos > 0">boletos {{ moeda(linha.totalBoletosPagos) }} receita</div>
+            <div class="sub" *ngIf="linha.semBoletosPaymobi">estimado pelo devido abaixo</div>
+            <div class="sub" *ngIf="linha.status === 'cancelada' && linha.valorRevenda > 0">revenda {{ moeda(linha.valorRevenda) }}</div>
+            <label class="mini" *ngIf="linha.precisaInformarBoletosPagos && linha.status !== 'cancelada'">
+              Boletos pagos
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                class="custo-inline"
+                [(ngModel)]="linha.venda.valorBoletosPagos"
+                [name]="'boletosPagosAtivo-' + linha.venda.id"
+                (blur)="salvarDevolucao(linha)"
+              />
+            </label>
+          </td>
+          <td class="col-falta">
+            <div *ngIf="linha.statusCobranca === 'perdido'" class="negativo">
+              {{ moeda(linha.prejuizoAparelho) }}
+              <div class="sub">prejuízo do aparelho</div>
+            </div>
+            <div
+              *ngIf="linha.statusCobranca !== 'perdido' && linha.status !== 'cancelada' && linha.faltaPagar > 0"
+              class="falta-pagar"
+            >
+              {{ moeda(linha.faltaPagar) }}
+              <div class="sub falta-pagar-qtd">{{ linha.parcelasAtraso }} {{ linha.parcelasAtraso === 1 ? 'parcela' : 'parcelas' }}</div>
+            </div>
+            <div
+              *ngIf="linha.statusCobranca !== 'perdido' && (linha.status === 'cancelada' || linha.faltaPagar <= 0)"
+              class="positivo"
+            >
+              {{ linha.status === 'cancelada' ? '—' : 'ok' }}
+            </div>
+            <ng-container *ngIf="linha.concretizada">
+              <div
+                class="sub"
+                [class.negativo]="linha.faltaEmpate > 0"
+                [class.positivo]="linha.faltaEmpate <= 0"
+              >
+                empate {{ linha.faltaEmpate > 0 ? moeda(linha.faltaEmpate) : 'ok' }}
+              </div>
+              <div
+                class="sub"
+                [class.negativo]="linha.faltaLucroMinimo > 0"
+                [class.positivo]="linha.faltaLucroMinimo <= 0"
+              >
+                lucro {{ percentualLucroMinimo * 100 }}%
+                {{ linha.faltaLucroMinimo > 0 ? moeda(linha.faltaLucroMinimo) : 'ok' }}
+              </div>
+            </ng-container>
+          </td>
+          <td>{{ moeda(linha.valorVenda) }}</td>
+          <td>
+            <span class="badge-resultado" [attr.data-resultado]="linha.tipoResultado">
+              {{ linha.rotuloResultado }}
+            </span>
+            <div
+              *ngIf="linha.concretizada"
+              [class.negativo]="linha.lucroLiquido < 0"
+              [class.positivo]="linha.lucroLiquido > 0"
+            >
+              {{ moeda(linha.lucroLiquido) }}
+            </div>
+          </td>
+          <td>
+            <select
+              class="status-cobranca"
+              [ngModel]="linha.statusCobranca"
+              [name]="'statusCobranca-' + linha.venda.id"
+              (ngModelChange)="salvarStatusCobranca(linha, $event)"
+              [attr.data-cobranca]="linha.statusCobranca"
+            >
+              <option *ngFor="let s of statusCobrancaOpcoes" [ngValue]="s.id">{{ s.rotulo }}</option>
+            </select>
+          </td>
+          <td><span class="badge" [attr.data-status]="linha.status">{{ linha.rotuloStatus }}</span></td>
+          <td class="acoes">
+            <button type="button" (click)="abrirParcelas(linha)">Parcelas</button>
+            <button type="button" (click)="editar(linha)">Editar</button>
+            <button type="button" class="btn-perigo" (click)="excluir(linha)">Excluir</button>
+          </td>
+        </tr>
+      </ng-container>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="paymobi-modal-backdrop" *ngIf="linhaParcelas as linha" (click)="fecharParcelas()">
+    <div class="paymobi-modal-box" role="dialog" aria-modal="true" aria-labelledby="paymobi-parcelas-titulo" (click)="$event.stopPropagation()">
+      <div class="paymobi-modal-header">
+        <h3 id="paymobi-parcelas-titulo">Parcelas · {{ linha.venda.clienteNome }}</h3>
+        <button type="button" class="paymobi-modal-close" (click)="fecharParcelas()" aria-label="Fechar">✕</button>
+      </div>
+      <div class="paymobi-modal-body cobrancas">
+        <p class="modal-cliente-sub" *ngIf="linha.venda.aparelhoImei || linha.aparelho">
+          {{ linha.aparelho }}
+          <span *ngIf="linha.venda.aparelhoImei"> · IMEI {{ linha.venda.aparelhoImei }}</span>
+        </p>
+              <p class="lista-titulo">Boletos deste IMEI{{ linha.venda.aparelhoImei ? ' (' + linha.venda.aparelhoImei + ')' : '' }}</p>
+              <p class="muted" *ngIf="!linha.boletosImei.length">Nenhum boleto da PayMobi neste aparelho.</p>
+              <ul class="boletos-imei" *ngIf="linha.boletosImei.length">
+                <li *ngFor="let b of linha.boletosImei; trackBy: trackBoleto" [attr.data-status]="rotuloBoleto(b)">
+                  <span>
+                    {{ b.numero ? b.numero + 'ª' : '' }}
+                    {{ dataCurta(b.vencimento) }} — {{ moeda(b.valor) }}
+                  </span>
+                  <span class="sub">{{ rotuloBoleto(b) }}</span>
+                  <a *ngIf="b.link" [href]="b.link" target="_blank" rel="noopener">Abrir boleto</a>
+                </li>
+              </ul>
+              <p class="lista-titulo">Recebimentos manuais desta venda</p>
+              <p class="muted" *ngIf="linha.valorEntrada > 0">
+                Entrada no ato da compra: {{ moeda(linha.valorEntrada) }} (receita já arrecadada).
+              </p>
+              <p *ngIf="!(linha.venda.cobrancas ?? []).length" class="muted">Nenhum recebimento manual ainda.</p>
+              <ul *ngIf="(linha.venda.cobrancas ?? []).length">
+                <li *ngFor="let c of linha.venda.cobrancas">
+                  <span>{{ dataCurta(c.data) }} — {{ moeda(c.valor) }}</span>
+                  <span class="sub" *ngIf="c.observacao">{{ c.observacao }}</span>
+                  <button type="button" class="btn-perigo" (click)="removerCobranca(linha, c)">Remover</button>
+                </li>
+              </ul>
+              <div class="nova-cobranca">
+                <input type="date" [(ngModel)]="novaCobrancaData" name="novaCobrancaData" />
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  [(ngModel)]="novaCobrancaValor"
+                  name="novaCobrancaValor"
+                  placeholder="Valor recebido"
+                />
+                <input
+                  [(ngModel)]="novaCobrancaObs"
+                  name="novaCobrancaObs"
+                  placeholder="Obs. (opcional)"
+                />
+                <button type="button" class="btn-primario" (click)="registrarCobranca(linha)" [disabled]="salvando">
+                  Registrar recebimento
+                </button>
+              </div>
+      </div>
+    </div>
+  </div>
+</div>

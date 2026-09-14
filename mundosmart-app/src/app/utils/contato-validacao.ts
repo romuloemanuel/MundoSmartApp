@@ -51,6 +51,14 @@ export function formatarCpfCnpj(valor?: string): string {
     .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
 }
 
+export function formatarCpf(valor?: string): string {
+  return formatarCpfCnpj(apenasDigitos(valor).slice(0, 11));
+}
+
+export function formatarCnpj(valor?: string): string {
+  return formatarCpfCnpj(apenasDigitos(valor).slice(0, 14));
+}
+
 export function formatarTelefone(valor?: string): string {
   const d = apenasDigitos(valor).slice(0, 11);
   if (d.length === 0) return '';
@@ -82,6 +90,10 @@ export function ehCelularValido(valor?: string): boolean {
 export function ehTelefoneFixoValido(valor?: string): boolean {
   const d = apenasDigitos(valor);
   return d.length === 10 && d[2] !== '9';
+}
+
+export function ehTelefoneValido(valor?: string): boolean {
+  return ehCelularValido(valor) || ehTelefoneFixoValido(valor);
 }
 
 export function temTelefoneContatoValido(celular?: string, telefone?: string): boolean {

@@ -1,4 +1,5 @@
 import { BlingContatoEndereco } from '../models/bling.models';
+import { apenasDigitos } from './contato-validacao';
 
 export function formatarEnderecoCliente(endereco?: BlingContatoEndereco | null): string {
   if (!endereco) return '—';
@@ -17,4 +18,19 @@ export function formatarEnderecoCliente(endereco?: BlingContatoEndereco | null):
 
 export function enderecoClientePreenchido(endereco?: BlingContatoEndereco | null): boolean {
   return formatarEnderecoCliente(endereco) !== '—';
+}
+
+/** Linha única para contrato / documentos. */
+export function formatarEnderecoCompleto(e?: BlingContatoEndereco | null): string {
+  if (!e) return '';
+  const rua = [e.logradouro?.trim(), e.numero?.trim()].filter(Boolean).join(', ');
+  const cidadeUf = [e.municipio?.trim(), e.uf?.trim()].filter(Boolean).join(' - ');
+  const cep = e.cep?.trim() ? `CEP ${e.cep.trim()}` : '';
+  return [rua, e.complemento?.trim(), e.bairro?.trim(), cidadeUf, cep].filter(Boolean).join(', ');
+}
+
+export function enderecoMinimoPreenchido(e?: BlingContatoEndereco | null): boolean {
+  if (!e) return false;
+  if (apenasDigitos(e.cep).length === 8) return true;
+  return !!(e.logradouro?.trim() && e.municipio?.trim());
 }

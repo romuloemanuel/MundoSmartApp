@@ -1,3 +1,5 @@
+@use './app/utils/documento-folha';
+
 // ─── Mundo Smart – Identidade Visual ────────────────────────────────────────
 // Preto : #0d0d0d  |  Azul : #2563EB  |  Branco : #FFFFFF
 // ────────────────────────────────────────────────────────────────────────────
@@ -1161,6 +1163,13 @@ h3 {
   font-weight: 600;
 }
 
+.campo-aviso {
+  font-size: 11px;
+  color: #b45309;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
 .os-form .campo-invalido :is(input, select, textarea),
 .os-form .campo-invalido .autocomplete-input,
 .os-form .campo-invalido .ac-input {
@@ -1185,6 +1194,47 @@ h3 {
   cursor: pointer;
 
   &:hover { background: #1d4ed8; }
+}
+
+.tel-whatsapp-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.tel-whatsapp-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-whatsapp {
+  flex: 0 0 auto;
+  align-self: stretch;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-whatsapp:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.btn-whatsapp:disabled {
+  background: #86efac;
+  color: #14532d;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.btn-whatsapp-alt {
+  margin-top: 8px;
 }
 
 .contato-card {

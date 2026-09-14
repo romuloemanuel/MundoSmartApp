@@ -12,8 +12,15 @@ public class ComissaoRelatorioResponse
     public decimal TotalJuros { get; set; }
     public decimal TotalPecas { get; set; }
     public decimal TotalLiquido { get; set; }
+    public int QuantidadeAguardandoCliente { get; set; }
+    public decimal TotalLiquidoAguardandoCliente { get; set; }
+    public int QuantidadeAndamentoComPreco { get; set; }
+    public decimal TotalLiquidoAndamentoComPreco { get; set; }
+    public decimal TotalLiquidoPrevisaoMes { get; set; }
     public List<ComissaoPorTecnico> PorTecnico { get; set; } = [];
     public List<ComissaoOsItem> Ordens { get; set; } = [];
+    public List<ComissaoOsItem> AguardandoCliente { get; set; } = [];
+    public List<ComissaoOsItem> AndamentoComPreco { get; set; } = [];
 }
 
 public class ComissaoPorTecnico
@@ -24,6 +31,10 @@ public class ComissaoPorTecnico
     public decimal TotalJuros { get; set; }
     public decimal TotalPecas { get; set; }
     public decimal TotalLiquido { get; set; }
+    public int QuantidadeAguardandoCliente { get; set; }
+    public decimal TotalLiquidoAguardandoCliente { get; set; }
+    public int QuantidadeAndamentoComPreco { get; set; }
+    public decimal TotalLiquidoAndamentoComPreco { get; set; }
 }
 
 public class ComissaoOsItem
@@ -34,6 +45,7 @@ public class ComissaoOsItem
     public string? TecnicoNome { get; set; }
     public string? ClienteNome { get; set; }
     public string? Equipamento { get; set; }
+    public string? Situacao { get; set; }
     public DateTime? DataConclusao { get; set; }
     public decimal ValorTotal { get; set; }
     public decimal Juros { get; set; }

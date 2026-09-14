@@ -1,8 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, HostListener, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import {
+  ComissaoOsItem,
   ComissaoPorTecnico,
   ComissaoRelatorio,
   OrdensServicoService,
@@ -84,6 +85,88 @@ import { LOJAS_OS_FILTRO, labelLojaOs, siglaLojaOs } from '../../config/os-loja.
       font-size: 15px;
       color: #075985;
     }
+    .resumo-geral .previsao {
+      color: #c2410c;
+      font-weight: 600;
+    }
+    .resumo-geral .previsao-destaque {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .resumo-geral .previsao button,
+    .resumo-card .previsao-linha button {
+      background: none;
+      border: none;
+      padding: 0;
+      margin-left: 6px;
+      color: inherit;
+      font: inherit;
+      font-weight: 700;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .previsao-txt { color: #c2410c; }
+    .previsao-cell { font-weight: 600; color: #c2410c; }
+    .resumo-card .previsao-linha {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: #c2410c;
+      margin-top: 6px;
+    }
+    .resumo-card .previsao-linha strong {
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+    .comissao-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(0, 0, 0, 0.55);
+    }
+    .comissao-modal-box {
+      background: #fff;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 920px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    }
+    .comissao-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 20px;
+      background: #0d0d0d;
+      border-radius: 12px 12px 0 0;
+    }
+    .comissao-modal-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .comissao-modal-close {
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 18px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .comissao-modal-body {
+      overflow: auto;
+      padding: 16px 20px 20px;
+    }
+    .comissao-modal-body .data-grid { width: 100%; }
     .resumo-cards {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -144,6 +227,25 @@ export class ComissoesPage implements OnInit {
   carregando = false;
   erro = '';
   relatorio: ComissaoRelatorio | null = null;
+  modalPrevisao: 'aguardando' | 'andamento' | null = null;
+  modalTecnico = '';
+
+  get rotuloModalPrevisao(): string {
+    const base = this.modalPrevisao === 'aguardando'
+      ? 'Pronto na loja — aguardando cliente retirar'
+      : 'Com preço definido — aberto ou em teste';
+    return this.modalTecnico ? `${base} · ${this.modalTecnico}` : base;
+  }
+
+  get ordensModal(): ComissaoOsItem[] {
+    if (!this.relatorio || !this.modalPrevisao) return [];
+    const lista = this.modalPrevisao === 'aguardando'
+      ? (this.relatorio.aguardandoCliente ?? [])
+      : (this.relatorio.andamentoComPreco ?? []);
+    if (!this.modalTecnico) return lista;
+    return lista.filter(o =>
+      (o.tecnicoNome || '').toLowerCase() === this.modalTecnico.toLowerCase());
+  }
 
   get rotuloEscopoLoja(): string {
     return this.filtroLoja
@@ -193,6 +295,7 @@ export class ComissoesPage implements OnInit {
   }
 
   gerar(): void {
+    this.fecharModalPrevisao();
     this.carregando = true;
     this.erro = '';
     this.relatorio = null;
@@ -214,6 +317,21 @@ export class ComissoesPage implements OnInit {
         this.carregando = false;
       },
     });
+  }
+
+  abrirPrevisao(tipo: 'aguardando' | 'andamento', tecnico = ''): void {
+    this.modalPrevisao = tipo;
+    this.modalTecnico = tecnico;
+  }
+
+  fecharModalPrevisao(): void {
+    this.modalPrevisao = null;
+    this.modalTecnico = '';
+  }
+
+  @HostListener('document:keydown.escape')
+  fecharModalTecla(): void {
+    if (this.modalPrevisao) this.fecharModalPrevisao();
   }
 
   formatarMoeda(v?: number | null): string {

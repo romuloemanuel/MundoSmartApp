@@ -44,6 +44,16 @@ builder.Services.AddSingleton<IOrcamentoLocalRepository, OrcamentoLocalRepositor
 builder.Services.AddSingleton<IAparelhoRepository, AparelhoRepository>();
 builder.Services.AddSingleton<IPecaEstoqueRepository, PecaEstoqueRepository>();
 builder.Services.AddSingleton<ICategoriaPecaRepository, CategoriaPecaRepository>();
+builder.Services.AddSingleton<IDocumentoModeloRepository, DocumentoModeloRepository>();
+    builder.Services.AddSingleton<IPaymobiVendaRepository, PaymobiVendaRepository>();
+builder.Services.AddSingleton<IPaymobiConfigRepository, PaymobiConfigRepository>();
+builder.Services.AddSingleton<IPaymobiSyncService, PaymobiSyncService>();
+builder.Services.AddHttpClient("PaymobiFin", client =>
+{
+    client.BaseAddress = new Uri("https://api-v2.paymobi.com.br/");
+    client.Timeout = TimeSpan.FromMinutes(2);
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+});
 builder.Services.AddSingleton<IAssistenciaConfigRepository, AssistenciaConfigRepository>();
 builder.Services.AddSingleton<IAssistenciaConfigService, AssistenciaConfigService>();
 builder.Services.AddSingleton<IBlingConfigRepository, BlingConfigRepository>();
@@ -65,6 +75,7 @@ builder.Services.AddHttpClient("BlingProdutos", client =>
 builder.Services.AddSingleton<IBlingProdutoAcessorioRepository, BlingProdutoAcessorioRepository>();
 builder.Services.AddSingleton<IBlingProdutoConsultaService, BlingProdutoConsultaService>();
 builder.Services.AddHostedService<BlingProdutoSyncHostedService>();
+builder.Services.AddHostedService<PaymobiSyncHostedService>();
 builder.Services.AddScoped<IOsIntakeService, OsIntakeService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IOsHistoricoRepository, OsHistoricoRepository>();
@@ -264,6 +275,17 @@ try
     await categoriasPecaRepo.EnsureIndexesAsync();
     await categoriasPecaRepo.GarantirSeedAsync();
     Console.WriteLine("[MundoSmart API] Categorias de peça seedadas.");
+    var documentosRepo = app.Services.GetRequiredService<IDocumentoModeloRepository>();
+    await documentosRepo.EnsureIndexesAsync();
+    await documentosRepo.GarantirSeedAsync();
+    Console.WriteLine("[MundoSmart API] Modelos de contrato/aviso/termo seedados.");
+    var paymobiRepo = app.Services.GetRequiredService<IPaymobiVendaRepository>();
+    await paymobiRepo.EnsureIndexesAsync();
+    var nomesComerciais = await paymobiRepo.AplicarNomesComerciaisAsync();
+    if (nomesComerciais > 0)
+        Console.WriteLine($"[MundoSmart API] PayMobi: {nomesComerciais} aparelhos com nome comercial.");
+    var cobrancas = await paymobiRepo.AplicarStatusCobrancaPadraoAsync();
+    Console.WriteLine($"[MundoSmart API] PayMobi: {cobrancas} cobranças classificadas (atraso = Perdido, demais = OK).");
     var acessoriosRepo = app.Services.GetRequiredService<IBlingProdutoAcessorioRepository>();
     await acessoriosRepo.EnsureIndexesAsync();
     await app.Services.GetRequiredService<IBlingEffectiveSettings>().EnsureLoadedAsync();

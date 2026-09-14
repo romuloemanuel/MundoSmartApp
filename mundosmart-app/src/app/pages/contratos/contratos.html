@@ -1,0 +1,371 @@
+<div class="page contratos-page">
+  <div class="page-header">
+    <h2>Contratos e termos</h2>
+  </div>
+
+  <p class="hint">
+    Monte os textos com variáveis do tipo <code ngNonBindable>{{comprador_nome}}</code>.
+    A equipe preenche os dados na aba Emitir e gera a impressão.
+  </p>
+
+  <div class="contratos-abas">
+    <button type="button" [class.ativa]="aba === 'emitir'" (click)="definirAba('emitir')">Emitir</button>
+    <button
+      *ngIf="appAuth.isAdmin()"
+      type="button"
+      [class.ativa]="aba === 'modelos'"
+      (click)="definirAba('modelos')"
+    >
+      Modelos
+    </button>
+    <button
+      *ngIf="appAuth.isAdmin()"
+      type="button"
+      [class.ativa]="aba === 'variaveis'"
+      (click)="definirAba('variaveis')"
+    >
+      Variáveis
+    </button>
+  </div>
+
+  <p *ngIf="carregando" class="muted">Carregando…</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <ng-container *ngIf="!carregando && aba === 'emitir'">
+    <p *ngIf="!modelosAtivos.length" class="vazio">
+      Nenhum documento ativo. Peça a um administrador para cadastrar o contrato, aviso ou termo em Modelos.
+    </p>
+
+    <div class="emitir-layout" *ngIf="modelosAtivos.length">
+      <aside class="lista-modelos">
+        <p class="lista-titulo">Documentos</p>
+        <button
+          *ngFor="let m of modelosAtivos"
+          type="button"
+          class="modelo-card"
+          [class.ativo]="modeloEmitir?.id === m.id"
+          (click)="selecionarParaEmitir(m)"
+        >
+          <span class="tipo-badge">{{ rotuloTipoDoc(m.tipo) }}</span>
+          <strong>{{ tituloEmitir(m) }}</strong>
+        </button>
+      </aside>
+
+      <section class="emitir-form" *ngIf="modeloEmitir; else escolha">
+        <div class="emitir-cabecalho">
+          <h3>{{ modeloEmitir.titulo }}</h3>
+          <button type="button" class="btn-primario" (click)="imprimir()">
+            {{ rotuloImprimir }}
+          </button>
+        </div>
+        <p class="campo-hint" *ngIf="anexaTermoConscientizacao">
+          Uma impressão: 2 vias do contrato (cliente e loja) e o termo de conscientização, que fica na loja.
+        </p>
+
+        <div class="emitir-grid">
+          <div class="campos">
+            <div class="form-group" *ngFor="let v of camposEmitir" [class.campo-invalido]="errosCampos[v.chave]">
+              <label [for]="'var_' + v.chave">
+                {{ v.rotulo }}
+                <span class="campo-obrigatorio" *ngIf="v.obrigatoria">*</span>
+              </label>
+              <app-endereco-campo
+                *ngIf="ehTipoEndereco(v)"
+                [endereco]="enderecoDe(v.chave)"
+                [namePrefix]="'var_' + v.chave"
+                [mostrarLinhaContrato]="true"
+                (enderecoChange)="onEndereco(v.chave, $event)"
+                (linhaChange)="onEnderecoLinha(v, $event)"
+              />
+              <ng-container *ngIf="ehCampoFormaPagamento(v)">
+                <select
+                  [id]="'var_' + v.chave"
+                  [ngModel]="formaPagamentoOpcao"
+                  (ngModelChange)="onFormaPagamentoChange($event)"
+                  [name]="'var_' + v.chave"
+                >
+                  <option value="">Selecione</option>
+                  <option *ngFor="let op of formasPagamentoContrato" [value]="op.id">{{ op.label }}</option>
+                </select>
+                <div class="parcelas-contrato" *ngIf="formaPagamentoOpcao === 'parcelado'">
+                  <label [for]="'parcelas_' + v.chave">Quantas vezes?</label>
+                  <select
+                    [id]="'parcelas_' + v.chave"
+                    [ngModel]="parcelasPagamento"
+                    (ngModelChange)="onParcelasChange($event)"
+                    name="parcelasPagamentoContrato"
+                  >
+                    <option *ngFor="let n of parcelasOpcoes" [ngValue]="n">{{ n }}x</option>
+                  </select>
+                </div>
+              </ng-container>
+              <ng-container *ngIf="ehCampoGarantiaItem(v)">
+                <label class="check-label garantia-toggle">
+                  <input
+                    type="checkbox"
+                    [ngModel]="garantiaItem6Meses"
+                    (ngModelChange)="onGarantiaItemToggle($event)"
+                    name="garantiaItem6Meses"
+                  />
+                  Incluir garantia estendida em um item
+                </label>
+                <span class="campo-hint">O aparelho já tem 3 meses (item 6.1). Marque só se um componente tiver 6 meses; entra como 6.3, um item por vez.</span>
+                <div class="garantia-item" *ngIf="garantiaItem6Meses">
+                  <label [for]="'item6_' + v.chave">Qual item?</label>
+                  <input
+                    [id]="'item6_' + v.chave"
+                    [ngModel]="garantiaItemNome"
+                    (ngModelChange)="onGarantiaItemNome($event)"
+                    name="garantiaItemNome"
+                    placeholder="Ex.: tela"
+                  />
+                </div>
+              </ng-container>
+              <textarea
+                *ngIf="entradaVar(v.tipo) === 'textarea' && !ehCampoFormaPagamento(v) && !ehCampoGarantiaItem(v)"
+                [id]="'var_' + v.chave"
+                rows="3"
+                [ngModel]="valores[v.chave]"
+                (ngModelChange)="onValorCampo(v, $event)"
+                [name]="'var_' + v.chave"
+              ></textarea>
+              <input
+                *ngIf="entradaVar(v.tipo) !== 'textarea' && !ehTipoEndereco(v) && !ehCampoFormaPagamento(v) && !ehCampoGarantiaItem(v)"
+                [id]="'var_' + v.chave"
+                [type]="entradaVar(v.tipo)"
+                [ngModel]="valores[v.chave]"
+                (ngModelChange)="onValorCampo(v, $event)"
+                [name]="'var_' + v.chave"
+                [placeholder]="placeholderCampo(v)"
+                [attr.inputmode]="v.tipo === 'cpf' || v.tipo === 'cnpj' || v.tipo === 'telefone' || v.tipo === 'moeda' || ehCampoImei(v) ? 'numeric' : null"
+                [attr.maxlength]="v.tipo === 'cpf' || v.tipo === 'cnpj' ? 18 : v.tipo === 'telefone' ? 15 : null"
+                [attr.autocomplete]="v.tipo === 'telefone' ? 'tel' : v.tipo === 'cpf' || v.tipo === 'cnpj' ? 'off' : null"
+              />
+              <span class="campo-hint" *ngIf="v.tipo === 'cpf'">CPF (11 dígitos) ou CNPJ (14 dígitos).</span>
+              <span class="campo-hint" *ngIf="v.tipo === 'cnpj'">CNPJ com 14 dígitos.</span>
+              <span class="campo-hint" *ngIf="v.tipo === 'telefone'">Celular ou telefone fixo, com DDD.</span>
+              <span class="campo-hint" *ngIf="ehCampoImei(v)">IMEI tem 15 dígitos. Serial pode ter outro tamanho.</span>
+              <span class="campo-aviso" *ngIf="avisosCampos[v.chave]">{{ avisosCampos[v.chave] }}</span>
+              <span class="campo-hint" *ngIf="ehTipoEndereco(v)">
+                Tipo <strong>Endereço (CEP)</strong>: busca o endereço, formata e substitui
+                <code>{{ placeholder(v.chave) }}</code> no texto.
+              </span>
+              <span class="campo-erro" *ngIf="errosCampos[v.chave]">{{ errosCampos[v.chave] }}</span>
+            </div>
+          </div>
+          <div class="preview">
+            <app-documento-a4-preview
+              [titulo]="modeloEmitir.titulo"
+              [corpo]="textoPreview"
+              [duasVias]="!!modeloEmitir.imprimirDuasVias"
+              [extras]="corposExtrasPreview"
+              [rotulo]="rotuloPreview"
+            />
+          </div>
+        </div>
+      </section>
+      <ng-template #escolha>
+        <p class="muted">Escolha um documento à esquerda para preencher.</p>
+      </ng-template>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="!carregando && aba === 'modelos' && appAuth.isAdmin()">
+    <div class="toolbar">
+      <button type="button" class="btn-primario" (click)="novoModelo()">Novo documento</button>
+    </div>
+
+    <table class="data-grid" *ngIf="!modeloEditando">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Título</th>
+          <th>Variáveis</th>
+          <th>Ativo</th>
+          <th>2 vias</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let m of modelos">
+          <td>{{ rotuloTipoDoc(m.tipo) }}</td>
+          <td>{{ m.titulo }}</td>
+          <td>{{ m.variaveis?.length || 0 }}</td>
+          <td>{{ m.ativo ? 'Sim' : 'Não' }}</td>
+          <td>{{ m.imprimirDuasVias ? 'Sim' : 'Não' }}</td>
+          <td class="acoes">
+            <button type="button" (click)="editarModelo(m)">Editar</button>
+            <button type="button" class="btn-perigo" (click)="excluirModelo(m)">Excluir</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <form *ngIf="modeloEditando" class="editor" (ngSubmit)="salvarModelo()">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="docTipo">Tipo</label>
+          <select id="docTipo" name="docTipo" [(ngModel)]="modeloEditando.tipo">
+            <option *ngFor="let t of tiposDoc" [ngValue]="t.id">{{ t.rotulo }}</option>
+          </select>
+        </div>
+        <div class="form-group grow">
+          <label for="docTitulo">Título</label>
+          <input id="docTitulo" name="docTitulo" [(ngModel)]="modeloEditando.titulo" />
+        </div>
+        <div class="form-group check">
+          <label class="check-label">
+            <input type="checkbox" name="docAtivo" [(ngModel)]="modeloEditando.ativo" />
+            Ativo para emissão
+          </label>
+        </div>
+        <div class="form-group check">
+          <label class="check-label">
+            <input type="checkbox" name="docDuasVias" [(ngModel)]="modeloEditando.imprimirDuasVias" />
+            Sempre imprimir duas vias
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="editor-cabecalho">
+          <label>Texto do contrato</label>
+          <button type="button" (click)="previsualizarModelo()">Ver impressão</button>
+        </div>
+        <p class="campo-hint" *ngIf="ehModeloTermoConscientizacao(modeloEditando)">
+          Sai automaticamente na venda: 2 vias do contrato + esta folha (fica na loja).
+        </p>
+        <app-documento-corpo-editor
+          name="docCorpo"
+          [(ngModel)]="modeloEditando.corpo"
+        />
+      </div>
+
+      <h3>Variáveis deste documento</h3>
+      <p class="campo-hint">
+        Inclua do catálogo ou crie uma nova. Depois clique em Inserir para colocar no texto.
+        Use o tipo <strong>Endereço (CEP)</strong> para o componente que busca, formata e preenche o contrato.
+      </p>
+
+      <div class="var-add">
+        <select name="catalogoPick" [(ngModel)]="catalogoPick">
+          <option value="">Catálogo…</option>
+          <option *ngFor="let c of catalogo" [value]="c.chave">
+            {{ c.rotulo }} — {{ rotuloTipoVar(c.tipo) }}
+          </option>
+        </select>
+        <button type="button" (click)="adicionarVarDoCatalogo()">Usar do catálogo</button>
+      </div>
+
+      <div class="var-add">
+        <input name="novaVarChave" [(ngModel)]="novaVarChave" placeholder="chave (ex.: imei_2)" />
+        <input name="novaVarRotulo" [(ngModel)]="novaVarRotulo" placeholder="Rótulo" />
+        <select name="novaVarTipo" [(ngModel)]="novaVarTipo">
+          <option *ngFor="let t of tiposVariavel" [value]="t.id">{{ t.rotulo }}</option>
+        </select>
+        <label class="check-inline">
+          <input type="checkbox" name="novaVarObrigatoria" [(ngModel)]="novaVarObrigatoria" />
+          Obrigatória
+        </label>
+        <button type="button" (click)="adicionarVarManual()">Incluir variável</button>
+      </div>
+
+      <table class="data-grid" *ngIf="modeloEditando.variaveis.length">
+        <thead>
+          <tr>
+            <th>Chave</th>
+            <th>Rótulo</th>
+            <th>Tipo</th>
+            <th>Obrigatória</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let v of modeloEditando.variaveis; let i = index">
+            <td><code>{{ placeholder(v.chave) }}</code></td>
+            <td>
+              <input [(ngModel)]="v.rotulo" [name]="'rotulo_' + i" />
+            </td>
+            <td>
+              <select [(ngModel)]="v.tipo" [name]="'tipo_' + i">
+                <option *ngFor="let t of tiposVariavel" [value]="t.id">{{ t.rotulo }}</option>
+              </select>
+            </td>
+            <td>
+              <input type="checkbox" [(ngModel)]="v.obrigatoria" [name]="'obg_' + i" />
+            </td>
+            <td class="acoes">
+              <button type="button" (click)="inserirNoCorpo(v.chave)">Inserir no texto</button>
+              <button type="button" class="btn-perigo" (click)="removerVar(v.chave)">Remover</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="form-actions">
+        <button type="submit" [disabled]="salvando">{{ salvando ? 'Salvando…' : 'Salvar documento' }}</button>
+        <button type="button" (click)="cancelarEdicao()">Cancelar</button>
+      </div>
+    </form>
+  </ng-container>
+
+  <ng-container *ngIf="!carregando && aba === 'variaveis' && appAuth.isAdmin()">
+    <p class="hint">
+      Catálogo reutilizável. Ao criar um contrato, aviso ou termo, você escolhe quais variáveis entram nele.
+      Inclua um tipo agora (texto, CPF, telefone, <strong>Endereço (CEP)</strong>…).
+      O tipo Endereço abre o buscador de CEP na emissão e grava a linha formatada no contrato.
+    </p>
+
+    <div class="var-add">
+      <input name="novaCatChave" [(ngModel)]="novaCatChave" placeholder="chave (ex.: garantia_dias)" />
+      <input name="novaCatRotulo" [(ngModel)]="novaCatRotulo" placeholder="Rótulo para o formulário" />
+      <select name="novaCatTipo" [(ngModel)]="novaCatTipo">
+        <option *ngFor="let t of tiposVariavel" [value]="t.id">{{ t.rotulo }}</option>
+      </select>
+      <button type="button" class="btn-primario" (click)="criarCatalogo()" [disabled]="salvando">
+        Incluir no catálogo
+      </button>
+    </div>
+
+    <table class="data-grid">
+      <thead>
+        <tr>
+          <th>Chave</th>
+          <th>Rótulo</th>
+          <th>Tipo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let c of catalogo">
+          <ng-container *ngIf="editCat?.id === c.id; else catLinha">
+            <td>
+              <input [(ngModel)]="catEdicao.chave" name="editCatChave" />
+            </td>
+            <td>
+              <input [(ngModel)]="catEdicao.rotulo" name="editCatRotulo" />
+            </td>
+            <td>
+              <select [(ngModel)]="catEdicao.tipo" name="editCatTipo">
+                <option *ngFor="let t of tiposVariavel" [value]="t.id">{{ t.rotulo }}</option>
+              </select>
+            </td>
+            <td class="acoes">
+              <button type="button" (click)="salvarCatalogo()" [disabled]="salvando">Salvar</button>
+              <button type="button" (click)="editCat = null">Cancelar</button>
+            </td>
+          </ng-container>
+          <ng-template #catLinha>
+            <td><code>{{ c.chave }}</code></td>
+            <td>{{ c.rotulo }}</td>
+            <td>{{ rotuloTipoVar(c.tipo) }}</td>
+            <td class="acoes">
+              <button type="button" (click)="comecarEditarCatalogo(c)">Editar</button>
+              <button type="button" class="btn-perigo" (click)="excluirCatalogo(c)">Excluir</button>
+            </td>
+          </ng-template>
+        </tr>
+      </tbody>
+    </table>
+  </ng-container>
+</div>

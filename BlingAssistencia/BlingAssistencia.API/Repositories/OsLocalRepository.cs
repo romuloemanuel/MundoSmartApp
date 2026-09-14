@@ -23,6 +23,11 @@ public interface IOsLocalRepository
         IReadOnlyList<string>? tecnicos = null,
         bool incluirSemTecnico = true,
         string? lojaOrigem = null);
+    /// <summary>OS em aberto, em teste ou aguardando retirada — previsão de comissão do mês.</summary>
+    Task<List<OsLocalData>> ListarPrevisaoComissaoAsync(
+        IReadOnlyList<string>? tecnicos = null,
+        bool incluirSemTecnico = true,
+        string? lojaOrigem = null);
     Task<List<OsLocalData>> ListarEmAndamentoPorModeloAsync(string modeloId, long? excluirBlingId = null);
     Task<OsLocalData?> ObterPorIntakeTokenAsync(string token);
     Task SalvarAsync(OsLocalData dados);
@@ -227,6 +232,7 @@ public class OsLocalRepository : IOsLocalRepository
             .Include(x => x.TecnicoNome)
             .Include(x => x.ValorTotal)
             .Include(x => x.ValorTotalAcordado)
+            .Include(x => x.ValorAVista)
             .Include(x => x.Juros)
             .Include(x => x.Itens)
             .Include(x => x.Equipamento)
@@ -238,6 +244,93 @@ public class OsLocalRepository : IOsLocalRepository
             .Sort(Builders<OsLocalData>.Sort.Descending(x => x.DataConclusao).Descending(x => x.BlingId))
             .Limit(5000)
             .ToListAsync();
+    }
+
+    public async Task<List<OsLocalData>> ListarPrevisaoComissaoAsync(
+        IReadOnlyList<string>? tecnicos = null,
+        bool incluirSemTecnico = true,
+        string? lojaOrigem = null)
+    {
+        var filtro = Builders<OsLocalData>.Filter.Or(
+            Builders<OsLocalData>.Filter.Eq(x => x.ExcluidoEm, null),
+            Builders<OsLocalData>.Filter.Exists(x => x.ExcluidoEm, false));
+
+        filtro &= Builders<OsLocalData>.Filter.Regex(
+            x => x.Situacao,
+            new BsonRegularExpression(@"^\s*(aberto|em aberto|em teste|teste|aguardando cliente.*)\s*$", "i"));
+
+        filtro &= FiltroLojaTecnicos(lojaOrigem, tecnicos, incluirSemTecnico);
+
+        var projection = Builders<OsLocalData>.Projection
+            .Include(x => x.BlingId)
+            .Include(x => x.OsNumero)
+            .Include(x => x.Situacao)
+            .Include(x => x.DataConclusao)
+            .Include(x => x.ContatoNome)
+            .Include(x => x.TecnicoNome)
+            .Include(x => x.ValorTotal)
+            .Include(x => x.ValorTotalAcordado)
+            .Include(x => x.ValorAVista)
+            .Include(x => x.Juros)
+            .Include(x => x.Itens)
+            .Include(x => x.Equipamento)
+            .Include(x => x.ModeloNome)
+            .Include(x => x.LojaOrigem);
+
+        return await _collection.Find(filtro)
+            .Project<OsLocalData>(projection)
+            .Sort(Builders<OsLocalData>.Sort.Ascending(x => x.Situacao).Descending(x => x.BlingId))
+            .Limit(5000)
+            .ToListAsync();
+    }
+
+    private static FilterDefinition<OsLocalData> FiltroLojaTecnicos(
+        string? lojaOrigem,
+        IReadOnlyList<string>? tecnicos,
+        bool incluirSemTecnico)
+    {
+        var filtro = Builders<OsLocalData>.Filter.Empty;
+
+        if (!string.IsNullOrWhiteSpace(lojaOrigem))
+        {
+            var loja = Config.OsLojaHelper.Normalizar(lojaOrigem);
+            if (loja == Config.OsLojaHelper.Padrao)
+            {
+                filtro &= Builders<OsLocalData>.Filter.Or(
+                    Builders<OsLocalData>.Filter.Eq(x => x.LojaOrigem, loja),
+                    Builders<OsLocalData>.Filter.Eq(x => x.LojaOrigem, null),
+                    Builders<OsLocalData>.Filter.Eq(x => x.LojaOrigem, ""),
+                    Builders<OsLocalData>.Filter.Exists(x => x.LojaOrigem, false));
+            }
+            else
+            {
+                filtro &= Builders<OsLocalData>.Filter.Eq(x => x.LojaOrigem, loja);
+            }
+        }
+
+        var nomes = (tecnicos ?? [])
+            .Select(t => t?.Trim())
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (nomes.Count == 0) return filtro;
+
+        var orTecnicos = nomes
+            .Select(n => Builders<OsLocalData>.Filter.Regex(
+                x => x.TecnicoNome,
+                new BsonRegularExpression($"^{Regex.Escape(n!)}$", "i")))
+            .ToList();
+
+        if (incluirSemTecnico)
+        {
+            orTecnicos.Add(Builders<OsLocalData>.Filter.Or(
+                Builders<OsLocalData>.Filter.Eq(x => x.TecnicoNome, null),
+                Builders<OsLocalData>.Filter.Eq(x => x.TecnicoNome, ""),
+                Builders<OsLocalData>.Filter.Exists(x => x.TecnicoNome, false)));
+        }
+
+        return filtro & Builders<OsLocalData>.Filter.Or(orTecnicos);
     }
 
     private static FilterDefinition<OsLocalData> MontarFiltroLista(OsListarFiltros? filtros)

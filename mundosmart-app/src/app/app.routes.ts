@@ -99,6 +99,17 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/calculo-juros/calculo-juros').then(m => m.CalculoJurosPage),
       },
+      {
+        path: 'contratos',
+        loadComponent: () =>
+          import('./pages/contratos/contratos').then(m => m.ContratosPage),
+      },
+      {
+        path: 'paymobi',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./pages/paymobi/paymobi').then(m => m.PaymobiPage),
+      },
       { path: 'estoque', component: EstoquePage },
       { path: 'estoque/lotes-retorno', component: LotesRetornoPage },
       { path: 'estoque/analise-retorno', component: AnaliseRetornoPage },
@@ -114,6 +125,12 @@ export const routes: Routes = [
         canActivate: [adminGuard],
         loadComponent: () =>
           import('./pages/configuracoes/acrescimo-estoque/acrescimo-estoque').then(m => m.ConfigAcrescimoEstoquePage),
+      },
+      {
+        path: 'configuracoes/paymobi',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./pages/configuracoes/paymobi/paymobi').then(m => m.ConfigPaymobiPage),
       },
       {
         path: 'configuracoes/bling',

@@ -32,6 +32,8 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <a routerLink="/consulta-produtos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Consulta estoque</a>
           <a routerLink="/consulta-telas" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Consulta telas</a>
           <a routerLink="/calculo-juros" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Cálculo de juros</a>
+          <a routerLink="/contratos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Contratos</a>
+          <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Vendas boleto</a>
           <a routerLink="/clientes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Clientes</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/historico-alteracoes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Hist&oacute;rico de altera&ccedil;&otilde;es</a>
           <div class="nav-section-label">Cadastros</div>
@@ -41,8 +43,10 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <a *ngIf="appAuth.isAdmin()" routerLink="/tecnicos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">T&eacute;cnicos</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/usuarios" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Usu&aacute;rios</a>
           <div class="nav-section-label" *ngIf="appAuth.isAdmin()">Configura&ccedil;&otilde;es</div>
+          <a *ngIf="appAuth.isAdmin()" routerLink="/contratos" [queryParams]="{ aba: 'modelos' }" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Contratos e termos</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/impressao-os" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Impress&atilde;o da OS</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/acrescimo-estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Acr&eacute;scimo estoque</a>
+          <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/paymobi" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Vendas boleto</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/bling" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Bling</a>
         </nav>
       </aside>

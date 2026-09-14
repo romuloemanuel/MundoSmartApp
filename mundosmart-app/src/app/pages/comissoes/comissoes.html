@@ -1,14 +1,13 @@
 <div class="page">
   <div class="page-header">
-    <h2>Comiss&otilde;es</h2>
+    <h2>Lucro da assist&ecirc;ncia</h2>
   </div>
 
   <p class="formula-hint">
-    Base l&iacute;quida por OS = valor total − juros − custo das pe&ccedil;as (FIFO).
-    Somente OS com situa&ccedil;&atilde;o <strong>Conclu&iacute;do</strong>.
-    O servi&ccedil;o &eacute; executado na assist&ecirc;ncia de <strong>Mococa</strong> —
-    o padr&atilde;o do relat&oacute;rio &eacute; <strong>todas as lojas</strong>;
-    use o filtro se quiser ver s&oacute; uma origem.
+    Relat&oacute;rio de <strong>lucro da assist&ecirc;ncia t&eacute;cnica</strong>.
+    L&iacute;quido fechado = valor total − juros − custo das pe&ccedil;as, s&oacute; OS <strong>Conclu&iacute;do</strong>.
+    Em <strong class="previsao-txt">laranja</strong>: previs&atilde;o ainda neste m&ecirc;s.
+    Use <strong>Ver</strong> para abrir as OS na modal.
   </p>
 
   <div class="filtros-comissao">
@@ -70,6 +69,27 @@
       <span>Juros: {{ formatarMoeda(relatorio.totalJuros) }}</span>
       <span>Pe&ccedil;as: {{ formatarMoeda(relatorio.totalPecas) }}</span>
       <span class="destaque">L&iacute;quido: {{ formatarMoeda(relatorio.totalLiquido) }}</span>
+      <span class="previsao">
+        Pronto na loja: {{ formatarMoeda(relatorio.totalLiquidoAguardandoCliente) }}
+        · {{ relatorio.quantidadeAguardandoCliente }} OS
+        <button
+          type="button"
+          *ngIf="relatorio.quantidadeAguardandoCliente > 0"
+          (click)="abrirPrevisao('aguardando')"
+        >Ver</button>
+      </span>
+      <span class="previsao">
+        Com pre&ccedil;o (aberto/teste): {{ formatarMoeda(relatorio.totalLiquidoAndamentoComPreco) }}
+        · {{ relatorio.quantidadeAndamentoComPreco }} OS
+        <button
+          type="button"
+          *ngIf="relatorio.quantidadeAndamentoComPreco > 0"
+          (click)="abrirPrevisao('andamento')"
+        >Ver</button>
+      </span>
+      <span class="previsao previsao-destaque">
+        Previs&atilde;o do m&ecirc;s: {{ formatarMoeda(relatorio.totalLiquidoPrevisaoMes) }}
+      </span>
     </div>
 
     <div class="resumo-cards" *ngIf="relatorio.porTecnico.length">
@@ -80,6 +100,20 @@
         <div class="linha"><span>Juros</span><strong>{{ formatarMoeda(t.totalJuros) }}</strong></div>
         <div class="linha"><span>Pe&ccedil;as</span><strong>{{ formatarMoeda(t.totalPecas) }}</strong></div>
         <div class="liquido"><span>L&iacute;quido</span><span>{{ formatarMoeda(t.totalLiquido) }}</span></div>
+        <div class="previsao-linha" *ngIf="t.quantidadeAguardandoCliente > 0">
+          <span>Pronto na loja</span>
+          <strong>
+            {{ formatarMoeda(t.totalLiquidoAguardandoCliente) }} · {{ t.quantidadeAguardandoCliente }}
+            <button type="button" (click)="abrirPrevisao('aguardando', t.tecnicoNome)">Ver</button>
+          </strong>
+        </div>
+        <div class="previsao-linha" *ngIf="t.quantidadeAndamentoComPreco > 0">
+          <span>Aberto / em teste</span>
+          <strong>
+            {{ formatarMoeda(t.totalLiquidoAndamentoComPreco) }} · {{ t.quantidadeAndamentoComPreco }}
+            <button type="button" (click)="abrirPrevisao('andamento', t.tecnicoNome)">Ver</button>
+          </strong>
+        </div>
       </div>
     </div>
 
@@ -118,4 +152,50 @@
       </tbody>
     </table>
   </ng-container>
+
+  <div
+    class="comissao-modal-backdrop"
+    *ngIf="modalPrevisao"
+    (click)="fecharModalPrevisao()"
+  >
+    <div
+      class="comissao-modal-box"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-labelledby]="'comissao-modal-titulo'"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="comissao-modal-header">
+        <h3 id="comissao-modal-titulo">{{ rotuloModalPrevisao }}</h3>
+        <button type="button" class="comissao-modal-close" (click)="fecharModalPrevisao()" aria-label="Fechar">✕</button>
+      </div>
+      <div class="comissao-modal-body">
+        <p *ngIf="!ordensModal.length">Nenhuma OS neste grupo.</p>
+        <table class="data-grid" *ngIf="ordensModal.length">
+          <thead>
+            <tr>
+              <th>OS</th>
+              <th>Loja</th>
+              <th>T&eacute;cnico</th>
+              <th>Cliente</th>
+              <th>Equipamento</th>
+              <th>Situa&ccedil;&atilde;o</th>
+              <th class="col-num">L&iacute;quido</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let o of ordensModal">
+              <td><a [routerLink]="['/ordens-servico', o.id]" (click)="fecharModalPrevisao()">#{{ o.numero || o.id }}</a></td>
+              <td [title]="labelLoja(o.lojaOrigem)">{{ siglaLoja(o.lojaOrigem) }}</td>
+              <td>{{ o.tecnicoNome || '—' }}</td>
+              <td>{{ o.clienteNome || '—' }}</td>
+              <td>{{ o.equipamento || '—' }}</td>
+              <td>{{ o.situacao || '—' }}</td>
+              <td class="col-num previsao-cell">{{ formatarMoeda(o.valorLiquido) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
