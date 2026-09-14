@@ -15,13 +15,12 @@ export const STATUS_COBRANCA: { id: PaymobiStatusCobranca; rotulo: string }[] = 
 
 export function statusCobrancaDe(
   valor: string | undefined,
-  parcelasAtraso: number,
-  statusContrato?: PaymobiStatus,
+  _parcelasAtraso?: number,
+  _statusContrato?: PaymobiStatus,
 ): PaymobiStatusCobranca {
   const s = (valor ?? '').trim().toLowerCase();
   if (s === 'ok' || s === 'negociacao' || s === 'recuperacao' || s === 'perdido') return s;
-  if (statusContrato === 'quitada' || statusContrato === 'cancelada') return 'ok';
-  return parcelasAtraso > 0 || statusContrato === 'atrasada' ? 'perdido' : 'ok';
+  return 'ok';
 }
 
 export interface PaymobiBoleto {

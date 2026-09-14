@@ -285,7 +285,7 @@ try
     if (nomesComerciais > 0)
         Console.WriteLine($"[MundoSmart API] PayMobi: {nomesComerciais} aparelhos com nome comercial.");
     var cobrancas = await paymobiRepo.AplicarStatusCobrancaPadraoAsync();
-    Console.WriteLine($"[MundoSmart API] PayMobi: {cobrancas} cobranças classificadas (atraso = Perdido, demais = OK).");
+    Console.WriteLine($"[MundoSmart API] PayMobi: {cobrancas} cobranças classificadas (Perdido só o que a loja marcou).");
     var custosPadrao = await paymobiRepo.ConcretizarTodasAsync();
     if (custosPadrao > 0)
         Console.WriteLine($"[MundoSmart API] PayMobi: {custosPadrao} aparelhos com custo padrão (R$ 20 + chave).");

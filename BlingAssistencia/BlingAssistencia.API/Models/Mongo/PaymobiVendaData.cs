@@ -31,7 +31,7 @@ public static class PaymobiStatusCobranca
     public static bool Manual(string? status)
     {
         var s = NormalizarOuVazio(status);
-        return s is Negociacao or Recuperacao;
+        return s is Negociacao or Recuperacao or Perdido;
     }
 
     public static string NormalizarOuVazio(string? status)
@@ -47,11 +47,11 @@ public static class PaymobiStatusCobranca
         return Padrao(parcelasAtraso, statusContrato);
     }
 
-    public static string Padrao(int parcelasAtraso, string? statusContrato)
+    public static string Padrao(int _, string? statusContrato)
     {
         var contrato = PaymobiStatus.Normalizar(statusContrato);
         if (contrato is PaymobiStatus.Quitada or PaymobiStatus.Cancelada) return Ok;
-        return parcelasAtraso > 0 || contrato == PaymobiStatus.Atrasada ? Perdido : Ok;
+        return Ok;
     }
 
     public static string AposPagamentoOuRenegociacao(
@@ -77,7 +77,9 @@ public static class PaymobiStatusCobranca
         if (s == Perdido && (entrouDinheiro || renegociou || saiuAtraso || atrasoDepois <= 0))
             return atrasoDepois > 0 ? Negociacao : Ok;
 
-        if (s.Length == 0 || s is Ok or Perdido)
+        if (s == Perdido) return Perdido;
+
+        if (s.Length == 0 || s is Ok)
             return Padrao(atrasoDepois, contrato);
 
         return s;

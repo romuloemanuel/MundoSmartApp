@@ -18,15 +18,15 @@
     <strong>Despesa:</strong> custo dos aparelhos (já com {{ moeda(acrescimoAparelho) }} + chave em cada linha)
     + plataforma (mensal × meses desde a primeira venda)
     + prejuízo de cancelamento
-    + prejuízo dos contratos Perdido (custo − já recebido, sem repetir o aparelho na despesa).
+    + prejuízo dos contratos que a loja marcou como Perdido (já recebido − custo, sem repetir o aparelho).
     Se a PayMobi não trouxer boleto (CNPJ antigo), usamos o <strong>devido</strong> da linha:
     boletos pagos ≈ financiado − devido.
     A plataforma mensal só é rateada acima de {{ percentualLucro * 100 }}% do custo
     e com pelo menos {{ moeda(margemErroLucro) }} de margem.
-    Cobrança: atrasos entram como <strong>Perdido</strong> e os demais como <strong>OK</strong>.
-    Se entrar pagamento ou renegociação na PayMobi, use <strong>Buscar vendas</strong> ou aguarde a busca automática (a cada 1 hora): o contrato sai de Perdido.
-    Use Em Negociação ou Em Recuperação para acompanhar quem ainda deve, sem contar como perdido.
-    <strong>Perdido</strong> mostra só o prejuízo real do aparelho (custo − já recebido), não o saldo das parcelas.
+    Cobrança: só entra como <strong>Perdido</strong> o contrato que a loja marcar na lista.
+    Atraso sozinho continua em <strong>OK</strong> (ou no status que vocês escolherem).
+    Use Em Negociação ou Em Recuperação para acompanhar quem ainda deve, sem somar como perdido.
+    <strong>Perdido</strong> soma só o resultado desses aparelhos (já recebido − custo), o mesmo valor da despesa ou da receita.
   </p>
 
   <p class="muted" *ngIf="ultimaSincronizacao">
@@ -87,11 +87,12 @@
     <div class="card">
       <span>Com custo informado</span>
       <strong>{{ resumo.concretizadas }}</strong>
+      <em>só quem tem o valor de compra do aparelho preenchido</em>
     </div>
     <div class="card">
       <span>Custo dos aparelhos</span>
-      <strong>{{ moeda(resumo.custoLiquido) }}</strong>
-      <em>todos os contratos · o filtro da lista não muda este valor · {{ moeda(acrescimoAparelho) }} + chave já entram na linha</em>
+      <strong>{{ moeda(resumo.custoAparelhosOperacao) }}</strong>
+      <em>o mesmo valor da despesa em aparelhos · sem cancelados e sem perdidos definidos · o filtro não altera</em>
     </div>
     <div class="card card-entrada">
       <span>Receita</span>
@@ -173,7 +174,7 @@
     <div class="card" [class.lucro]="resumo.resultadoCancelamentos > 0" [class.prejuizo]="resumo.resultadoCancelamentos < 0">
       <span>Cancelamentos / devoluções</span>
       <strong>{{ moeda(resumo.resultadoCancelamentos) }}</strong>
-      <em>entrada + boletos + revenda − custo do aparelho (sem repetir na despesa geral)</em>
+      <em>entrada + boletos + revenda − custo do aparelho · o mesmo valor entra na despesa ou na receita</em>
     </div>
     <div class="card" [class.prejuizo]="resumo.resultadoPerdidos < 0" [class.lucro]="resumo.resultadoPerdidos > 0">
       <span>Perdidos</span>
@@ -181,8 +182,9 @@
       <em>
         {{ resumo.contratosPerdidos }}
         {{ resumo.contratosPerdidos === 1 ? 'contrato' : 'contratos' }}
-        · já recebido − custo do aparelho
-        · prejuízo soma na despesa · lucro soma na receita · sem repetir o aparelho
+        · já recebido − custo do aparelho (compra + R$ 20 + chave)
+        · só status Perdido marcado na lista
+        · o mesmo valor entra na despesa ou na receita
       </em>
     </div>
   </div>
@@ -208,7 +210,7 @@
     <p class="caixa-cobranca-hint">
       Só vendas em cobrança (sem quitadas nem canceladas).
       Os totais seguem a PayMobi: só boletos gerados, sem parcela repetida.
-      Atrasos entram como Perdido. Nesse grupo vale o prejuízo real do aparelho, não o que ainda faltava no contrato.
+      Perdido é só o que a loja marcar. Nesse grupo vale o prejuízo real do aparelho, não o que ainda faltava no contrato.
     </p>
     <div class="caixa-cobranca-itens">
       <div class="item-receber item-total">
@@ -249,7 +251,7 @@
       <div class="item-receber">
         <span>A receber esperado</span>
         <strong>{{ moeda(resumo.devidoEsperado) }}</strong>
-        <em>visão otimista · {{ percentual(resumo.percentualOtimista) }} dos contratos ativos · {{ resumo.contratosOtimistas }} contratos</em>
+        <em>saldo dos ativos, sem perdido · {{ percentual(resumo.percentualOtimista) }} dos contratos ativos · {{ resumo.contratosOtimistas }} contratos</em>
       </div>
       <div class="item-previsto" [class.lucro]="resumo.lucroPrevisto > 0" [class.prejuizo]="resumo.lucroPrevisto < 0">
         <span>Lucro previsto</span>
@@ -282,7 +284,7 @@
       Retorno = (receita − despesa) ÷ despesa, com a receita e a despesa de todas as vendas (ativos, quitados e cancelados).
       Os percentuais de contratos (bons pagantes, perdido, otimista) continuam só sobre os ativos.
       <strong>Realista:</strong> só bons pagantes (em dia, sem perdido).
-      <strong>Otimista:</strong> só o valor em atraso de contrato ativo. Perdido não entra.
+      <strong>Otimista:</strong> saldo inteiro de todos os ativos, menos Perdido. Sempre maior ou igual à realista.
       A receita mensal prevista é a soma das parcelas do grupo de cada visão.
     </p>
     <div class="caixa-cobranca-itens">
@@ -340,7 +342,7 @@
       </div>
       <div class="visao visao-otimista">
         <h4>Visão otimista</h4>
-        <p>Só o vencido dos contratos ativos. Perdido não entra.</p>
+        <p>Todos os contratos ativos, menos Perdido.</p>
         <div class="caixa-cobranca-itens">
           <div class="item-receber">
             <span>A receber</span>
@@ -350,7 +352,7 @@
           <div class="item-pago">
             <span>Receita prevista</span>
             <strong>{{ moeda(resumo.receita + resumo.devidoEsperado) }}</strong>
-            <em>hoje + atraso dos ativos, sem perdido</em>
+            <em>hoje + saldo dos ativos, sem perdido</em>
           </div>
           <div class="item-previsto" [class.lucro]="resumo.retornoPrevistoOtimistaPercentual > 0" [class.prejuizo]="resumo.retornoPrevistoOtimistaPercentual < 0">
             <span>Retorno previsto</span>
