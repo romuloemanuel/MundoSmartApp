@@ -95,13 +95,6 @@ export class PaymobiPage implements OnInit {
     return this.filtrosApi.contarAtivos(this.filtros);
   }
 
-  get custoAparelhosVisiveis(): number {
-    return this.linhasVisiveis.reduce(
-      (acc, l) => acc + (l.contaCusto ? l.custoAparelhoTotal : 0),
-      0,
-    );
-  }
-
   trackLinha(_: number, linha: PaymobiLinhaView): string {
     return linha.venda.id || linha.chaveCliente + linha.venda.aparelhoImei;
   }

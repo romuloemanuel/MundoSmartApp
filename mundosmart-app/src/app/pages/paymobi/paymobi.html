@@ -17,7 +17,8 @@
     Se der positivo, entra somado na receita.
     <strong>Despesa:</strong> custo dos aparelhos (já com {{ moeda(acrescimoAparelho) }} + chave em cada linha)
     + plataforma (mensal × meses desde a primeira venda)
-    + prejuízo de cancelamento.
+    + prejuízo de cancelamento
+    + prejuízo dos contratos Perdido (custo − já recebido, sem repetir o aparelho na despesa).
     Se a PayMobi não trouxer boleto (CNPJ antigo), usamos o <strong>devido</strong> da linha:
     boletos pagos ≈ financiado − devido.
     A plataforma mensal só é rateada acima de {{ percentualLucro * 100 }}% do custo
@@ -36,12 +37,20 @@
     A conta da PayMobi ainda não foi configurada.
     <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/paymobi">Informar e-mail e senha</a>
   </p>
+  <p class="muted" *ngIf="!carregando">
+    Receita, despesa, custo dos aparelhos e os demais cards usam todas as vendas. O filtro só altera a tabela.
+  </p>
 
   <div class="resumo" *ngIf="!carregando">
     <div class="card card-vendidos">
       <span>Aparelhos vendidos</span>
       <strong>{{ resumo.aparelhosVendidos }}</strong>
       <em>até hoje · todos os contratos</em>
+      <em>
+        {{ resumo.aparelhosConsideradosVendidos }}
+        {{ resumo.aparelhosConsideradosVendidos === 1 ? 'considerado vendido' : 'considerados vendidos' }}
+        (concluídos + em cobrança, sem cancelados)
+      </em>
       <div class="card-vendidos-barra" *ngIf="resumo.aparelhosVendidos > 0" aria-hidden="true">
         <span class="fatia conc" [style.flexGrow]="resumo.pagos || 0.0001"></span>
         <span class="fatia cobr" [style.flexGrow]="resumo.emAndamento || 0.0001"></span>
@@ -81,8 +90,8 @@
     </div>
     <div class="card">
       <span>Custo dos aparelhos</span>
-      <strong>{{ moeda(custoAparelhosVisiveis) }}</strong>
-      <em>soma do total de cada linha da lista · {{ moeda(acrescimoAparelho) }} + chave já entram na linha, não de novo aqui</em>
+      <strong>{{ moeda(resumo.custoLiquido) }}</strong>
+      <em>todos os contratos · o filtro da lista não muda este valor · {{ moeda(acrescimoAparelho) }} + chave já entram na linha</em>
     </div>
     <div class="card card-entrada">
       <span>Receita</span>
@@ -92,6 +101,10 @@
         <ng-container *ngIf="resumo.valorLucroCancelamentos > 0">
           + lucro de cancelamento {{ moeda(resumo.valorLucroCancelamentos) }}
         </ng-container>
+        <ng-container *ngIf="resumo.valorLucroPerdidos > 0">
+          + lucro de perdido {{ moeda(resumo.valorLucroPerdidos) }}
+        </ng-container>
+        · todas as vendas
       </em>
     </div>
     <div class="card">
@@ -101,14 +114,18 @@
         aparelhos {{ moeda(resumo.custoAparelhosOperacao) }}
         + plataforma {{ moeda(resumo.plataformaTotal) }}
         <ng-container *ngIf="resumo.valorPrejuizoCancelamentos > 0">
-        + prejuízo {{ moeda(resumo.valorPrejuizoCancelamentos) }} somado na despesa
+        + cancelamentos {{ moeda(resumo.valorPrejuizoCancelamentos) }}
         </ng-container>
+        <ng-container *ngIf="resumo.valorPrejuizoPerdidos > 0">
+        + perdidos {{ moeda(resumo.valorPrejuizoPerdidos) }}
+        </ng-container>
+        · todas as vendas
       </em>
     </div>
     <div class="card" [class.lucro]="resumo.lucroLiquido > 0" [class.prejuizo]="resumo.lucroLiquido < 0">
       <span>Lucro líquido</span>
       <strong>{{ moeda(resumo.lucroLiquido) }}</strong>
-      <em>receita − despesa · inclui quitados e cancelados</em>
+      <em>receita − despesa · inclui quitados, cancelados e perdidos</em>
     </div>
     <div class="card card-entrada">
       <span>Entradas arrecadadas</span>
@@ -157,6 +174,16 @@
       <span>Cancelamentos / devoluções</span>
       <strong>{{ moeda(resumo.resultadoCancelamentos) }}</strong>
       <em>entrada + boletos + revenda − custo do aparelho (sem repetir na despesa geral)</em>
+    </div>
+    <div class="card" [class.prejuizo]="resumo.resultadoPerdidos < 0" [class.lucro]="resumo.resultadoPerdidos > 0">
+      <span>Perdidos</span>
+      <strong>{{ moeda(resumo.resultadoPerdidos) }}</strong>
+      <em>
+        {{ resumo.contratosPerdidos }}
+        {{ resumo.contratosPerdidos === 1 ? 'contrato' : 'contratos' }}
+        · já recebido − custo do aparelho
+        · prejuízo soma na despesa · lucro soma na receita · sem repetir o aparelho
+      </em>
     </div>
   </div>
 

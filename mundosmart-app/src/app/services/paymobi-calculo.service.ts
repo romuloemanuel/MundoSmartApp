@@ -80,6 +80,9 @@ export interface PaymobiResumoView {
   custoAparelhosOperacao: number;
   valorPrejuizoCancelamentos: number;
   valorLucroCancelamentos: number;
+  valorPrejuizoPerdidos: number;
+  valorLucroPerdidos: number;
+  resultadoPerdidos: number;
   plataformaMensal: number;
   plataforma: number;
   operacional: number;
@@ -127,6 +130,7 @@ export interface PaymobiResumoView {
   retornoPrevistoPercentual: number;
   retornoPrevistoOtimistaPercentual: number;
   aparelhosVendidos: number;
+  aparelhosConsideradosVendidos: number;
   valorTotalVendido: number;
 }
 
@@ -164,6 +168,9 @@ export const PAYMOBI_RESUMO_VAZIO: PaymobiResumoView = {
   custoAparelhosOperacao: 0,
   valorPrejuizoCancelamentos: 0,
   valorLucroCancelamentos: 0,
+  valorPrejuizoPerdidos: 0,
+  valorLucroPerdidos: 0,
+  resultadoPerdidos: 0,
   plataformaMensal: 0,
   plataforma: 0,
   operacional: 0,
@@ -210,6 +217,7 @@ export const PAYMOBI_RESUMO_VAZIO: PaymobiResumoView = {
   retornoPrevistoPercentual: 0,
   retornoPrevistoOtimistaPercentual: 0,
   aparelhosVendidos: 0,
+  aparelhosConsideradosVendidos: 0,
   valorTotalVendido: 0,
 };
 
@@ -477,6 +485,7 @@ export class PaymobiCalculoService {
     let custoAparelhosOperacao = 0;
     let valorPrejuizoCancelamentos = 0;
     let valorLucroCancelamentos = 0;
+    let valorLucroPerdidos = 0;
     let plataforma = 0;
     let operacional = 0;
     let vendaPaga = 0;
@@ -495,6 +504,7 @@ export class PaymobiCalculoService {
 
     for (const l of linhas) {
       const ativo = l.status === 'aberta' || l.status === 'atrasada';
+      const perdido = cobrancaPerdida(l);
       if (ativo) emAndamento++;
       else if (l.status === 'quitada') {
         pagos++;
@@ -525,16 +535,20 @@ export class PaymobiCalculoService {
         operacional += l.despesa;
         const cancelComLucro = l.status === 'cancelada'
           && (l.receita - (l.custoAparelhoTotal + l.custoManutencao)) >= 0;
-        if (!cancelComLucro) {
+        if (!cancelComLucro && !perdido) {
           custoAparelhosOperacao += l.custoAparelhoTotal + l.custoManutencao;
         }
-        if (ativo) despesaAtivos += l.despesa;
+        if (perdido) {
+          const resultadoPerdido = l.receita - (l.custoAparelhoTotal + l.custoManutencao);
+          if (resultadoPerdido > 0) valorLucroPerdidos += resultadoPerdido;
+        }
+        if (ativo && !perdido) despesaAtivos += l.despesa;
       }
       if (l.deuLucroParaRateio) rateio++;
       entradas += l.valorEntrada;
       recebido += l.totalRecebido;
-      if (l.status !== 'cancelada') receitaOperacao += l.receita;
-      if (ativo) receitaAtivos += l.receita;
+      if (l.status !== 'cancelada' && !perdido) receitaOperacao += l.receita;
+      if (ativo && !perdido) receitaAtivos += l.receita;
       if (l.bloqueado) bloqueados++;
       if (l.parcelasAtraso > 0) comAtraso++;
       aparelhosVendidos++;
@@ -544,8 +558,12 @@ export class PaymobiCalculoService {
     const cobranca = totaisBoletosAtivos(linhas, hoje);
     const previsao = previsaoCobranca(linhas, hoje);
     const plataformaTotal = inicio ? cfg.custoPlataformaMensal * meses : 0;
-    const receita = receitaOperacao + valorLucroCancelamentos;
-    const despesa = custoAparelhosOperacao + plataformaTotal + Math.abs(valorPrejuizoCancelamentos);
+    const valorPrejuizoPerdidos = previsao.devidoPerdido;
+    const receita = receitaOperacao + valorLucroCancelamentos + valorLucroPerdidos;
+    const despesa = custoAparelhosOperacao
+      + plataformaTotal
+      + Math.abs(valorPrejuizoCancelamentos)
+      + valorPrejuizoPerdidos;
     const lucroLiquido = receita - despesa;
     const lucroAtivos = receitaAtivos - despesaAtivos;
     const ativos = cobranca.contratosAtivos;
@@ -565,6 +583,9 @@ export class PaymobiCalculoService {
       custoAparelhosOperacao,
       valorPrejuizoCancelamentos,
       valorLucroCancelamentos,
+      valorPrejuizoPerdidos,
+      valorLucroPerdidos,
+      resultadoPerdidos: valorLucroPerdidos - valorPrejuizoPerdidos,
       plataformaMensal: cfg.custoPlataformaMensal,
       plataforma,
       operacional,
@@ -597,6 +618,7 @@ export class PaymobiCalculoService {
       retornoPrevistoPercentual: percentualSobre(receita + previsao.devidoBomPagante - despesa, despesa),
       retornoPrevistoOtimistaPercentual: percentualSobre(receita + previsao.devidoEsperado - despesa, despesa),
       aparelhosVendidos,
+      aparelhosConsideradosVendidos: emAndamento + pagos,
       valorTotalVendido,
     };
   }
@@ -1090,6 +1112,10 @@ function valorVendidoLinha(l: PaymobiLinhaView): number {
 
 function ehBomPagante(l: PaymobiLinhaView): boolean {
   return l.parcelasAtraso <= 0 && l.statusCobranca !== 'perdido';
+}
+
+function cobrancaPerdida(l: PaymobiLinhaView): boolean {
+  return (l.status === 'aberta' || l.status === 'atrasada') && l.statusCobranca === 'perdido';
 }
 
 /** Prejuízo do aparelho se nada mais entrar: custo (compra + acréscimo + chave + manutenção) − já recebido. */
