@@ -12,9 +12,9 @@
 
   <p class="hint">
     Lucro líquido = receita − despesa.
-    <strong>Receita:</strong> entrada + boletos pagos + revenda de todas as vendas.
-    <strong>Despesa:</strong> o custo dos aparelhos (compra + {{ moeda(acrescimoAparelho) }} + chave), o mesmo valor do card Custo dos aparelhos.
-    Plataforma, cancelamento e Perdido ficam em cards próprios e não trocam esse custo.
+    <strong>Receita:</strong> tudo o que o cliente já pagou (entrada + boletos + revenda), inclusive cancelado e Perdido.
+    <strong>Despesa:</strong> custo dos aparelhos (compra + {{ moeda(acrescimoAparelho) }} + chave) + plataforma.
+    Cancelamento e Perdido só evidenciam o prejuízo do aparelho; o custo já está na despesa e não entra de novo.
     Se a PayMobi não trouxer boleto (CNPJ antigo), usamos o <strong>devido</strong> da linha:
     boletos pagos ≈ financiado − devido.
     A plataforma mensal só é rateada acima de {{ percentualLucro * 100 }}% do custo
@@ -99,15 +99,15 @@
       <span>Receita</span>
       <strong>{{ moeda(resumo.receita) }}</strong>
       <em>
-        entrada + boletos + revenda de todas as vendas
+        entrada + boletos + revenda de todas as vendas, inclusive cancelado e Perdido
       </em>
     </div>
     <div class="card">
       <span>Despesa</span>
       <strong>{{ moeda(resumo.despesa) }}</strong>
       <em>
-        {{ moeda(resumo.custoLiquido) }}
-        · o mesmo valor do custo dos aparelhos
+        aparelhos {{ moeda(resumo.custoLiquido) }}
+        + plataforma {{ moeda(resumo.plataformaTotal) }}
       </em>
     </div>
     <div class="card" [class.lucro]="resumo.lucroLiquido > 0" [class.prejuizo]="resumo.lucroLiquido < 0">
@@ -161,7 +161,7 @@
     <div class="card" [class.lucro]="resumo.resultadoCancelamentos > 0" [class.prejuizo]="resumo.resultadoCancelamentos < 0">
       <span>Cancelamentos / devoluções</span>
       <strong>{{ moeda(resumo.resultadoCancelamentos) }}</strong>
-      <em>entrada + boletos + revenda − custo do aparelho</em>
+      <em>evidência · o custo do aparelho já está na despesa · o que o cliente pagou já está na receita</em>
     </div>
     <div class="card" [class.prejuizo]="resumo.resultadoPerdidos < 0" [class.lucro]="resumo.resultadoPerdidos > 0">
       <span>Perdidos</span>
@@ -169,7 +169,8 @@
       <em>
         {{ resumo.contratosPerdidos }}
         {{ resumo.contratosPerdidos === 1 ? 'contrato' : 'contratos' }}
-        · prejuízo do aparelho (já recebido − custo), não o saldo das parcelas
+        · evidência do prejuízo do aparelho, sem somar de novo na despesa
+        · o que o cliente já pagou já está na receita
         · só status Perdido marcado na lista
       </em>
     </div>

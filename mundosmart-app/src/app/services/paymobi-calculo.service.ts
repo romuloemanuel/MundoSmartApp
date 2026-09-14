@@ -550,7 +550,7 @@ export class PaymobiCalculoService {
     const lucroPerdidosLiquido = Math.max(0, perdidos.resultado);
     const prejuizoPerdidosLiquido = Math.max(0, -perdidos.resultado);
     const receita = receitaTotal;
-    const despesa = custoLiquido;
+    const despesa = custoLiquido + plataformaTotal;
     const lucroLiquido = receita - despesa;
     const lucroAtivos = receitaAtivos - despesaAtivos;
     const ativos = cobranca.contratosAtivos;
