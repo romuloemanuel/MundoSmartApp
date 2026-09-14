@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, timeout } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export type PaymobiStatus = 'aberta' | 'atrasada' | 'quitada' | 'cancelada';
@@ -95,6 +95,7 @@ export interface PaymobiConfig {
   ultimaSincronizacao?: string;
   ultimoTotalImportado?: number;
   custoFixoAparelho?: number;
+  custoPorAparelho?: number;
   custoPlataformaTotal?: number;
   custoPlataformaMensal?: number;
 }
@@ -157,12 +158,20 @@ export class PaymobiVendasService {
     return this.http.get<PaymobiConfig>(`${environment.apiUrl}/paymobi/config`);
   }
 
-  sincronizar(body: { email?: string; senha?: string; salvarCredenciais?: boolean }): Observable<PaymobiSincronizarResultado> {
-    return this.http.post<PaymobiSincronizarResultado>(`${environment.apiUrl}/paymobi/sincronizar`, body);
+  sincronizar(body: {
+    email?: string;
+    senha?: string;
+    salvarCredenciais?: boolean;
+    substituirTudo?: boolean;
+  }): Observable<PaymobiSincronizarResultado> {
+    return this.http.post<PaymobiSincronizarResultado>(`${environment.apiUrl}/paymobi/sincronizar`, body).pipe(
+      timeout(600_000),
+    );
   }
 
   salvarCustos(body: {
     custoFixoAparelho: number;
+    custoPorAparelho: number;
     custoPlataformaTotal: number;
     custoPlataformaMensal: number;
     email?: string;

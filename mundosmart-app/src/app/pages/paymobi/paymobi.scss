@@ -129,6 +129,96 @@
   color: #047857;
 }
 
+.card.card-total {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.card.card-total strong {
+  color: #1d4ed8;
+}
+
+.card.card-vendidos {
+  grid-column: span 2;
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 72%);
+  border: 1px solid #93c5fd;
+  padding: 14px 16px 12px;
+  min-width: 280px;
+  gap: 6px;
+}
+
+.card.card-vendidos > strong {
+  font-size: 28px;
+  line-height: 1.1;
+  color: #1d4ed8;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-vendidos-barra {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+  margin: 4px 0 2px;
+}
+
+.card-vendidos-barra .fatia.conc { background: #22c55e; }
+.card-vendidos-barra .fatia.cobr { background: #3b82f6; }
+.card-vendidos-barra .fatia.canc { background: #ef4444; }
+
+.card-vendidos-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.card-vendidos-split .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 8px 7px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+
+.card-vendidos-split .stat strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-vendidos-split .stat span {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.card-vendidos-split .stat.conc {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.card-vendidos-split .stat.conc strong { color: #15803d; }
+.card-vendidos-split .stat.conc span { color: #166534; }
+
+.card-vendidos-split .stat.cobr {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.card-vendidos-split .stat.cobr strong { color: #1d4ed8; }
+.card-vendidos-split .stat.cobr span { color: #1e40af; }
+
+.card-vendidos-split .stat.canc {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.card-vendidos-split .stat.canc strong { color: #b91c1c; }
+.card-vendidos-split .stat.canc span { color: #991b1b; }
+
+@media (max-width: 560px) {
+  .card.card-vendidos { grid-column: span 1; }
+}
+
 .card.prejuizo {
   background: #fef2f2;
   border-color: #fecaca;

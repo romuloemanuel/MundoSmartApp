@@ -126,6 +126,8 @@ export interface PaymobiResumoView {
   retornoHojePercentual: number;
   retornoPrevistoPercentual: number;
   retornoPrevistoOtimistaPercentual: number;
+  aparelhosVendidos: number;
+  valorTotalVendido: number;
 }
 
 export interface PaymobiPainelView {
@@ -207,6 +209,8 @@ export const PAYMOBI_RESUMO_VAZIO: PaymobiResumoView = {
   retornoHojePercentual: 0,
   retornoPrevistoPercentual: 0,
   retornoPrevistoOtimistaPercentual: 0,
+  aparelhosVendidos: 0,
+  valorTotalVendido: 0,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -486,6 +490,8 @@ export class PaymobiCalculoService {
     let prejuizoCancelamentos = 0;
     let bloqueados = 0;
     let comAtraso = 0;
+    let aparelhosVendidos = 0;
+    let valorTotalVendido = 0;
 
     for (const l of linhas) {
       const ativo = l.status === 'aberta' || l.status === 'atrasada';
@@ -531,6 +537,8 @@ export class PaymobiCalculoService {
       if (ativo) receitaAtivos += l.receita;
       if (l.bloqueado) bloqueados++;
       if (l.parcelasAtraso > 0) comAtraso++;
+      aparelhosVendidos++;
+      valorTotalVendido += valorVendidoLinha(l);
     }
 
     const cobranca = totaisBoletosAtivos(linhas, hoje);
@@ -588,6 +596,8 @@ export class PaymobiCalculoService {
       retornoHojePercentual: percentualSobre(lucroLiquido, despesa),
       retornoPrevistoPercentual: percentualSobre(receita + previsao.devidoBomPagante - despesa, despesa),
       retornoPrevistoOtimistaPercentual: percentualSobre(receita + previsao.devidoEsperado - despesa, despesa),
+      aparelhosVendidos,
+      valorTotalVendido,
     };
   }
 }
@@ -1067,6 +1077,15 @@ function previsaoCobranca(linhas: PaymobiLinhaView[], hoje: string): {
     hoje,
     fimMes,
   };
+}
+
+function valorVendidoLinha(l: PaymobiLinhaView): number {
+  if (l.valorVenda > 0) return l.valorVenda;
+  const original = Number(l.venda.valorOriginal) || 0;
+  if (original > 0) return original;
+  const base = Number(l.venda.valorBaseAparelho) || 0;
+  if (base > 0) return base + l.valorEntrada;
+  return 0;
 }
 
 function ehBomPagante(l: PaymobiLinhaView): boolean {

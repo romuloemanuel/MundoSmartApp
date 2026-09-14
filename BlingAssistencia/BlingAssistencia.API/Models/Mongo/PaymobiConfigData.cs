@@ -28,6 +28,12 @@ public class PaymobiConfigData
     [BsonElement("custoFixoAparelho")]
     public decimal CustoFixoAparelho { get; set; } = 80;
 
+    /// <summary>Acréscimo fixo por aparelho (R$ 20 no início), somado em cada linha.</summary>
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("custoPorAparelho")]
+    public decimal? CustoPorAparelho { get; set; }
+
     /// <summary>Custo mensal da plataforma, rateado só nos aparelhos com lucro na margem.</summary>
     [BsonRepresentation(BsonType.Decimal128)]
     [BsonElement("custoPlataformaTotal")]

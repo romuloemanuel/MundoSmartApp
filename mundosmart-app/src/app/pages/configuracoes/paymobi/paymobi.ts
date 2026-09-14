@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { PaymobiVendasService } from '../../../services/paymobi-vendas.service';
+import { PaymobiConfig, PaymobiVendasService } from '../../../services/paymobi-vendas.service';
 import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
 
 @Component({
@@ -22,7 +22,7 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
       </div>
 
       <p class="hint">
-        O custo de cada aparelho é o valor de compra + R$ 20 + a chave.
+        O custo de cada aparelho é o valor de compra + o custo por aparelho + a chave.
         A entrada da venda é receita, não entra nesse custo.
       </p>
 
@@ -31,6 +31,11 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
 
       <form class="form" (ngSubmit)="salvar()">
         <h3>Custos</h3>
+        <label>
+          Custo por aparelho (R$)
+          <input type="number" min="0" step="0.01" [(ngModel)]="custoPorAparelho" name="custoPorAparelho" />
+          <span class="campo-hint">Somado em cada venda, além da chave e do valor de compra. Começa em R$ 20.</span>
+        </label>
         <label>
           Custo da chave (R$)
           <input type="number" min="0" step="0.01" [(ngModel)]="custoChave" name="custoChave" />
@@ -97,6 +102,7 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
   `],
 })
 export class ConfigPaymobiPage implements OnInit {
+  custoPorAparelho = 20;
   custoChave = 80;
   custoPlataformaMensal = 200;
   email = '';
@@ -117,6 +123,7 @@ export class ConfigPaymobiPage implements OnInit {
         this.senhaConfigurada = !!cfg.senhaConfigurada;
         this.ultimaSincronizacao = cfg.ultimaSincronizacao ?? '';
         this.ultimoTotalImportado = cfg.ultimoTotalImportado ?? 0;
+        this.custoPorAparelho = lerCustoPorAparelho(cfg);
         this.custoChave = Number(cfg.custoFixoAparelho) > 0 ? Number(cfg.custoFixoAparelho) : 80;
         const mensal = Number(cfg.custoPlataformaMensal ?? cfg.custoPlataformaTotal);
         this.custoPlataformaMensal = Number.isFinite(mensal) && mensal >= 0 ? mensal : 200;
@@ -133,6 +140,7 @@ export class ConfigPaymobiPage implements OnInit {
     this.ok = false;
     this.api.salvarCustos({
       custoFixoAparelho: Number(this.custoChave) || 0,
+      custoPorAparelho: Number(this.custoPorAparelho) || 0,
       custoPlataformaTotal: Number(this.custoPlataformaMensal) || 0,
       custoPlataformaMensal: Number(this.custoPlataformaMensal) || 0,
       email: this.email.trim() || undefined,
@@ -144,6 +152,7 @@ export class ConfigPaymobiPage implements OnInit {
         this.senha = '';
         this.email = cfg.email ?? this.email;
         this.senhaConfigurada = !!cfg.senhaConfigurada;
+        this.custoPorAparelho = lerCustoPorAparelho(cfg);
         this.custoChave = Number(cfg.custoFixoAparelho) > 0 ? Number(cfg.custoFixoAparelho) : 80;
         const mensal = Number(cfg.custoPlataformaMensal ?? cfg.custoPlataformaTotal);
         this.custoPlataformaMensal = Number.isFinite(mensal) && mensal >= 0 ? mensal : 200;
@@ -163,4 +172,9 @@ export class ConfigPaymobiPage implements OnInit {
     const [a, m, dia] = d.split('-');
     return a && m && dia ? `${dia}/${m}/${a}` : iso;
   }
+}
+
+function lerCustoPorAparelho(cfg: PaymobiConfig): number {
+  const n = Number(cfg.custoPorAparelho);
+  return Number.isFinite(n) && n >= 0 ? n : 20;
 }

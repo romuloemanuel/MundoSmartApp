@@ -52,7 +52,7 @@ export class PaymobiPage implements OnInit {
   readonly margemErroLucro = 100;
   readonly percentualLucro = 0.25;
   readonly percentualLucroMinimo = 0.3;
-  readonly acrescimoAparelho = 20;
+  acrescimoAparelho = 20;
 
   vendas: PaymobiVenda[] = [];
   linhas: PaymobiLinhaView[] = [];
@@ -205,6 +205,7 @@ export class PaymobiPage implements OnInit {
         this.senhaConfigurada = !!cfg.senhaConfigurada;
         this.ultimaSincronizacao = cfg.ultimaSincronizacao ?? '';
         this.ultimoTotalImportado = cfg.ultimoTotalImportado ?? 0;
+        this.acrescimoAparelho = lerCustoPorAparelho(cfg);
         this.custoChave = Number(cfg.custoFixoAparelho) > 0 ? Number(cfg.custoFixoAparelho) : 80;
         this.custoPlataformaMensal = lerCustoMensal(cfg);
         this.atualizarPainel();
@@ -273,8 +274,8 @@ export class PaymobiPage implements OnInit {
     this.api.atualizar(v.id, {
       ...v,
       valorInvestido: custo,
-      concretizada: custo > 0,
-      concretizadaEm: custo > 0 ? (v.concretizadaEm || new Date().toISOString()) : undefined,
+      concretizada: true,
+      concretizadaEm: v.concretizadaEm || new Date().toISOString(),
     }).subscribe({
       next: atual => this.substituir(atual),
       error: err => avisarErroUsuario(msgApi(err, 'Não foi possível salvar o custo do aparelho.')),
@@ -551,6 +552,11 @@ function lerCustoMensal(cfg: PaymobiConfig): number {
   const bruto = cfg.custoPlataformaMensal ?? cfg.custoPlataformaTotal;
   const n = Number(bruto);
   return Number.isFinite(n) && n >= 0 ? n : 200;
+}
+
+function lerCustoPorAparelho(cfg: PaymobiConfig): number {
+  const n = Number(cfg.custoPorAparelho);
+  return Number.isFinite(n) && n >= 0 ? n : 20;
 }
 
 function msgApi(err: unknown, fallback: string): string {

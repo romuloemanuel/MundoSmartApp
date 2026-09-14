@@ -20,7 +20,9 @@ public interface IPaymobiVendaRepository
     Task<PaymobiVendaData?> ConfirmarParcelaPagaAsync(string id, PaymobiConfirmarParcelaRequest pedido, CancellationToken cancellationToken = default);
     Task<PaymobiVendaData?> RemoverParcelaManualAsync(string vendaId, string boletoId, CancellationToken cancellationToken = default);
     Task UpsertDaPaymobiAsync(PaymobiVendaData item, CancellationToken cancellationToken = default);
+    Task<long> ApagarTodasAsync(CancellationToken cancellationToken = default);
     Task<int> AplicarCustoAparelhoAsync(decimal custo, bool somenteSemCusto, CancellationToken cancellationToken = default);
+    Task<int> ConcretizarTodasAsync(CancellationToken cancellationToken = default);
     Task<int> AplicarStatusCobrancaPadraoAsync(CancellationToken cancellationToken = default);
 }
 
@@ -366,6 +368,12 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         return atual is PaymobiStatus.Atrasada ? PaymobiStatus.Aberta : atual;
     }
 
+    public async Task<long> ApagarTodasAsync(CancellationToken cancellationToken = default)
+    {
+        var res = await _col.DeleteManyAsync(FilterDefinition<PaymobiVendaData>.Empty, cancellationToken);
+        return res.DeletedCount;
+    }
+
     public async Task UpsertDaPaymobiAsync(PaymobiVendaData item, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(item.PaymobiSellId))
@@ -383,6 +391,8 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
             item.Status = RecalcularStatus(item);
             item.StatusCobranca = PaymobiStatusCobranca.Padrao(item.ParcelasAtraso, item.Status);
             item.Cobrancas ??= [];
+            item.Concretizada = true;
+            item.ConcretizadaEm ??= DateTime.UtcNow;
             await _col.InsertOneAsync(item, cancellationToken: cancellationToken);
             return;
         }
@@ -472,11 +482,27 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
                 Builders<PaymobiVendaData>.Filter.Lte(x => x.ValorInvestido, 0))
             : Builders<PaymobiVendaData>.Filter.Ne(x => x.Status, PaymobiStatus.Cancelada);
 
+        var agora = DateTime.UtcNow;
         var res = await _col.UpdateManyAsync(
             filtro,
             Builders<PaymobiVendaData>.Update
                 .Set(x => x.ValorInvestido, custo)
-                .Set(x => x.AtualizadoEm, DateTime.UtcNow),
+                .Set(x => x.Concretizada, true)
+                .Set(x => x.ConcretizadaEm, agora)
+                .Set(x => x.AtualizadoEm, agora),
+            cancellationToken: cancellationToken);
+        return (int)res.ModifiedCount;
+    }
+
+    public async Task<int> ConcretizarTodasAsync(CancellationToken cancellationToken = default)
+    {
+        var agora = DateTime.UtcNow;
+        var res = await _col.UpdateManyAsync(
+            Builders<PaymobiVendaData>.Filter.Ne(x => x.Concretizada, true),
+            Builders<PaymobiVendaData>.Update
+                .Set(x => x.Concretizada, true)
+                .Set(x => x.ConcretizadaEm, agora)
+                .Set(x => x.AtualizadoEm, agora),
             cancellationToken: cancellationToken);
         return (int)res.ModifiedCount;
     }

@@ -51,7 +51,7 @@ builder.Services.AddSingleton<IPaymobiSyncService, PaymobiSyncService>();
 builder.Services.AddHttpClient("PaymobiFin", client =>
 {
     client.BaseAddress = new Uri("https://api-v2.paymobi.com.br/");
-    client.Timeout = TimeSpan.FromMinutes(2);
+    client.Timeout = TimeSpan.FromMinutes(10);
     client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
 });
 builder.Services.AddSingleton<IAssistenciaConfigRepository, AssistenciaConfigRepository>();
@@ -286,6 +286,9 @@ try
         Console.WriteLine($"[MundoSmart API] PayMobi: {nomesComerciais} aparelhos com nome comercial.");
     var cobrancas = await paymobiRepo.AplicarStatusCobrancaPadraoAsync();
     Console.WriteLine($"[MundoSmart API] PayMobi: {cobrancas} cobranças classificadas (atraso = Perdido, demais = OK).");
+    var custosPadrao = await paymobiRepo.ConcretizarTodasAsync();
+    if (custosPadrao > 0)
+        Console.WriteLine($"[MundoSmart API] PayMobi: {custosPadrao} aparelhos com custo padrão (R$ 20 + chave).");
     var acessoriosRepo = app.Services.GetRequiredService<IBlingProdutoAcessorioRepository>();
     await acessoriosRepo.EnsureIndexesAsync();
     await app.Services.GetRequiredService<IBlingEffectiveSettings>().EnsureLoadedAsync();

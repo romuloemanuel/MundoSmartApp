@@ -13,6 +13,8 @@ public class PaymobiSincronizarRequest
     public string? Email { get; set; }
     public string? Senha { get; set; }
     public bool SalvarCredenciais { get; set; } = true;
+    /// <summary>Apaga as vendas locais e importa de novo da PayMobi.</summary>
+    public bool SubstituirTudo { get; set; }
     public DateTime? De { get; set; }
     public DateTime? Ate { get; set; }
 }
@@ -24,6 +26,7 @@ public class PaymobiConfigPublicaDto
     public DateTime? UltimaSincronizacao { get; set; }
     public int UltimoTotalImportado { get; set; }
     public decimal CustoFixoAparelho { get; set; } = 80;
+    public decimal CustoPorAparelho { get; set; } = 20;
     public decimal CustoPlataformaTotal { get; set; } = 200;
     public decimal CustoPlataformaMensal { get; set; } = 200;
 }
@@ -31,6 +34,7 @@ public class PaymobiConfigPublicaDto
 public class PaymobiCustosRequest
 {
     public decimal CustoFixoAparelho { get; set; } = 80;
+    public decimal? CustoPorAparelho { get; set; }
     public decimal CustoPlataformaTotal { get; set; } = 200;
     public decimal? CustoPlataformaMensal { get; set; }
     public string? Email { get; set; }
@@ -75,6 +79,11 @@ public class PaymobiSyncService : IPaymobiSyncService
     public async Task<PaymobiConfigPublicaDto> ObterConfigAsync(CancellationToken cancellationToken = default)
     {
         var cfg = await _config.ObterAsync(cancellationToken);
+        if (cfg is not null && cfg.CustoPorAparelho is null)
+        {
+            cfg.CustoPorAparelho = 20;
+            await _config.SalvarAsync(cfg, cancellationToken);
+        }
         return MapearConfig(cfg);
     }
 
@@ -83,7 +92,11 @@ public class PaymobiSyncService : IPaymobiSyncService
         CancellationToken cancellationToken = default)
     {
         if (request.CustoFixoAparelho < 0)
-            throw new ArgumentException("O custo do aparelho não pode ser negativo.");
+            throw new ArgumentException("O custo da chave não pode ser negativo.");
+
+        var custoPorAparelho = request.CustoPorAparelho ?? 20;
+        if (custoPorAparelho < 0)
+            throw new ArgumentException("O custo por aparelho não pode ser negativo.");
 
         var mensal = request.CustoPlataformaMensal ?? request.CustoPlataformaTotal;
         if (mensal < 0)
@@ -91,6 +104,7 @@ public class PaymobiSyncService : IPaymobiSyncService
 
         var salvo = await _config.ObterAsync(cancellationToken) ?? new PaymobiConfigData();
         salvo.CustoFixoAparelho = decimal.Round(request.CustoFixoAparelho, 2);
+        salvo.CustoPorAparelho = decimal.Round(custoPorAparelho, 2);
         salvo.CustoPlataformaTotal = decimal.Round(mensal, 2);
         var email = (request.Email ?? "").Trim();
         if (!string.IsNullOrWhiteSpace(email))
@@ -111,6 +125,7 @@ public class PaymobiSyncService : IPaymobiSyncService
             UltimaSincronizacao = cfg?.UltimaSincronizacao,
             UltimoTotalImportado = cfg?.UltimoTotalImportado ?? 0,
             CustoFixoAparelho = cfg is null || cfg.CustoFixoAparelho <= 0 ? 80 : cfg.CustoFixoAparelho,
+            CustoPorAparelho = cfg?.CustoPorAparelho ?? 20,
             CustoPlataformaTotal = mensal,
             CustoPlataformaMensal = mensal,
         };
@@ -147,6 +162,12 @@ public class PaymobiSyncService : IPaymobiSyncService
         var sessao = await AutenticarAsync(client, email, senha, cancellationToken);
         var lojas = await ListarLojasAsync(client, sessao.Token, cancellationToken);
 
+        if (request.SubstituirTudo)
+        {
+            var apagadas = await _vendas.ApagarTodasAsync(cancellationToken);
+            Console.WriteLine($"[MundoSmart API] PayMobi: base local apagada ({apagadas} vendas). Reimportando.");
+        }
+
         var de = (request.De ?? new DateTime(2019, 1, 1)).Date;
         var ate = (request.Ate ?? DateTime.Today).Date;
         var parcelasPorVenda = await ListarParcelasAsync(client, sessao.Token, de, ate, cancellationToken);
@@ -166,6 +187,8 @@ public class PaymobiSyncService : IPaymobiSyncService
             await _vendas.UpsertDaPaymobiAsync(venda, cancellationToken);
             importadas++;
         }
+
+        await _vendas.ConcretizarTodasAsync(cancellationToken);
 
         if (request.SalvarCredenciais)
         {
@@ -543,6 +566,13 @@ public class PaymobiSyncService : IPaymobiSyncService
 
             if (lista is null || lista.Value.GetArrayLength() == 0) break;
 
+            if (page == 1)
+            {
+                var primeira = lista.Value[0];
+                var campos = primeira.EnumerateObject().Select(p => p.Name);
+                Console.WriteLine($"[MundoSmart API] PayMobi venda campos: {string.Join(", ", campos)}");
+            }
+
             foreach (var row in lista.Value.EnumerateArray())
             {
                 var venda = MapearVenda(row, parcelas);
@@ -565,19 +595,20 @@ public class PaymobiSyncService : IPaymobiSyncService
 
         var cancelada = Bool(row, "canceled");
         var encerrada = Bool(row, "completed");
-        var valorParcelado = Decimal(row, "valor");
-        var entrada = Decimal(row, "entryValue");
-        var total = Decimal(row, "sellTotalAmount");
+        var valorParcelado = PrimeiroDecimal(row, "valor", "financedValue", "financedAmount");
+        var entrada = PrimeiroDecimal(row, "entryValue", "entrada", "downPayment", "entry");
+        var original = PrimeiroDecimal(row, "originalValue", "originalAmount", "cashValue", "valorOriginal");
+        var baseAparelho = PrecoAparelho(row);
+        var total = PrimeiroDecimal(row, "sellTotalAmount", "totalAmount", "valorTotal", "amount", "saleTotal");
         if (total <= 0) total = valorParcelado + entrada;
-        var baseAparelho = Decimal(row, "deviceBaseValue");
-        var original = Decimal(row, "originalValue");
+        if (total <= 0) total = original;
+        if (total <= 0 && baseAparelho > 0) total = baseAparelho + entrada;
         var qtdParcelas = Inteiro(row, "parcelas") ?? Inteiro(row, "installments") ?? 0;
         var dataVenda = Data(row, "sellDate") ?? Data(row, "dataCadastro") ?? Data(row, "dataEfetivacao") ?? Data(row, "createdAt") ?? DateTime.UtcNow;
         var encerradoEm = Data(row, "completedAt");
         var canceladoEm = Data(row, "canceledAt");
         var imei = SoDigitos(Texto(row, "imei"));
-        var valorParcela = Decimal(row, "installmentValue");
-        if (valorParcela <= 0) valorParcela = Decimal(row, "sellInstallmentValue");
+        var valorParcela = PrimeiroDecimal(row, "installmentValue", "sellInstallmentValue", "valorParcela");
         if (valorParcela <= 0 && qtdParcelas > 0 && valorParcelado > 0)
             valorParcela = decimal.Round(valorParcelado / qtdParcelas, 2);
         var primeiraParcela = Data(row, "dataPrimeiraParcela") ?? dataVenda.Date.AddMonths(1);
@@ -616,7 +647,10 @@ public class PaymobiSyncService : IPaymobiSyncService
             ClienteTelefone = Texto(row, "phone") ?? Texto(row, "telefone") ?? Texto(row, "customerPhone") ?? "",
             ClienteEmail = Texto(row, "email") ?? Texto(row, "customerEmail") ?? "",
             AparelhoMarca = Texto(row, "brand") ?? "",
-            AparelhoModelo = AparelhoCodigoComercial.Nome(Texto(row, "model")),
+            AparelhoModelo = AparelhoCodigoComercial.Nome(
+                Texto(row, "comercialName")
+                ?? Texto(row, "financingProductName")
+                ?? Texto(row, "model")),
             AparelhoCor = Texto(row, "color") ?? Texto(row, "cor") ?? "",
             AparelhoImei = imei.Length > 0 ? imei : (Texto(row, "imei") ?? ""),
             ValorInvestido = 0,
@@ -714,14 +748,59 @@ public class PaymobiSyncService : IPaymobiSyncService
         };
     }
 
+    private static decimal PrecoAparelho(JsonElement row)
+    {
+        var direto = PrimeiroDecimal(row,
+            "financingProductPrice",
+            "deviceBaseValue",
+            "deviceValue",
+            "devicePrice",
+            "baseValue",
+            "productValue",
+            "productPrice",
+            "phoneValue",
+            "valorAparelho",
+            "valorBaseAparelho");
+        if (direto > 0) return direto;
+
+        foreach (var nome in new[] { "device", "aparelho", "product", "phone" })
+        {
+            var obj = Obj(row, nome);
+            if (obj is null) continue;
+            var nested = PrimeiroDecimal(obj.Value,
+                "baseValue", "value", "price", "deviceBaseValue", "amount");
+            if (nested > 0) return nested;
+        }
+
+        return 0;
+    }
+
+    private static decimal PrimeiroDecimal(JsonElement row, params string[] nomes)
+    {
+        foreach (var nome in nomes)
+        {
+            var n = Decimal(row, nome);
+            if (n > 0) return n;
+        }
+        return 0;
+    }
+
     private static decimal Decimal(JsonElement row, string nome)
     {
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty(nome, out var p))
+            return 0;
+        if (p.ValueKind == JsonValueKind.Number && p.TryGetDecimal(out var n))
+            return n;
         var t = Texto(row, nome);
         if (string.IsNullOrWhiteSpace(t)) return 0;
-        t = t.Replace(",", ".");
+        t = t.Trim();
+        if (t.Contains(',') && t.LastIndexOf(',') > t.LastIndexOf('.'))
+            t = t.Replace(".", "").Replace(",", ".");
+        else
+            t = t.Replace(",", ".");
         return decimal.TryParse(t, System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out var n)
-            ? n
+            System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
             : 0;
     }
 

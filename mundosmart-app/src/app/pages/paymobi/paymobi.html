@@ -38,6 +38,35 @@
   </p>
 
   <div class="resumo" *ngIf="!carregando">
+    <div class="card card-vendidos">
+      <span>Aparelhos vendidos</span>
+      <strong>{{ resumo.aparelhosVendidos }}</strong>
+      <em>até hoje · todos os contratos</em>
+      <div class="card-vendidos-barra" *ngIf="resumo.aparelhosVendidos > 0" aria-hidden="true">
+        <span class="fatia conc" [style.flexGrow]="resumo.pagos || 0.0001"></span>
+        <span class="fatia cobr" [style.flexGrow]="resumo.emAndamento || 0.0001"></span>
+        <span class="fatia canc" [style.flexGrow]="resumo.cancelados || 0.0001"></span>
+      </div>
+      <div class="card-vendidos-split">
+        <div class="stat conc">
+          <strong>{{ resumo.pagos }}</strong>
+          <span>Concluídos</span>
+        </div>
+        <div class="stat cobr">
+          <strong>{{ resumo.emAndamento }}</strong>
+          <span>Em cobrança</span>
+        </div>
+        <div class="stat canc">
+          <strong>{{ resumo.cancelados }}</strong>
+          <span>Cancelados</span>
+        </div>
+      </div>
+    </div>
+    <div class="card card-total">
+      <span>Valor total vendido</span>
+      <strong>{{ moeda(resumo.valorTotalVendido) }}</strong>
+      <em>até hoje · todos os contratos</em>
+    </div>
     <div class="card">
       <span>Em cobrança</span>
       <strong>{{ resumo.emAndamento }}</strong>
@@ -47,17 +76,13 @@
       <strong>{{ resumo.pagos }}</strong>
     </div>
     <div class="card">
-      <span>Cancelados / devoluções</span>
-      <strong>{{ resumo.cancelados }}</strong>
-    </div>
-    <div class="card">
       <span>Com custo informado</span>
       <strong>{{ resumo.concretizadas }}</strong>
     </div>
     <div class="card">
       <span>Custo dos aparelhos</span>
       <strong>{{ moeda(custoAparelhosVisiveis) }}</strong>
-      <em>soma do total de cada linha da lista · R$ 20 + chave já entram na linha, não de novo aqui</em>
+      <em>soma do total de cada linha da lista · {{ moeda(acrescimoAparelho) }} + chave já entram na linha, não de novo aqui</em>
     </div>
     <div class="card card-entrada">
       <span>Receita</span>
@@ -449,7 +474,7 @@
         />
       </label>
       <label>
-        Acréscimo do aparelho
+        Custo por aparelho
         <input [value]="moeda(preview?.custoAcrescimo ?? 0)" disabled />
       </label>
       <label>
@@ -758,7 +783,12 @@
               </div>
             </ng-container>
           </td>
-          <td>{{ moeda(linha.valorVenda) }}</td>
+          <td>
+            {{ moeda(linha.valorVenda) }}
+            <div class="sub" *ngIf="(linha.venda.valorBaseAparelho || 0) > 0">
+              aparelho {{ moeda(linha.venda.valorBaseAparelho || 0) }}
+            </div>
+          </td>
           <td>
             <span class="badge-resultado" [attr.data-resultado]="linha.tipoResultado">
               {{ linha.rotuloResultado }}
