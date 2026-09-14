@@ -12,13 +12,9 @@
 
   <p class="hint">
     Lucro líquido = receita − despesa.
-    <strong>Receita:</strong> entrada + boletos pagos dos contratos que seguem.
-    Se o cancelamento der negativo, o valor entra somado na despesa.
-    Se der positivo, entra somado na receita.
-    <strong>Despesa:</strong> custo dos aparelhos (já com {{ moeda(acrescimoAparelho) }} + chave em cada linha)
-    + plataforma (mensal × meses desde a primeira venda)
-    + prejuízo de cancelamento
-    + prejuízo dos contratos que a loja marcou como Perdido (já recebido − custo, sem repetir o aparelho).
+    <strong>Receita:</strong> entrada + boletos pagos + revenda de todas as vendas.
+    <strong>Despesa:</strong> o custo dos aparelhos (compra + {{ moeda(acrescimoAparelho) }} + chave), o mesmo valor do card Custo dos aparelhos.
+    Plataforma, cancelamento e Perdido ficam em cards próprios e não trocam esse custo.
     Se a PayMobi não trouxer boleto (CNPJ antigo), usamos o <strong>devido</strong> da linha:
     boletos pagos ≈ financiado − devido.
     A plataforma mensal só é rateada acima de {{ percentualLucro * 100 }}% do custo
@@ -26,7 +22,7 @@
     Cobrança: só entra como <strong>Perdido</strong> o contrato que a loja marcar na lista.
     Atraso sozinho continua em <strong>OK</strong> (ou no status que vocês escolherem).
     Use Em Negociação ou Em Recuperação para acompanhar quem ainda deve, sem somar como perdido.
-    <strong>Perdido</strong> soma só o resultado desses aparelhos (já recebido − custo), o mesmo valor da despesa ou da receita.
+    <strong>Perdido</strong> é o prejuízo do aparelho (já recebido − custo), não o saldo das parcelas.
   </p>
 
   <p class="muted" *ngIf="ultimaSincronizacao">
@@ -103,29 +99,15 @@
       <span>Receita</span>
       <strong>{{ moeda(resumo.receita) }}</strong>
       <em>
-        entrada + boletos dos contratos que seguem
-        <ng-container *ngIf="resumo.valorLucroCancelamentos > 0">
-          + lucro de cancelamento {{ moeda(resumo.valorLucroCancelamentos) }}
-        </ng-container>
-        <ng-container *ngIf="resumo.valorLucroPerdidos > 0">
-          + lucro de perdido {{ moeda(resumo.valorLucroPerdidos) }}
-        </ng-container>
-        · todas as vendas
+        entrada + boletos + revenda de todas as vendas
       </em>
     </div>
     <div class="card">
       <span>Despesa</span>
       <strong>{{ moeda(resumo.despesa) }}</strong>
       <em>
-        aparelhos {{ moeda(resumo.custoAparelhosOperacao) }}
-        + plataforma {{ moeda(resumo.plataformaTotal) }}
-        <ng-container *ngIf="resumo.valorPrejuizoCancelamentos > 0">
-        + cancelamentos {{ moeda(resumo.valorPrejuizoCancelamentos) }}
-        </ng-container>
-        <ng-container *ngIf="resumo.valorPrejuizoPerdidos > 0">
-        + perdidos {{ moeda(resumo.valorPrejuizoPerdidos) }}
-        </ng-container>
-        · todas as vendas
+        {{ moeda(resumo.custoLiquido) }}
+        · o mesmo valor do custo dos aparelhos
       </em>
     </div>
     <div class="card" [class.lucro]="resumo.lucroLiquido > 0" [class.prejuizo]="resumo.lucroLiquido < 0">
@@ -179,7 +161,7 @@
     <div class="card" [class.lucro]="resumo.resultadoCancelamentos > 0" [class.prejuizo]="resumo.resultadoCancelamentos < 0">
       <span>Cancelamentos / devoluções</span>
       <strong>{{ moeda(resumo.resultadoCancelamentos) }}</strong>
-      <em>entrada + boletos + revenda − custo do aparelho · o mesmo valor entra na despesa ou na receita</em>
+      <em>entrada + boletos + revenda − custo do aparelho</em>
     </div>
     <div class="card" [class.prejuizo]="resumo.resultadoPerdidos < 0" [class.lucro]="resumo.resultadoPerdidos > 0">
       <span>Perdidos</span>
@@ -189,7 +171,6 @@
         {{ resumo.contratosPerdidos === 1 ? 'contrato' : 'contratos' }}
         · prejuízo do aparelho (já recebido − custo), não o saldo das parcelas
         · só status Perdido marcado na lista
-        · o mesmo valor entra na despesa ou na receita
       </em>
     </div>
   </div>

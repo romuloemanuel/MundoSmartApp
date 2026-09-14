@@ -487,7 +487,7 @@ export class PaymobiCalculoService {
     let operacional = 0;
     let vendaPaga = 0;
     let recebido = 0;
-    let receitaOperacao = 0;
+    let receitaTotal = 0;
     let receitaAtivos = 0;
     let despesaAtivos = 0;
     let resultadoPagos = 0;
@@ -533,7 +533,7 @@ export class PaymobiCalculoService {
       if (l.deuLucroParaRateio) rateio++;
       entradas += l.valorEntrada;
       recebido += l.totalRecebido;
-      if (l.status !== 'cancelada' && !perdido) receitaOperacao += l.receita;
+      receitaTotal += l.receita;
       if (ativo && !perdido) receitaAtivos += l.receita;
       if (l.bloqueado) bloqueados++;
       if (l.parcelasAtraso > 0) comAtraso++;
@@ -549,11 +549,8 @@ export class PaymobiCalculoService {
     const prejuizoCancelamentosLiquido = Math.max(0, -resultadoCancelamentos);
     const lucroPerdidosLiquido = Math.max(0, perdidos.resultado);
     const prejuizoPerdidosLiquido = Math.max(0, -perdidos.resultado);
-    const receita = receitaOperacao + lucroCancelamentosLiquido + lucroPerdidosLiquido;
-    const despesa = custoAparelhosOperacao
-      + plataformaTotal
-      + prejuizoCancelamentosLiquido
-      + prejuizoPerdidosLiquido;
+    const receita = receitaTotal;
+    const despesa = custoLiquido;
     const lucroLiquido = receita - despesa;
     const lucroAtivos = receitaAtivos - despesaAtivos;
     const ativos = cobranca.contratosAtivos;
