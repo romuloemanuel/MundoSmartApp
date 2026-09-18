@@ -110,6 +110,26 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/paymobi/paymobi').then(m => m.PaymobiPage),
       },
+      {
+        path: 'vendas-celulares/payjoy',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/payjoy/payjoy').then(m => m.VendasPayjoyPage),
+        title: 'Vendas Payjoy',
+      },
+      {
+        path: 'vendas-celulares/iniciar-paymobi',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/iniciar-paymobi/iniciar-paymobi').then(
+            m => m.IniciarVendaPaymobiPage,
+          ),
+      },
+      {
+        path: 'vendas-celulares/consultar-desconto',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/consultar-desconto/consultar-desconto').then(
+            m => m.ConsultarClienteDescontoPage,
+          ),
+      },
       { path: 'estoque', component: EstoquePage },
       { path: 'estoque/lotes-retorno', component: LotesRetornoPage },
       { path: 'estoque/analise-retorno', component: AnaliseRetornoPage },

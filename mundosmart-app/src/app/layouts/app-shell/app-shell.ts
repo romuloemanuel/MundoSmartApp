@@ -1,5 +1,5 @@
-import { Component, OnInit } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, HostListener, OnInit } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { BlingAuthService } from '../../services/bling-auth';
 import { AppAuthService } from '../../services/app-auth';
@@ -33,7 +33,29 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <a routerLink="/consulta-telas" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Consulta telas</a>
           <a routerLink="/calculo-juros" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Cálculo de juros</a>
           <a routerLink="/contratos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Contratos</a>
-          <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Vendas boleto</a>
+          <div
+            class="nav-grupo"
+            [class.aberto]="submenuCelularesAberto"
+            [class.ativo]="rotaCelularesAtiva"
+            (click)="$event.stopPropagation()"
+          >
+            <button
+              type="button"
+              class="nav-grupo-btn"
+              [class.active]="rotaCelularesAtiva"
+              [attr.aria-expanded]="submenuCelularesAberto"
+              (click)="alternarSubmenuCelulares($event)"
+            >
+              Vendas Celulares
+              <span class="nav-grupo-seta" aria-hidden="true"></span>
+            </button>
+            <div class="nav-submenu" *ngIf="submenuCelularesAberto">
+              <a routerLink="/vendas-celulares/payjoy" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas Payjoy</a>
+              <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas PayMobi</a>
+              <a routerLink="/vendas-celulares/iniciar-paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Iniciar uma Venda Paymobi</a>
+              <a routerLink="/vendas-celulares/consultar-desconto" routerLinkActive="active" (click)="aoClicarItemCelulares()">Consultar Cliente Desconto</a>
+            </div>
+          </div>
           <a routerLink="/clientes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Clientes</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/historico-alteracoes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Hist&oacute;rico de altera&ccedil;&otilde;es</a>
           <div class="nav-section-label">Cadastros</div>
@@ -46,7 +68,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <a *ngIf="appAuth.isAdmin()" routerLink="/contratos" [queryParams]="{ aba: 'modelos' }" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Contratos e termos</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/impressao-os" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Impress&atilde;o da OS</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/acrescimo-estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Acr&eacute;scimo estoque</a>
-          <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/paymobi" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Vendas boleto</a>
+          <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/paymobi" routerLinkActive="active" (click)="fecharMenuSeEstreito()">PayMobi</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/bling" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Bling</a>
         </nav>
       </aside>
@@ -148,12 +170,34 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
 })
 export class AppShell implements OnInit {
   menuAberto = true;
+  submenuCelularesAberto = false;
 
   constructor(
     public blingAuth: BlingAuthService,
     public appAuth: AppAuthService,
     private categoriasPeca: CategoriasPecaService,
+    private router: Router,
   ) {}
+
+  get rotaCelularesAtiva(): boolean {
+    const u = this.router.url.split('?')[0];
+    return u === '/paymobi' || u.startsWith('/paymobi/') || u.startsWith('/vendas-celulares');
+  }
+
+  alternarSubmenuCelulares(ev: Event): void {
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.submenuCelularesAberto = !this.submenuCelularesAberto;
+  }
+
+  aoClicarItemCelulares(): void {
+    this.fecharMenuSeEstreito();
+  }
+
+  @HostListener('document:click')
+  fecharSubmenuCelularesFora(): void {
+    this.submenuCelularesAberto = false;
+  }
 
   ngOnInit(): void {
     this.menuAberto = this.lerPreferenciaInicial();
