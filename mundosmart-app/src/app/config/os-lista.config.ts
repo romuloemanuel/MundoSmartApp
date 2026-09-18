@@ -18,10 +18,10 @@ export interface OsOrdenacao {
   direcao: OsOrdenacaoDirecao;
 }
 
-/** Padrão: mais urgente (vermelho / mais tempo na assistência) primeiro. */
+/** Padrão: entrada mais recente primeiro. */
 export const OS_ORDENACAO_PADRAO: OsOrdenacao = {
-  campo: 'urgencia',
-  direcao: 'asc',
+  campo: 'data',
+  direcao: 'desc',
 };
 
 export const OS_COLUNAS_ORDENAVEIS: { campo: OsOrdenacaoCampo; label: string }[] = [

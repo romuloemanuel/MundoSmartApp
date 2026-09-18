@@ -576,7 +576,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     } else {
       this.ordenacao = {
         campo,
-        direcao: campo === 'urgencia' ? 'asc' : 'asc',
+        direcao: campo === 'data' ? 'desc' : 'asc',
       };
     }
     this.grid.reset();
