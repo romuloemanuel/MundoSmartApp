@@ -22,6 +22,14 @@
     <None Update="Data\modelos_catalogo.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Config\ContratoVendaBoleto.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Config\ReciboEntregaContratoBoleto.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Include="Config\ContratoVendaBoleto.html" />
+    <EmbeddedResource Include="Config\ReciboEntregaContratoBoleto.html" />
   </ItemGroup>
 
 </Project>

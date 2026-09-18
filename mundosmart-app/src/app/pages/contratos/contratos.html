@@ -61,6 +61,12 @@
         <p class="campo-hint" *ngIf="anexaTermoConscientizacao">
           Uma impressão: 2 vias do contrato (cliente e loja) e o termo de conscientização, que fica na loja.
         </p>
+        <p class="campo-hint" *ngIf="ehContratoBoleto">
+          Uma impressão: 2 vias do contrato (2 páginas A4 cada) e 1 recibo de entrega — 5 folhas no total.
+        </p>
+        <p class="campo-hint" *ngIf="!anexaTermoConscientizacao && !ehContratoBoleto && modeloEmitir.imprimirDuasVias">
+          Uma impressão: 2 vias (cliente e loja).
+        </p>
 
         <div class="emitir-grid">
           <div class="campos">
@@ -234,6 +240,9 @@
         </div>
         <p class="campo-hint" *ngIf="ehModeloTermoConscientizacao(modeloEditando)">
           Sai automaticamente na venda: 2 vias do contrato + esta folha (fica na loja).
+        </p>
+        <p class="campo-hint" *ngIf="ehModeloReciboEntregaBoleto(modeloEditando)">
+          Sai automaticamente no boleto: 2 vias do contrato (4 folhas) + este recibo (5 folhas no total).
         </p>
         <app-documento-corpo-editor
           name="docCorpo"

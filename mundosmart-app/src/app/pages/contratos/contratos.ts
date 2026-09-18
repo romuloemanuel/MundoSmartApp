@@ -51,14 +51,23 @@ function normalizarCodigoDoc(codigo: string | undefined): string {
 
 function ehContratoVenda(modelo: DocumentoModelo | null | undefined): boolean {
   if (!modelo || modelo.tipo !== 'contrato') return false;
-  const codigo = normalizarCodigoDoc(modelo.codigo);
-  if (codigo === 'contratovenda') return true;
-  if (codigo.includes('compra')) return false;
-  return /venda/i.test(modelo.titulo ?? '');
+  return normalizarCodigoDoc(modelo.codigo) === 'contratovenda';
+}
+
+function ehContratoVendaBoleto(modelo: DocumentoModelo | null | undefined): boolean {
+  return !!modelo && normalizarCodigoDoc(modelo.codigo) === 'contratovendaboleto';
 }
 
 function ehTermoConscientizacao(modelo: DocumentoModelo | null | undefined): boolean {
   return !!modelo && normalizarCodigoDoc(modelo.codigo) === 'termoconscientizacao';
+}
+
+function ehReciboEntregaBoleto(modelo: DocumentoModelo | null | undefined): boolean {
+  return !!modelo && normalizarCodigoDoc(modelo.codigo) === 'reciboentregacontratoboleto';
+}
+
+function ehAnexoAutomatico(modelo: DocumentoModelo | null | undefined): boolean {
+  return ehTermoConscientizacao(modelo) || ehReciboEntregaBoleto(modelo);
 }
 
 const FORMAS_PAGAMENTO_CONTRATO = [
@@ -134,7 +143,7 @@ export class ContratosPage implements OnInit {
   get modelosAtivos(): DocumentoModelo[] {
     const grupos = new Map<string, DocumentoModelo[]>();
     for (const m of this.modelos) {
-      if (!m.ativo || ehTermoConscientizacao(m)) continue;
+      if (!m.ativo || ehAnexoAutomatico(m)) continue;
       const chave = normalizarCodigoDoc(m.codigo) || m.id || m.titulo;
       const lista = grupos.get(chave) ?? [];
       lista.push(m);
@@ -153,6 +162,18 @@ export class ContratosPage implements OnInit {
     return ehContratoVenda(this.modeloEmitir) && !!this.modeloTermoConscientizacao;
   }
 
+  get ehContratoBoleto(): boolean {
+    return ehContratoVendaBoleto(this.modeloEmitir);
+  }
+
+  get modeloReciboEntregaBoleto(): DocumentoModelo | undefined {
+    return this.modelos.find(m => ehReciboEntregaBoleto(m) && m.ativo);
+  }
+
+  get anexaReciboEntregaBoleto(): boolean {
+    return this.ehContratoBoleto && !!this.modeloReciboEntregaBoleto;
+  }
+
   get camposEmitir(): DocumentoVariavel[] {
     return (this.modeloEmitir?.variaveis ?? []).filter(v => this.campoVisivel(v));
   }
@@ -168,12 +189,16 @@ export class ContratosPage implements OnInit {
 
   get rotuloImprimir(): string {
     if (this.anexaTermoConscientizacao) return 'Imprimir 3 folhas';
+    if (this.anexaReciboEntregaBoleto) return 'Imprimir 5 folhas';
     if (this.modeloEmitir?.imprimirDuasVias) return 'Imprimir 2 vias';
     return 'Imprimir';
   }
 
   get rotuloPreview(): string {
     if (this.anexaTermoConscientizacao) return 'Pré-visualização A4 — 2 vias + termo da loja';
+    if (this.anexaReciboEntregaBoleto) {
+      return 'Pré-visualização A4 — 2 vias · 2 páginas cada + recibo (5 folhas)';
+    }
     if (this.modeloEmitir?.imprimirDuasVias) return 'Pré-visualização A4 — 2 vias';
     return 'Pré-visualização A4';
   }
@@ -190,9 +215,16 @@ export class ContratosPage implements OnInit {
     return ehTermoConscientizacao(modelo);
   }
 
+  ehModeloReciboEntregaBoleto(modelo: DocumentoModelo | null | undefined): boolean {
+    return ehReciboEntregaBoleto(modelo);
+  }
+
   tituloEmitir(modelo: DocumentoModelo): string {
     const titulo = (modelo.titulo ?? '').trim();
-    if (/venda/i.test(titulo) || modelo.codigo === 'contrato-venda') {
+    if (ehContratoVendaBoleto(modelo) || /boleto/i.test(titulo)) {
+      return 'Compra e venda de celular novo (boleto)';
+    }
+    if (modelo.codigo === 'contrato-venda' || (/venda/i.test(titulo) && !/compra/i.test(titulo) && !/boleto/i.test(titulo))) {
       return 'Venda de celular seminovo';
     }
     if (/compra/i.test(titulo) || modelo.codigo === 'contrato-compra-venda') {
@@ -630,6 +662,10 @@ export class ContratosPage implements OnInit {
     if (v.chave === 'vendedor_telefone') {
       return formatarTelefone(empresa.telefoneEmpresa || '19989387457');
     }
+    if (v.chave === 'vendedor_ie') return '453.203.753.110';
+    if (v.chave === 'vendedor_email') return 'mundosmartmococa@gmail.com';
+    if (v.chave === 'parcelas_periodicidade') return 'Mensal';
+    if (v.chave === 'aparelho_produto') return 'Aparelho celular';
     if (v.chave === 'cidade' || v.chave === 'foro') return 'Mococa/SP';
     if (v.chave === 'estado_aparelho') return 'SEMINOVO';
     if (v.tipo === 'data' || v.tipo === 'data_hora' || v.chave === 'data') return agoraLocalIso();
@@ -649,17 +685,27 @@ export class ContratosPage implements OnInit {
 
   private valoresParaDocumentos(): Record<string, string> {
     const next = this.valoresComAutomaticos();
-    const termo = this.modeloTermoConscientizacao;
-    if (!this.anexaTermoConscientizacao || !termo) return next;
-    for (const v of termo.variaveis ?? []) {
-      if (!(next[v.chave] ?? '').trim()) next[v.chave] = this.valorPadrao(v);
+    const anexos = [
+      this.anexaTermoConscientizacao ? this.modeloTermoConscientizacao : undefined,
+      this.anexaReciboEntregaBoleto ? this.modeloReciboEntregaBoleto : undefined,
+    ].filter((m): m is DocumentoModelo => !!m);
+    for (const modelo of anexos) {
+      for (const v of modelo.variaveis ?? []) {
+        if (!(next[v.chave] ?? '').trim()) next[v.chave] = this.valorPadrao(v);
+      }
     }
     return next;
   }
 
   private corposAnexos(valores: Record<string, string>): string[] {
-    if (!this.anexaTermoConscientizacao || !this.modeloTermoConscientizacao) return [];
-    return [preencherModelo(this.modeloTermoConscientizacao, valores)];
+    const extras: string[] = [];
+    if (this.anexaTermoConscientizacao && this.modeloTermoConscientizacao) {
+      extras.push(preencherModelo(this.modeloTermoConscientizacao, valores));
+    }
+    if (this.anexaReciboEntregaBoleto && this.modeloReciboEntregaBoleto) {
+      extras.push(preencherModelo(this.modeloReciboEntregaBoleto, valores));
+    }
+    return extras;
   }
 
   private validarCampos(valores: Record<string, string>): Record<string, string> {

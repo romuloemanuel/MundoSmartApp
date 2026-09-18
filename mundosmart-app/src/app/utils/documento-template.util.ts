@@ -105,8 +105,10 @@ const CHAVES_OCULTAS = new Set([
   'compradora_representante_cpf',
   'vendedor_nome',
   'vendedor_cnpj',
+  'vendedor_ie',
   'vendedor_endereco',
   'vendedor_telefone',
+  'vendedor_email',
   'cidade',
   'foro',
   'data',
@@ -241,6 +243,10 @@ export function documentoParaHtml(texto: string): string {
 
 const CSS_DOCUMENTO = `
   @page { size: A4; margin: 0; }
+  @page boleto {
+    size: A4;
+    margin: 11mm 12mm 18mm;
+  }
   html, body { margin: 0; padding: 0; }
   body {
     font-family: "Times New Roman", Times, serif;
@@ -376,6 +382,149 @@ const CSS_DOCUMENTO = `
   strong, b { font-weight: 700; }
   em, i { font-style: italic; }
   u { text-decoration: underline; }
+
+  /* Contrato boleto: texto do advogado intacto; só recuo, entrelinha e assinatura. */
+  .via:has(.doc-denso) {
+    height: auto;
+    min-height: 297mm;
+    max-height: 891mm;
+    overflow: hidden;
+    padding: 10mm 13mm 16mm;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  body:has(.doc-denso) {
+    font-size: 8.15pt;
+    line-height: 1.16;
+    letter-spacing: 0.02em;
+  }
+  .doc-denso h1 {
+    font-size: 10.6pt;
+    letter-spacing: 0.04em;
+    line-height: 1.18;
+    margin: 0 0 4px;
+  }
+  .doc-denso .titulo-linha { margin: 0 0 6px; }
+  .doc-denso h2 {
+    font-size: 8.4pt;
+    letter-spacing: 0.035em;
+    margin: 6px 0 2.5px;
+    padding-bottom: 1px;
+    border-bottom: 0.4pt solid #444;
+  }
+  .doc-denso p {
+    margin: 0 0 2.4px;
+    letter-spacing: 0.02em;
+  }
+  .doc-denso .sub {
+    margin: 0 0 3px;
+    padding-left: 7mm;
+    text-indent: -7mm;
+    letter-spacing: 0.02em;
+  }
+  .doc-denso .quadro-resumo {
+    border: 0.7pt solid #111;
+    padding: 5px 7px 4px;
+    margin: 0 0 6px;
+  }
+  .doc-denso .quadro-resumo p {
+    margin: 0 0 2px;
+    text-align: left;
+    padding-left: 0;
+    text-indent: 0;
+    letter-spacing: 0.015em;
+  }
+  .doc-denso .quadro-resumo p:last-child { margin-bottom: 0; }
+  .doc-denso .colunas {
+    column-count: 1;
+    column-gap: 0;
+    column-rule: none;
+  }
+  .doc-denso .colunas h2 { break-after: avoid; break-inside: avoid; }
+  .doc-denso .destaque {
+    border: 0.7pt solid #111;
+    padding: 4px 6px 3px;
+    margin: 5px 0 4px;
+  }
+  .doc-denso .rodape-boleto {
+    break-inside: avoid;
+    break-before: auto;
+    margin-top: 8mm;
+    padding-top: 6px;
+    padding-bottom: 4mm;
+  }
+  .doc-denso .fecho { margin: 0 0 6px; letter-spacing: 0.02em; }
+  .doc-denso .data { margin: 6px 0 10px; font-size: 9pt; letter-spacing: 0.03em; }
+  .assinaturas-4 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm 10mm;
+    margin-top: 4px;
+  }
+  .assinaturas-4 > div {
+    display: block;
+    width: auto;
+    padding: 0;
+    text-align: center;
+  }
+  .via:has(.doc-denso) .ass-espaco {
+    height: 20mm;
+    border-bottom: 1pt solid #111;
+    margin: 6px 6px 5px;
+  }
+  .via:has(.doc-denso) .ass-rotulo {
+    font-size: 8.4pt;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+  }
+  .via:has(.doc-denso) .ass-nome,
+  .via:has(.doc-denso) .ass-doc { font-size: 8.3pt; letter-spacing: 0.015em; }
+  .via:has(.doc-recibo) {
+    font-size: 11pt;
+    line-height: 1.32;
+    letter-spacing: 0;
+    padding: 16mm 18mm;
+    height: 297mm;
+    min-height: 297mm;
+    max-height: 297mm;
+    overflow: hidden;
+  }
+  .doc-recibo h1 {
+    font-size: 13.5pt;
+    letter-spacing: 0.03em;
+    margin: 0 0 6px;
+  }
+  .doc-recibo .titulo-linha { margin: 0 0 10px; }
+  .doc-recibo p { margin: 0 0 8px; }
+  .doc-recibo .quadro-resumo {
+    border: 0.7pt solid #111;
+    padding: 8px 10px 6px;
+    margin: 0 0 12px;
+  }
+  .doc-recibo .quadro-resumo p { margin: 0 0 4px; text-align: left; }
+  .doc-recibo .quadro-resumo p:last-child { margin-bottom: 0; }
+  .via:has(.doc-recibo) .ass-espaco {
+    height: 22mm;
+    margin: 8px 8px 4px;
+  }
+  .via:has(.doc-recibo) .ass-rotulo { font-size: 10pt; }
+  .via:has(.doc-recibo) .ass-doc { font-size: 10pt; }
+  @media print {
+    .via:has(.doc-denso) {
+      page: boleto;
+      height: auto;
+      min-height: 273mm;
+      max-height: 819mm;
+      overflow: hidden;
+      padding: 0 0 8mm;
+    }
+    .via:has(.doc-recibo) {
+      height: 297mm;
+      min-height: 297mm;
+      max-height: 297mm;
+      overflow: hidden;
+    }
+  }
 `;
 
 export function montarHtmlDocumento(

@@ -25,7 +25,8 @@ public static class DocumentoChave
 public static class DocumentoModeloSeed
 {
     /// <summary>Modelos oficiais regravados no seed (texto jurídico da loja).</summary>
-    public static readonly string[] CodigosSincronizar = ["contrato-compra-venda", "contrato-venda", "termo-conscientizacao"];
+    public static readonly string[] CodigosSincronizar =
+        ["contrato-compra-venda", "contrato-venda", "contrato-venda-boleto", "termo-conscientizacao", "recibo-entrega-contrato-boleto"];
 
     public static readonly (string Chave, string Rotulo, string Tipo)[] Variaveis =
     [
@@ -48,20 +49,34 @@ public static class DocumentoModeloSeed
         ("comprador_rg", "RG do comprador", "texto"),
         ("comprador_endereco", "Endereço do comprador(a)", "endereco"),
         ("comprador_telefone", "Telefone do comprador(a)", "telefone"),
+        ("comprador_email", "E-mail do comprador(a)", "texto"),
+        ("aparelho_produto", "Produto", "texto"),
         ("aparelho_marca", "Marca do aparelho", "texto"),
         ("aparelho_modelo", "Modelo do aparelho", "texto"),
         ("aparelho_cor", "Cor do aparelho", "texto"),
         ("aparelho_capacidade", "Capacidade (ex.: 128GB)", "texto"),
         ("aparelho_imei", "IMEI / serial", "imei"),
+        ("aparelho_imei2", "IMEI 2", "imei"),
+        ("aparelho_serial", "Número de série", "texto"),
         ("acessorios", "Acessórios entregues", "texto"),
         ("estado_aparelho", "Estado de conservação", "texto"),
         ("valor", "Valor", "moeda"),
         ("valor_extenso", "Valor por extenso", "texto"),
+        ("valor_entrada", "Entrada", "moeda"),
+        ("valor_saldo", "Saldo parcelado", "moeda"),
+        ("valor_parcela", "Valor de cada parcela", "moeda"),
+        ("valor_total_parcelado", "Valor total no parcelamento", "moeda"),
+        ("parcelas_qtd", "Quantidade de parcelas", "numero"),
+        ("parcelas_periodicidade", "Periodicidade das parcelas", "texto"),
+        ("data_primeira_parcela", "Vencimento da primeira parcela", "data"),
         ("forma_pagamento", "Forma de pagamento", "texto"),
+        ("vendedor_ie", "Inscrição estadual da loja", "texto"),
+        ("vendedor_email", "E-mail da loja", "texto"),
         ("garantia_clausula_6_meses", "Garantia estendida (um item)", "texto"),
         ("cidade", "Cidade", "texto"),
         ("foro", "Foro / comarca", "texto"),
         ("data", "Data e hora", "data_hora"),
+        ("nota_fiscal", "Número da nota fiscal", "texto"),
         ("observacoes", "Observações", "paragrafo"),
     ];
 
@@ -197,10 +212,47 @@ public static class DocumentoModeloSeed
         },
         new DocumentoModeloData
         {
+            Codigo = "contrato-venda-boleto",
+            Tipo = DocumentoTipos.Contrato,
+            Titulo = "Contrato de compra e venda de aparelho celular novo com pagamento parcelado por boleto bancário",
+            Ordem = 3,
+            Ativo = true,
+            ImprimirDuasVias = true,
+            Variaveis = Vars(
+                "vendedor_nome", "vendedor_cnpj", "vendedor_ie", "vendedor_endereco",
+                "vendedor_telefone", "vendedor_email",
+                "comprador_nome", "comprador_cpf", "comprador_rg", "comprador_endereco",
+                "comprador_telefone", "comprador_email",
+                "aparelho_produto", "aparelho_marca", "aparelho_modelo", "aparelho_cor",
+                "aparelho_capacidade", "aparelho_imei", "aparelho_imei2", "aparelho_serial",
+                "valor", "valor_entrada", "valor_saldo", "parcelas_qtd", "valor_parcela",
+                "data_primeira_parcela", "parcelas_periodicidade", "valor_total_parcelado",
+                "nota_fiscal",
+                "cidade", "data"),
+            Corpo = LerArquivoDocumento("ContratoVendaBoleto.html", "contrato de venda no boleto"),
+        },
+        new DocumentoModeloData
+        {
+            Codigo = "recibo-entrega-contrato-boleto",
+            Tipo = DocumentoTipos.Termo,
+            Titulo = "Recibo de entrega de via de contrato assinado",
+            Ordem = 4,
+            Ativo = true,
+            ImprimirDuasVias = false,
+            Variaveis = Vars(
+                "vendedor_nome", "vendedor_cnpj",
+                "comprador_nome", "comprador_cpf", "comprador_rg",
+                "comprador_telefone", "comprador_email",
+                "aparelho_marca", "aparelho_modelo", "aparelho_imei", "aparelho_imei2", "aparelho_serial",
+                "nota_fiscal", "cidade", "data"),
+            Corpo = LerArquivoDocumento("ReciboEntregaContratoBoleto.html", "recibo de entrega do contrato no boleto"),
+        },
+        new DocumentoModeloData
+        {
             Codigo = "termo-conscientizacao",
             Tipo = DocumentoTipos.Termo,
             Titulo = "Termo de ciência e conscientização",
-            Ordem = 3,
+            Ordem = 5,
             Ativo = true,
             Variaveis = Vars(
                 "vendedor_nome", "vendedor_cnpj", "vendedor_endereco",
@@ -238,7 +290,7 @@ public static class DocumentoModeloSeed
             Codigo = "aviso-geral",
             Tipo = DocumentoTipos.Aviso,
             Titulo = "Aviso",
-            Ordem = 4,
+            Ordem = 6,
             Ativo = true,
             Variaveis = Vars("cidade", "data", "observacoes"),
             Corpo =
@@ -262,14 +314,39 @@ public static class DocumentoModeloSeed
                 Rotulo = v.Rotulo,
                 Tipo = v.Tipo,
                 Obrigatoria = chave is not "observacoes" and not "comprador_rg" and not "acessorios"
-                    and not "garantia_clausula_6_meses",
+                    and not "garantia_clausula_6_meses" and not "comprador_email" and not "aparelho_imei2"
+                    and not "aparelho_serial" and not "valor_entrada",
                 Oculta = chave is "compradora_razao_social" or "compradora_cnpj" or "compradora_endereco"
                     or "compradora_representante" or "compradora_representante_cargo" or "compradora_representante_cpf"
                     or "vendedor_nome" or "vendedor_cnpj" or "vendedor_endereco" or "vendedor_telefone"
+                    or "vendedor_ie" or "vendedor_email"
                     or "cidade" or "foro" or "data",
                 Ordem = ordem++,
             });
         }
         return lista;
+    }
+
+    private static string LerArquivoDocumento(string nomeArquivo, string rotuloErro)
+    {
+        var caminho = Path.Combine(AppContext.BaseDirectory, "Config", nomeArquivo);
+        if (File.Exists(caminho)) return File.ReadAllText(caminho);
+
+        var asm = typeof(DocumentoModeloSeed).Assembly;
+        var recurso = asm.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith(nomeArquivo, StringComparison.OrdinalIgnoreCase));
+        if (recurso is not null)
+        {
+            using var stream = asm.GetManifestResourceStream(recurso);
+            if (stream is not null)
+            {
+                using var leitor = new StreamReader(stream);
+                return leitor.ReadToEnd();
+            }
+        }
+
+        throw new FileNotFoundException(
+            $"Arquivo do {rotuloErro} não encontrado.",
+            caminho);
     }
 }
