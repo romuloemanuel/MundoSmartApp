@@ -18,6 +18,7 @@ public class OrdensServicoController : ControllerBase
     private readonly IOsLocalRepository _localRepo;
     private readonly ITecnicoRepository _tecnicos;
     private readonly IOsHistoricoService _historico;
+    private readonly IEstoqueLoteService _estoqueLote;
     private readonly IWebHostEnvironment _env;
 
     public OrdensServicoController(
@@ -25,12 +26,14 @@ public class OrdensServicoController : ControllerBase
         IOsLocalRepository localRepo,
         ITecnicoRepository tecnicos,
         IOsHistoricoService historico,
+        IEstoqueLoteService estoqueLote,
         IWebHostEnvironment env)
     {
         _service = service;
         _localRepo = localRepo;
         _tecnicos = tecnicos;
         _historico = historico;
+        _estoqueLote = estoqueLote;
         _env = env;
     }
 
@@ -84,8 +87,15 @@ public class OrdensServicoController : ControllerBase
             previsaoLocais = [];
         }
 
-        var ordens = locais.Select(MapearComissaoItem).ToList();
-        var previsao = previsaoLocais.Select(MapearComissaoItem).ToList();
+        var custosRef = await _estoqueLote.ObterCustosReferenciaPecasAsync(
+            locais.Concat(previsaoLocais)
+                .SelectMany(os => os.Itens ?? [])
+                .Where(ItemEhPecaComissao)
+                .Where(i => i.CustoPeca is not > 0 && !string.IsNullOrWhiteSpace(i.PecaId))
+                .Select(i => i.PecaId!));
+
+        var ordens = locais.Select(os => MapearComissaoItem(os, custosRef)).ToList();
+        var previsao = previsaoLocais.Select(os => MapearComissaoItem(os, custosRef)).ToList();
 
         var aguardandoCliente = previsao
             .Where(o => string.Equals(
@@ -135,11 +145,13 @@ public class OrdensServicoController : ControllerBase
         });
     }
 
-    private static ComissaoOsItem MapearComissaoItem(OsLocalData local)
+    private static ComissaoOsItem MapearComissaoItem(
+        OsLocalData local,
+        IReadOnlyDictionary<string, decimal>? custosRef = null)
     {
         var valorTotal = PrimeiroValorPositivo(local.ValorTotalAcordado, local.ValorTotal, local.ValorAVista);
         var juros = local.Juros is > 0 ? local.Juros.Value : 0m;
-        var valorPecas = CalcularCustoPecas(local.Itens);
+        var valorPecas = CalcularCustoPecas(local.Itens, custosRef);
         return new ComissaoOsItem
         {
             Id = local.BlingId,
@@ -209,20 +221,35 @@ public class OrdensServicoController : ControllerBase
         return 0m;
     }
 
-    private static decimal CalcularCustoPecas(List<BlingOrdemServicoItem>? itens)
+    private static bool ItemEhPecaComissao(BlingOrdemServicoItem item)
+    {
+        if (string.Equals(item.TipoItem, "servico", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return string.Equals(item.TipoItem, "peca", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(item.PecaId);
+    }
+
+    private static decimal CalcularCustoPecas(
+        List<BlingOrdemServicoItem>? itens,
+        IReadOnlyDictionary<string, decimal>? custosRef = null)
     {
         if (itens is null || itens.Count == 0) return 0m;
 
         decimal total = 0m;
         foreach (var item in itens)
         {
-            var tipo = item.TipoItem?.Trim();
-            var ehPeca = string.Equals(tipo, "peca", StringComparison.OrdinalIgnoreCase)
-                || !string.IsNullOrWhiteSpace(item.PecaId);
-            if (!ehPeca) continue;
+            if (!ItemEhPecaComissao(item)) continue;
 
-            var custoUnit = item.CustoPeca ?? 0m;
             var qtd = item.Quantidade <= 0 ? 1m : item.Quantidade;
+            var custoUnit = item.CustoPeca is > 0 ? item.CustoPeca.Value : 0m;
+            if (custoUnit <= 0
+                && !string.IsNullOrWhiteSpace(item.PecaId)
+                && custosRef is not null
+                && custosRef.TryGetValue(item.PecaId.Trim(), out var refCusto))
+            {
+                custoUnit = refCusto;
+            }
+
             total += custoUnit * qtd;
         }
 

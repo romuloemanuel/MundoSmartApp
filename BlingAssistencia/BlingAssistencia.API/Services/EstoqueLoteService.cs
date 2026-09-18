@@ -33,6 +33,7 @@ public interface IEstoqueLoteService
         string? periodo = null,
         string? modeloId = null);
     Task<CustoPecaReferenciaResponse?> ObterCustoReferenciaPecaAsync(string pecaId);
+    Task<Dictionary<string, decimal>> ObterCustosReferenciaPecasAsync(IEnumerable<string> pecaIds);
     /// <summary>Valor em estoque, investimento mensal e giro (saídas a custo).</summary>
     Task<RelatorioFinanceiroEstoqueResponse> RelatorioFinanceiroAsync(int meses = 12);
     /// <summary>Cria lote a partir do estoque informado no cadastro da peça, se ainda não houver saldo em lotes.</summary>
@@ -1848,6 +1849,8 @@ public class EstoqueLoteService : IEstoqueLoteService
         if (string.IsNullOrWhiteSpace(pecaId)) return null;
 
         var lotes = await ListarLotesAsync(pecaId, somenteComSaldo: true);
+        if (lotes.Count == 0)
+            lotes = await ListarLotesAsync(pecaId, somenteComSaldo: false);
         if (lotes.Count == 0) return null;
 
         var custoMedio = lotes.Sum(l => l.CustoUnitario * l.QuantidadeRestante);
@@ -1877,6 +1880,23 @@ public class EstoqueLoteService : IEstoqueLoteService
             MarcaPeca = usarFifo ? fifo.MarcaPeca : null,
             Fonte = usarFifo ? "fifo" : "media",
         };
+    }
+
+    public async Task<Dictionary<string, decimal>> ObterCustosReferenciaPecasAsync(IEnumerable<string> pecaIds)
+    {
+        var ids = pecaIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var mapa = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        foreach (var id in ids)
+        {
+            var refCusto = await ObterCustoReferenciaPecaAsync(id);
+            if (refCusto is { CustoUnitario: > 0 })
+                mapa[id] = refCusto.CustoUnitario;
+        }
+        return mapa;
     }
 
     public async Task<RelatorioFinanceiroEstoqueResponse> RelatorioFinanceiroAsync(int meses = 12)

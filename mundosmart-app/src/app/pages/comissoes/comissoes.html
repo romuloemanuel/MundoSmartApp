@@ -5,8 +5,8 @@
 
   <p class="formula-hint">
     Relat&oacute;rio de <strong>lucro da assist&ecirc;ncia t&eacute;cnica</strong>.
-    L&iacute;quido fechado = valor total − juros − custo das pe&ccedil;as, s&oacute; OS <strong>Conclu&iacute;do</strong>.
-    Em <strong class="previsao-txt">laranja</strong>: previs&atilde;o ainda neste m&ecirc;s.
+    L&iacute;quido = valor total − juros − custo das pe&ccedil;as.
+    Em <strong class="previsao-txt">laranja</strong>: previs&atilde;o (pronto na loja e aberto/em teste) com o mesmo l&iacute;quido, descontando as pe&ccedil;as j&aacute; lan&ccedil;adas at&eacute; agora.
     Use <strong>Ver</strong> para abrir as OS na modal.
   </p>
 
@@ -180,6 +180,8 @@
               <th>Cliente</th>
               <th>Equipamento</th>
               <th>Situa&ccedil;&atilde;o</th>
+              <th class="col-num">Total</th>
+              <th class="col-num">Pe&ccedil;as</th>
               <th class="col-num">L&iacute;quido</th>
             </tr>
           </thead>
@@ -191,6 +193,8 @@
               <td>{{ o.clienteNome || '—' }}</td>
               <td>{{ o.equipamento || '—' }}</td>
               <td>{{ o.situacao || '—' }}</td>
+              <td class="col-num">{{ formatarMoeda(o.valorTotal) }}</td>
+              <td class="col-num">{{ formatarMoeda(o.valorPecas) }}</td>
               <td class="col-num previsao-cell">{{ formatarMoeda(o.valorLiquido) }}</td>
             </tr>
           </tbody>
