@@ -593,7 +593,12 @@ public class PaymobiSyncService : IPaymobiSyncService
         var sellId = Texto(row, "id");
         if (string.IsNullOrWhiteSpace(sellId)) return null;
 
-        var cancelada = Bool(row, "canceled");
+        var canceladoEm = Data(row, "canceledAt") ?? Data(row, "cancelledAt") ?? Data(row, "canceled_at");
+        var statusPaymobi = (Texto(row, "status") ?? "").Trim().ToLowerInvariant();
+        var cancelada = Bool(row, "canceled")
+            || Bool(row, "cancelled")
+            || canceladoEm is not null
+            || statusPaymobi is "canceled" or "cancelled" or "cancelada" or "cancelado";
         var encerrada = Bool(row, "completed");
         var valorParcelado = PrimeiroDecimal(row, "valor", "financedValue", "financedAmount");
         var entrada = PrimeiroDecimal(row, "entryValue", "entrada", "downPayment", "entry");
@@ -606,7 +611,6 @@ public class PaymobiSyncService : IPaymobiSyncService
         var qtdParcelas = Inteiro(row, "parcelas") ?? Inteiro(row, "installments") ?? 0;
         var dataVenda = Data(row, "sellDate") ?? Data(row, "dataCadastro") ?? Data(row, "dataEfetivacao") ?? Data(row, "createdAt") ?? DateTime.UtcNow;
         var encerradoEm = Data(row, "completedAt");
-        var canceladoEm = Data(row, "canceledAt");
         var imei = SoDigitos(Texto(row, "imei"));
         var valorParcela = PrimeiroDecimal(row, "installmentValue", "sellInstallmentValue", "valorParcela");
         if (valorParcela <= 0 && qtdParcelas > 0 && valorParcelado > 0)
@@ -623,6 +627,12 @@ public class PaymobiSyncService : IPaymobiSyncService
         if (valorParcela <= 0) valorParcela = resumoParcelas.ValorParcela;
         var atraso = resumoParcelas.Atraso;
         var devido = resumoParcelas.Devido;
+
+        if (cancelada)
+        {
+            atraso = 0;
+            devido = 0;
+        }
 
         string status;
         if (cancelada) status = PaymobiStatus.Cancelada;

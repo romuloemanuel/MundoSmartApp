@@ -195,6 +195,7 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         existente.ValorBoletosPagos = item.ValorBoletosPagos;
         existente.Status = PaymobiStatus.Normalizar(item.Status);
         existente.Status = RecalcularStatus(existente);
+        AjustarAtrasoCancelada(existente);
         existente.StatusCobranca = PaymobiStatusCobranca.Normalizar(
             item.StatusCobranca, existente.ParcelasAtraso, existente.Status);
         existente.AtualizadoEm = DateTime.UtcNow;
@@ -368,6 +369,13 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         return atual is PaymobiStatus.Atrasada ? PaymobiStatus.Aberta : atual;
     }
 
+    private static void AjustarAtrasoCancelada(PaymobiVendaData item)
+    {
+        if (PaymobiStatus.Normalizar(item.Status) is not PaymobiStatus.Cancelada) return;
+        item.ParcelasAtraso = 0;
+        item.ValorDevido = 0;
+    }
+
     public async Task<long> ApagarTodasAsync(CancellationToken cancellationToken = default)
     {
         var res = await _col.DeleteManyAsync(FilterDefinition<PaymobiVendaData>.Empty, cancellationToken);
@@ -447,6 +455,7 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         if (existente.ValorInvestido <= 0 && item.ValorInvestido > 0)
             existente.ValorInvestido = item.ValorInvestido;
         existente.Status = RecalcularStatus(existente);
+        AjustarAtrasoCancelada(existente);
         var pagosDepois = SomaBoletosPagos(existente.Boletos);
         var renegociou = (item.Boletos ?? []).Any(b =>
             !string.IsNullOrWhiteSpace(b.Id)

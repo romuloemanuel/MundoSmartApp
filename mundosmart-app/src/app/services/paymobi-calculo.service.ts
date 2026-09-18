@@ -331,7 +331,7 @@ export class PaymobiCalculoService {
     const semBoletos = boletos.length === 0;
     const totalBoletosPagos = totalBoletosPagosDe(v, boletos, semBoletos, devidoGuardado, valorFinanciado, hoje);
     const agenda = atrasoPeloContrato(v, boletos, valorParcela, totalBoletosPagos, hoje);
-    const quitou = v.status !== 'cancelada' && agenda.quitou;
+    const quitou = !ehCancelada(v) && agenda.quitou;
     const valorDevido = semBoletos
       ? devidoGuardado
       : boletos
@@ -398,7 +398,7 @@ export class PaymobiCalculoService {
     const faltaEmpate = b.conta ? Math.max(0, custoEmpate - b.receita) : 0;
     const faltaLucroMinimo = b.conta ? Math.max(0, custoEmpate * (1 + cfg.percentualLucroMinimo) - b.receita) : 0;
     const tipo = tipoResultado(v, b.conta, lucroLiquido, b.lucroAntes, b.deuLucroParaRateio);
-    const status: PaymobiStatus = v.status === 'cancelada'
+    const status: PaymobiStatus = ehCancelada(v)
       ? 'cancelada'
       : (b.quitou || v.status === 'quitada')
         ? 'quitada'
@@ -536,7 +536,9 @@ export class PaymobiCalculoService {
       receitaTotal += l.receita;
       if (ativo && !perdido) receitaAtivos += l.receita;
       if (l.bloqueado) bloqueados++;
-      if (l.parcelasAtraso > 0) comAtraso++;
+      if (!ehCancelada(l.venda) && (l.status === 'aberta' || l.status === 'atrasada') && l.parcelasAtraso > 0) {
+        comAtraso++;
+      }
       aparelhosVendidos++;
       valorTotalVendido += valorVendidoLinha(l);
     }
@@ -730,7 +732,7 @@ function atrasoPeloContrato(
     for (let n = 1; n <= qtd; n++) if (paga(n)) efetivas++;
     parcelasPagas = Math.max(parcelasPagas, efetivas);
   }
-  if (v.status === 'cancelada') {
+  if (ehCancelada(v)) {
     return { parcelasAtraso: 0, faltaPagar: 0, parcelasPagas, quitou: false };
   }
   const quitou = v.status === 'quitada' || (qtd > 0 && parcelasPagas >= qtd);
@@ -798,7 +800,7 @@ function ultimoPagamento(boletos: PaymobiBoleto[], hoje: string): string {
 }
 
 function completarAgenda(v: PaymobiVenda, lista: PaymobiBoleto[]): PaymobiBoleto[] {
-  if (v.status === 'cancelada' || v.status === 'quitada') return lista;
+  if (ehCancelada(v) || v.status === 'quitada') return lista;
   const qtd = Number(v.parcelas) || 0;
   const valor = Number(v.valorParcela) || 0;
   if (qtd <= 0 || valor <= 0) return lista;
@@ -983,7 +985,7 @@ function totaisBoletosAtivos(linhas: PaymobiLinhaView[], hoje: string): {
   let boletosAReceber = 0;
   const vistos = new Set<string>();
   for (const l of linhas) {
-    if (l.status !== 'aberta' && l.status !== 'atrasada') continue;
+    if (ehCancelada(l.venda) || (l.status !== 'aberta' && l.status !== 'atrasada')) continue;
     contratosAtivos++;
     if (l.boletosContabeis.length) {
       for (const b of l.boletosContabeis) {
@@ -1047,7 +1049,7 @@ function previsaoCobranca(linhas: PaymobiLinhaView[], hoje: string): {
   let receitaMensalOtimista = 0;
   const vistos = new Set<string>();
   for (const l of linhas) {
-    if (l.status !== 'aberta' && l.status !== 'atrasada') continue;
+    if (ehCancelada(l.venda) || (l.status !== 'aberta' && l.status !== 'atrasada')) continue;
     devidoAtivos += l.valorDevido;
     if (cobrancaPerdida(l)) {
       contratosPerdidos++;
@@ -1106,7 +1108,14 @@ export function statusCobrancaSalvo(l: PaymobiLinhaView): PaymobiStatusCobranca 
 }
 
 export function cobrancaPerdida(l: PaymobiLinhaView): boolean {
+  if (ehCancelada(l.venda) || l.status === 'cancelada') return false;
   return (l.status === 'aberta' || l.status === 'atrasada') && statusCobrancaSalvo(l) === 'perdido';
+}
+
+function ehCancelada(v: PaymobiVenda): boolean {
+  const s = (v.status ?? '').trim().toLowerCase();
+  if (s === 'cancelada' || s === 'cancelado') return true;
+  return !!(v.canceladoEm && String(v.canceladoEm).trim());
 }
 
 /** Percorre todos os contratos Perdido e soma o resultado (já recebido − custo). */
