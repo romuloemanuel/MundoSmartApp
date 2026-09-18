@@ -12,7 +12,7 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
   template: `
     <div class="page">
       <div class="page-header">
-        <h2>Vendas no boleto</h2>
+        <h2>PayMobi</h2>
         <div class="acoes">
           <a routerLink="/paymobi">Ver vendas</a>
           <button type="button" (click)="salvar()" [disabled]="salvando">

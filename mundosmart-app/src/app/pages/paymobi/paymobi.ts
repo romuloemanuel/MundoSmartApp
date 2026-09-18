@@ -90,7 +90,7 @@ export class PaymobiPage implements OnInit {
 
   ngOnInit(): void {
     this.carregar();
-    this.carregarConfig();
+    this.carregarConfig(true);
   }
 
   get filtrosAtivos(): number {
@@ -194,7 +194,7 @@ export class PaymobiPage implements OnInit {
     });
   }
 
-  carregarConfig(): void {
+  carregarConfig(puxarDaPaymobi = false): void {
     this.api.config().subscribe({
       next: cfg => {
         this.senhaConfigurada = !!cfg.senhaConfigurada;
@@ -204,6 +204,7 @@ export class PaymobiPage implements OnInit {
         this.custoChave = Number(cfg.custoFixoAparelho) > 0 ? Number(cfg.custoFixoAparelho) : 80;
         this.custoPlataformaMensal = lerCustoMensal(cfg);
         this.atualizarPainel();
+        if (puxarDaPaymobi && this.senhaConfigurada) this.buscarNaPaymobi();
       },
       error: () => this.cdr.markForCheck(),
     });
@@ -211,7 +212,7 @@ export class PaymobiPage implements OnInit {
 
   buscarNaPaymobi(): void {
     if (!this.senhaConfigurada) {
-      avisarErroUsuario('Configure o e-mail e a senha da PayMobi em Configurações → Vendas boleto.');
+      avisarErroUsuario('Configure o e-mail e a senha da PayMobi em Configurações → PayMobi.');
       return;
     }
     this.sincronizando = true;

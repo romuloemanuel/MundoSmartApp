@@ -27,8 +27,8 @@
 
   <p class="muted" *ngIf="ultimaSincronizacao">
     Última busca: {{ dataHora(ultimaSincronizacao) }} — {{ ultimoTotalImportado }} vendas.
-    Atualização automática a cada 1 hora.
   </p>
+  <p class="muted" *ngIf="sincronizando">Buscando vendas na PayMobi…</p>
   <p class="muted" *ngIf="!senhaConfigurada">
     A conta da PayMobi ainda não foi configurada.
     <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/paymobi">Informar e-mail e senha</a>
@@ -220,7 +220,7 @@
       <div class="item-atraso">
         <span>Valor em atraso</span>
         <strong>{{ moeda(resumo.boletosAtrasados) }}</strong>
-        <em>boletos gerados vencidos</em>
+        <em>boletos gerados vencidos · cancelado sai desta métrica</em>
       </div>
       <div class="item-receber">
         <span>Boletos em aberto</span>
