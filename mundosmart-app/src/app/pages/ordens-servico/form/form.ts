@@ -73,8 +73,9 @@ import {
 } from '../../../config/os-impressao.config';
 import { agruparPecasPorCategoria, categoriaUsaCoresPorModelo, labelPecaCatalogo } from '../../../config/peca-categoria.config';
 import { agoraDatetimeLocalBrasil, formatarDatetimeLocalBrasil, paraIsoOperacionalBrasil } from '../../../utils/horario-brasil.util';
+import { mensagemAlertaImei } from '../../../utils/imei.util';
 import { AcrescimoEstoqueConfigService } from '../../../services/acrescimo-estoque-config.service';
-import { avisarErroUsuario } from '../../../services/user-feedback.service';
+import { avisarAvisoUsuario, avisarErroUsuario } from '../../../services/user-feedback.service';
 
 type ContatoAlternativoOpcao = {
   indice: number;
@@ -2008,6 +2009,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     return formaPagamentoPermiteParcelas(this.os.formaPagamento);
   }
 
+  get alertaImei(): string {
+    return mensagemAlertaImei(this.os.imei);
+  }
+
   valorParcelaPagamento(): number | null {
     const total = this.os.formaPagamento === 'parcelado'
       ? (this.os.valorAPrazo ?? this.os.valorTotalAcordado ?? this.totalOsItens)
@@ -2330,6 +2335,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       this.scrollParaPrimeiroErro();
       return;
     }
+
+    if (this.alertaImei) avisarAvisoUsuario(this.alertaImei, 'IMEI');
 
     if (
       osSituacaoConcluida(this.os.situacao)
