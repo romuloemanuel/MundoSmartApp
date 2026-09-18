@@ -70,10 +70,19 @@ public class OrdensServicoController : ControllerBase
             incluirSemTecnico,
             lojaFiltro);
 
-        var previsaoLocais = await _localRepo.ListarPrevisaoComissaoAsync(
-            tecnicos,
-            incluirSemTecnico,
-            lojaFiltro);
+        List<OsLocalData> previsaoLocais;
+        try
+        {
+            previsaoLocais = await _localRepo.ListarPrevisaoComissaoAsync(
+                tecnicos,
+                incluirSemTecnico,
+                lojaFiltro);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MundoSmart API] Comissão: previsão falhou, relatório concluído segue. {ex.Message}");
+            previsaoLocais = [];
+        }
 
         var ordens = locais.Select(MapearComissaoItem).ToList();
         var previsao = previsaoLocais.Select(MapearComissaoItem).ToList();
@@ -128,7 +137,7 @@ public class OrdensServicoController : ControllerBase
 
     private static ComissaoOsItem MapearComissaoItem(OsLocalData local)
     {
-        var valorTotal = local.ValorAVista ?? local.ValorTotalAcordado ?? local.ValorTotal ?? 0m;
+        var valorTotal = PrimeiroValorPositivo(local.ValorTotalAcordado, local.ValorTotal, local.ValorAVista);
         var juros = local.Juros is > 0 ? local.Juros.Value : 0m;
         var valorPecas = CalcularCustoPecas(local.Itens);
         return new ComissaoOsItem
@@ -154,12 +163,17 @@ public class OrdensServicoController : ControllerBase
         List<ComissaoOsItem> andamentoComPreco)
     {
         var nomes = concluidas.Select(o => o.TecnicoNome)
-            .Concat(aguardandoCliente.Select(o => o.TecnicoNome))
-            .Concat(andamentoComPreco.Select(o => o.TecnicoNome))
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        foreach (var nome in aguardandoCliente.Select(o => o.TecnicoNome)
+                     .Concat(andamentoComPreco.Select(o => o.TecnicoNome)))
+        {
+            if (string.IsNullOrWhiteSpace(nome)) continue;
+            if (nomes.Any(n => string.Equals(n, nome, StringComparison.OrdinalIgnoreCase))) continue;
+            nomes.Add(nome);
+        }
 
         ComissaoOsItem[] DoTecnico(IEnumerable<ComissaoOsItem> lista, string nome) =>
             lista.Where(o => string.Equals(o.TecnicoNome, nome, StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -184,6 +198,15 @@ public class OrdensServicoController : ControllerBase
                 TotalLiquidoAndamentoComPreco = andamento.Sum(x => x.ValorLiquido),
             };
         }).ToList();
+    }
+
+    private static decimal PrimeiroValorPositivo(params decimal?[] valores)
+    {
+        foreach (var v in valores)
+        {
+            if (v is > 0) return v.Value;
+        }
+        return 0m;
     }
 
     private static decimal CalcularCustoPecas(List<BlingOrdemServicoItem>? itens)

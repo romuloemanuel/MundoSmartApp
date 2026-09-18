@@ -275,7 +275,7 @@ export class OrdensServicoService {
       if (t) params = params.append('tecnicos', t);
     }
     return this.http.get<ComissaoRelatorio>(`${this.apiUrl}/relatorio-comissao`, { params }).pipe(
-      timeout(this.httpTimeoutMs),
+      timeout(60_000),
     );
   }
 
