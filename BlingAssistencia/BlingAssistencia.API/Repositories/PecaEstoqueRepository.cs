@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using MongoDB.Driver;
 using MundoSmart.BlingAssistencia.API.Infrastructure;
+using MundoSmart.BlingAssistencia.API.Models.Bling;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
 using MundoSmart.BlingAssistencia.API.Services;
 
@@ -219,50 +220,34 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
         var pecas = await _pecas.Find(filtroCompat).Limit(MaxPecasReferencia).ToListAsync();
         if (pecas.Count == 0) return [];
 
-        var todosModeloIds = pecas
-            .SelectMany(p => p.ModelosCompativeis.Select(mc => mc.ModeloId))
-            .Distinct()
-            .ToList();
-
-        var filtroOs = Builders<OsLocalData>.Filter.In(x => x.ModeloId, todosModeloIds)
-            & Builders<OsLocalData>.Filter.Nin(x => x.Situacao, SituacoesFinais)
-            & Builders<OsLocalData>.Filter.Ne(x => x.TipoPecaProblemaId, null);
-
-        var osEmExecucao = (await _osLocal.Find(filtroOs).Limit(MaxOsReferencia).ToListAsync())
-            .Where(os => !OsSituacaoHelper.EhFinalizada(os.Situacao))
-            .ToList();
-
+        var reservas = await ContarReservasEstoqueOsAsync(pecas.Select(p => p.Id!).ToList());
         var resultado = new List<DisponibilidadePecaResponse>();
 
         foreach (var peca in pecas)
         {
-            var modelosIdsDestaPeca = peca.ModelosCompativeis.Select(mc => mc.ModeloId).ToHashSet();
-            var osDestaPeca = osEmExecucao
-                .Where(os => modelosIdsDestaPeca.Contains(os.ModeloId ?? "")
-                          && os.TipoPecaProblemaId == peca.Id)
-                .ToList();
-
-            var emExecucao = osDestaPeca.Count;
+            reservas.TryGetValue(peca.Id!, out var reserva);
+            reserva ??= new ReservaPeca();
             var (troca, minimo) = PecaPrecoResolver.Resolver(peca, modeloId);
+            var disponiveis = Math.Max(0, peca.QuantidadeEstoque - reserva.NaoBaixada);
 
             resultado.Add(new DisponibilidadePecaResponse
             {
                 PecaId = peca.Id!,
                 PecaNome = peca.Nome,
                 Descricao = peca.Descricao,
-                QuantidadeEstoque = peca.QuantidadeEstoque,
-                EmExecucao = emExecucao,
-                Disponiveis = peca.QuantidadeEstoque,
+                QuantidadeEstoque = disponiveis,
+                EmExecucao = reserva.EmOs,
+                Disponiveis = disponiveis,
                 ValorSugeridoTroca = troca,
                 ValorSugeridoMinimo = minimo,
                 Parcelamento = peca.Parcelamento,
-                Alerta = DeveAlertarEstoque(peca, peca.QuantidadeEstoque),
-                NivelEstoque = _estoqueNivel.CalcularNivel(peca.QuantidadeEstoque),
-                NivelDisponivel = _estoqueNivel.CalcularNivel(peca.QuantidadeEstoque),
+                Alerta = DeveAlertarEstoque(peca, disponiveis),
+                NivelEstoque = _estoqueNivel.CalcularNivel(disponiveis),
+                NivelDisponivel = _estoqueNivel.CalcularNivel(disponiveis),
                 ModelosCompativeis = peca.ModelosCompativeis
                     .Select(mc => $"{mc.MarcaNome} {mc.ModeloNome}".Trim())
                     .ToList(),
-                OsEmExecucao = osDestaPeca.Select(os => new OsExecucaoInfo
+                OsEmExecucao = reserva.Os.Select(os => new OsExecucaoInfo
                 {
                     BlingId = os.BlingId,
                     OsNumero = os.OsNumero,
@@ -275,16 +260,13 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
         return resultado;
     }
 
-    public Task<ModeloServicosValoresResponse> ConsultarServicosValoresAsync(string modeloId)
+    public async Task<ModeloServicosValoresResponse> ConsultarServicosValoresAsync(string modeloId)
     {
-        var cacheKey = $"v|{modeloId}";
-        if (_valoresCache.TryGetValue(cacheKey, out var hit)
-            && DateTime.UtcNow - hit.Ts < ReferenciaCacheTtl)
-            return Task.FromResult(hit.Data);
-
-        var response = MontarServicosValores(ObterPecasModelo(modeloId), modeloId);
-        _valoresCache[cacheKey] = (DateTime.UtcNow, response);
-        return Task.FromResult(response);
+        var pecas = ObterPecasModelo(modeloId);
+        var reservas = await ContarReservasEstoqueOsAsync(pecas.Select(p => p.Id!).ToList());
+        var response = MontarServicosValores(pecas, modeloId, reservas);
+        _valoresCache[$"v|{modeloId}"] = (DateTime.UtcNow, response);
+        return response;
     }
 
     private static readonly string[] OrdemCategoriasPeca =
@@ -307,11 +289,17 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
     ];
 
     private ModeloServicosValoresResponse MontarServicosValores(
-        IReadOnlyList<PecaEstoque> pecas, string modeloId) =>
+        IReadOnlyList<PecaEstoque> pecas,
+        string modeloId,
+        IReadOnlyDictionary<string, ReservaPeca> reservas) =>
         new()
         {
             Pecas = pecas
-                .Select(p => MapearPecaValor(p, modeloId))
+                .Select(p =>
+                {
+                    reservas.TryGetValue(p.Id!, out var reserva);
+                    return MapearPecaValor(p, modeloId, reserva);
+                })
                 .OrderBy(p => IndiceCategoriaPeca(p.Categoria))
                 .ThenBy(p => p.Nome, StringComparer.OrdinalIgnoreCase)
                 .ToList()
@@ -380,7 +368,7 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
                 != System.Globalization.UnicodeCategory.NonSpacingMark)
             .Aggregate("", (a, c) => a + c);
 
-    private PecaValorInfo MapearPecaValor(PecaEstoque p, string? modeloId = null)
+    private PecaValorInfo MapearPecaValor(PecaEstoque p, string? modeloId = null, ReservaPeca? reserva = null)
     {
         var (troca, minimo) = PecaPrecoResolver.Resolver(p, modeloId);
         var variacoes = p.Variacoes
@@ -400,7 +388,7 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
         var cores = string.IsNullOrWhiteSpace(modeloId)
             ? []
             : p.ModelosCompativeis
-                .Where(mc => mc.ModeloId == modeloId)
+                .Where(mc => string.Equals(mc.ModeloId, modeloId, StringComparison.OrdinalIgnoreCase))
                 .SelectMany(mc => mc.Cores ?? [])
                 .Where(c => !string.IsNullOrWhiteSpace(c.Cor))
                 .Select(c => new CorEstoqueModelo
@@ -410,9 +398,34 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
                 })
                 .ToList();
 
+        if (reserva is not null && cores.Count > 0)
+        {
+            var atribuida = 0;
+            foreach (var cor in cores)
+            {
+                if (!reserva.NaoBaixadaPorCor.TryGetValue(cor.Cor, out var reservada) || reservada <= 0)
+                    continue;
+                var descontar = Math.Min(cor.Quantidade, reservada);
+                cor.Quantidade -= descontar;
+                atribuida += descontar;
+            }
+
+            var semCor = reserva.NaoBaixada - atribuida;
+            if (semCor > 0)
+            {
+                foreach (var cor in cores)
+                {
+                    if (semCor <= 0) break;
+                    var descontar = Math.Min(cor.Quantidade, semCor);
+                    cor.Quantidade -= descontar;
+                    semCor -= descontar;
+                }
+            }
+        }
+
         var qtdExibir = cores.Count > 0
             ? cores.Sum(c => c.Quantidade)
-            : p.QuantidadeEstoque;
+            : Math.Max(0, p.QuantidadeEstoque - (reserva?.NaoBaixada ?? 0));
 
         return new PecaValorInfo
         {
@@ -429,6 +442,89 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
             Variacoes = variacoes,
             Cores = cores
         };
+    }
+
+    private sealed class ReservaPeca
+    {
+        public int EmOs { get; set; }
+        public int NaoBaixada { get; set; }
+        public Dictionary<string, int> NaoBaixadaPorCor { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<(long BlingId, string? OsNumero, string? ModeloNome, string? MarcaNome)> Os { get; } = [];
+    }
+
+    private static bool ItemReservaEstoque(BlingOrdemServicoItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.PecaId)) return false;
+        if (string.Equals(item.OrigemPeca, "externo", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (string.Equals(item.TipoItem, "servico", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Peças em OS abertas: desconta do disponível o que ainda não foi baixado do lote.
+    /// </summary>
+    private async Task<Dictionary<string, ReservaPeca>> ContarReservasEstoqueOsAsync(
+        IReadOnlyCollection<string> pecaIds,
+        long? excluirBlingId = null)
+    {
+        var mapa = pecaIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(id => id, _ => new ReservaPeca(), StringComparer.OrdinalIgnoreCase);
+        if (mapa.Count == 0) return mapa;
+
+        var pecaIdsFiltro = mapa.Keys.ToList();
+        var filtro = Builders<OsLocalData>.Filter.Nin(x => x.Situacao, SituacoesFinais)
+            & Builders<OsLocalData>.Filter.Or(
+                Builders<OsLocalData>.Filter.ElemMatch(
+                    x => x.Itens,
+                    Builders<BlingOrdemServicoItem>.Filter.In(i => i.PecaId, pecaIdsFiltro)),
+                Builders<OsLocalData>.Filter.In(x => x.TipoPecaProblemaId, pecaIdsFiltro));
+
+        if (excluirBlingId is > 0)
+            filtro &= Builders<OsLocalData>.Filter.Ne(x => x.BlingId, excluirBlingId.Value);
+
+        var lista = await _osLocal.Find(filtro).Limit(500).ToListAsync();
+        foreach (var os in lista)
+        {
+            if (OsSituacaoHelper.EhFinalizada(os.Situacao)) continue;
+
+            var pecasNestaOs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in os.Itens ?? [])
+            {
+                if (!ItemReservaEstoque(item)) continue;
+                var pecaId = item.PecaId!.Trim();
+                if (!mapa.TryGetValue(pecaId, out var reserva)) continue;
+
+                var qtd = item.Quantidade > 0 ? (int)Math.Floor(item.Quantidade) : 1;
+                reserva.EmOs += qtd;
+                var baixada = (int)Math.Floor(item.QuantidadeEstoqueBaixada);
+                var naoBaixada = Math.Max(0, qtd - baixada);
+                reserva.NaoBaixada += naoBaixada;
+                if (naoBaixada > 0 && !string.IsNullOrWhiteSpace(item.Cor))
+                {
+                    var cor = item.Cor.Trim();
+                    reserva.NaoBaixadaPorCor[cor] = reserva.NaoBaixadaPorCor.GetValueOrDefault(cor) + naoBaixada;
+                }
+
+                if (pecasNestaOs.Add(pecaId))
+                    reserva.Os.Add((os.BlingId, os.OsNumero, os.ModeloNome, os.MarcaNome));
+            }
+
+            var tipoId = os.TipoPecaProblemaId?.Trim();
+            if (!string.IsNullOrWhiteSpace(tipoId)
+                && mapa.TryGetValue(tipoId, out var reservaTipo)
+                && pecasNestaOs.Add(tipoId))
+            {
+                reservaTipo.EmOs += 1;
+                reservaTipo.NaoBaixada += 1;
+                reservaTipo.Os.Add((os.BlingId, os.OsNumero, os.ModeloNome, os.MarcaNome));
+            }
+        }
+
+        return mapa;
     }
 
     private List<PecaEstoque> ObterPecasModelo(string modeloId)
@@ -455,28 +551,32 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
             .Limit(MaxOsReferencia)
             .ToListAsync();
         var osHojeTask = ContarOsAbertasHojeAsync();
+        var reservasTask = ContarReservasEstoqueOsAsync(pecas.Select(p => p.Id!).ToList(), excluirBlingId);
 
-        await Task.WhenAll(modeloTask, osTask, osHojeTask);
+        await Task.WhenAll(modeloTask, osTask, osHojeTask, reservasTask);
 
         var modelo = modeloTask.Result;
         var osEmAndamento = osTask.Result
             .Where(os => !OsSituacaoHelper.EhFinalizada(os.Situacao))
             .ToList();
         var osAbertasHoje = osHojeTask.Result;
+        var reservas = reservasTask.Result;
 
         var pecasResumo = pecas.Select(p =>
         {
-            var emExecucao = osEmAndamento.Count(os => os.TipoPecaProblemaId == p.Id);
+            reservas.TryGetValue(p.Id!, out var reserva);
+            reserva ??= new ReservaPeca();
+            var disponiveis = Math.Max(0, p.QuantidadeEstoque - reserva.NaoBaixada);
             return new PecaEstoqueOperacaoInfo
             {
                 PecaId = p.Id!,
                 Nome = p.Nome,
-                QuantidadeEstoque = p.QuantidadeEstoque,
-                EmExecucao = emExecucao,
-                Disponiveis = p.QuantidadeEstoque,
-                Alerta = DeveAlertarEstoque(p, p.QuantidadeEstoque),
+                QuantidadeEstoque = disponiveis,
+                EmExecucao = reserva.EmOs,
+                Disponiveis = disponiveis,
+                Alerta = DeveAlertarEstoque(p, disponiveis),
                 IgnorarAlertaEstoque = p.IgnorarAlertaEstoque,
-                NivelDisponivel = _estoqueNivel.CalcularNivel(p.QuantidadeEstoque)
+                NivelDisponivel = _estoqueNivel.CalcularNivel(disponiveis)
             };
         }).ToList();
 
@@ -533,13 +633,13 @@ public class PecaEstoqueRepository : IPecaEstoqueRepository
                     ValorSugeridoMinimo = p.ValorSugeridoMinimo,
                     Parcelamento = p.Parcelamento,
                     Garantia = p.Garantia,
-                    QuantidadeEstoque = p.QuantidadeEstoque,
+                    QuantidadeEstoque = resumo?.Disponiveis ?? p.QuantidadeEstoque,
                     EmExecucao = resumo?.EmExecucao ?? 0,
-                    Disponiveis = p.QuantidadeEstoque,
-                    TemEstoque = p.QuantidadeEstoque > 0,
+                    Disponiveis = resumo?.Disponiveis ?? p.QuantidadeEstoque,
+                    TemEstoque = (resumo?.Disponiveis ?? p.QuantidadeEstoque) > 0,
                     Alerta = resumo?.Alerta ?? false,
                     NivelEstoque = p.NivelEstoque,
-                    NivelDisponivel = p.NivelEstoque
+                    NivelDisponivel = resumo?.NivelDisponivel ?? p.NivelEstoque
                 };
             }).ToList()
         };

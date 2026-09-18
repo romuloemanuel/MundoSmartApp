@@ -171,7 +171,7 @@ export function labelPecaCatalogo(
   if (marcaPeca?.trim()) partes.push(marcaPeca.trim());
   if (extras?.estoque != null) {
     const vars = extras.variacoes ? ` · ${extras.variacoes} var.` : '';
-    partes.push(`(${extras.estoque} est.${vars})`);
+    partes.push(`(${extras.estoque} disp.${vars})`);
   }
   return partes.join(' · ');
 }

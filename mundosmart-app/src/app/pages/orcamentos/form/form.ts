@@ -607,7 +607,7 @@ export class OrcamentosForm implements OnInit {
     const partes = [
       min != null ? `mín ${this.formatarMoeda(min)}` : null,
       sug != null ? `sug ${this.formatarMoeda(sug)}` : null,
-      `${qtd} em estoque`,
+      `${qtd} disponível${qtd === 1 ? '' : 'is'}`,
       peca.garantia ? peca.garantia : null,
     ].filter(Boolean);
     return partes.join(' · ');
@@ -620,7 +620,7 @@ export class OrcamentosForm implements OnInit {
 
   rotuloEstoque(peca: PecaValorInfo): string {
     const qtd = peca.quantidadeEstoque ?? 0;
-    return qtd > 0 ? `${qtd} em estoque` : 'Sem estoque';
+    return qtd > 0 ? `${qtd} disponível${qtd === 1 ? '' : 'is'}` : 'Sem estoque';
   }
 
   estoqueDoItem(item: BlingOrcamentoItem): PecaValorInfo | undefined {

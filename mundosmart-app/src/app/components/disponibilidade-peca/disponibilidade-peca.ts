@@ -35,11 +35,11 @@ import {
               <span class="disp-metrica-valor disp-metrica-destaque" [ngClass]="classeNivelEstoque()">
                 {{ dados.quantidadeEstoque }}
               </span>
-              <span class="disp-metrica-label">Em estoque</span>
+              <span class="disp-metrica-label">Disponível</span>
             </div>
             <div class="disp-metrica disp-metrica-execucao" *ngIf="dados.emExecucao > 0">
               <span class="disp-metrica-valor">{{ dados.emExecucao }}</span>
-              <span class="disp-metrica-label">OS em andamento</span>
+              <span class="disp-metrica-label">Em serviço</span>
             </div>
           </div>
 
@@ -66,7 +66,7 @@ import {
           <div class="disp-aviso-critico" *ngIf="dados.alerta" [ngClass]="classeCardEstoque()">
             <strong>{{ labelNivelEstoque() }}:</strong>
             Restam <strong>{{ dados.quantidadeEstoque }}</strong>
-            {{ dados.quantidadeEstoque === 1 ? 'unidade em estoque' : 'unidades em estoque' }}
+            {{ dados.quantidadeEstoque === 1 ? 'unidade disponível' : 'unidades disponíveis' }}
             (limites: sem estoque · abaixo do mínimo · estoque mínimo · estoque normal).
             A baixa é feita ao salvar a OS.
           </div>

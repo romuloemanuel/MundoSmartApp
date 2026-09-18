@@ -65,10 +65,10 @@ import { osSituacaoFinalizada } from '../../pages/ordens-servico/os-situacao.uti
                     <span class="ref-servico-grupo-nome">{{ peca.nome }}</span>
                     <span class="ref-servico-grupo-estoque">
                       <span [ngClass]="classeNivel(peca.nivelEstoque, peca.quantidadeEstoque)">
-                        {{ peca.quantidadeEstoque }} est.
+                        {{ peca.quantidadeEstoque }} disp.
                       </span>
                       <ng-container *ngIf="resumoPeca(peca.pecaId) as resumo">
-                        <span *ngIf="resumo.emExecucao > 0" class="ref-servico-grupo-exec">· {{ resumo.emExecucao }} srv</span>
+                        <span *ngIf="resumo.emExecucao > 0" class="ref-servico-grupo-exec">· {{ resumo.emExecucao }} em serviço</span>
                       </ng-container>
                     </span>
                   </div>
