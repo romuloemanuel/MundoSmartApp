@@ -2,14 +2,13 @@ import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleCha
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ClientesService } from '../../services/clientes';
-import { CepService } from '../../services/cep';
 import { BlingContato } from '../../models/bling.models';
 import { ParentescoChips } from '../parentesco-chips/parentesco-chips';
+import { EnderecoCampo } from '../endereco-campo/endereco-campo';
 import {
   ErrosContatoForm,
   aplicarMascarasContato,
   apenasDigitos,
-  formatarCep,
   formatarCpfCnpj,
   formatarTelefone,
   formularioClienteValido,
@@ -29,11 +28,16 @@ import {
 import { of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { avisarErroUsuario } from '../../services/user-feedback.service';
+import {
+  podeEnviarWhatsapp,
+  tentarWhatsappConfirmarNumero,
+  tentarWhatsappContatoAlternativo,
+} from '../../utils/whatsapp.util';
 
 @Component({
   selector: 'app-novo-cliente-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, ParentescoChips],
+  imports: [CommonModule, FormsModule, ParentescoChips, EnderecoCampo],
   template: `
     <div class="modal-backdrop" (click)="fechar()">
       <div class="modal-box" (click)="$event.stopPropagation()">
@@ -73,25 +77,41 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
           <div class="form-row">
             <div class="form-group">
               <label>Celular <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
-              <input
-                [ngModel]="contato.celular"
-                (ngModelChange)="onCelularChange($event)"
-                name="celular"
-                placeholder="(00) 90000-0000"
-                inputmode="tel"
-              />
+              <div class="tel-whatsapp-row">
+                <input
+                  [ngModel]="contato.celular"
+                  (ngModelChange)="onCelularChange($event)"
+                  name="celular"
+                  placeholder="(00) 90000-0000"
+                  inputmode="tel"
+                />
+                <button
+                  type="button"
+                  class="btn-whatsapp"
+                  [disabled]="!podeWhatsapp(contato.celular)"
+                  (click)="confirmarWhatsapp(contato.celular)"
+                >Confirmar no WhatsApp</button>
+              </div>
               <span class="campo-erro" *ngIf="msgDupCelular">{{ msgDupCelular }}</span>
               <span class="campo-verificando" *ngIf="verificandoCelular">Verificando celular...</span>
             </div>
             <div class="form-group">
               <label>Telefone <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
-              <input
-                [ngModel]="contato.telefone"
-                (ngModelChange)="onTelefoneChange($event)"
-                name="telefone"
-                placeholder="(00) 0000-0000"
-                inputmode="tel"
-              />
+              <div class="tel-whatsapp-row">
+                <input
+                  [ngModel]="contato.telefone"
+                  (ngModelChange)="onTelefoneChange($event)"
+                  name="telefone"
+                  placeholder="(00) 0000-0000"
+                  inputmode="tel"
+                />
+                <button
+                  type="button"
+                  class="btn-whatsapp"
+                  [disabled]="!podeWhatsapp(contato.telefone)"
+                  (click)="confirmarWhatsapp(contato.telefone)"
+                >Confirmar no WhatsApp</button>
+              </div>
               <span class="campo-erro" *ngIf="msgDupTelefone">{{ msgDupTelefone }}</span>
               <span class="campo-verificando" *ngIf="verificandoTelefone">Verificando telefone...</span>
             </div>
@@ -101,13 +121,21 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
 
           <div class="form-group">
             <label>Telefone 2</label>
-            <input
-              [ngModel]="contato.telefone2"
-              (ngModelChange)="onTelefone2Change($event)"
-              name="telefone2"
-              placeholder="Segundo número (opcional)"
-              inputmode="tel"
-            />
+            <div class="tel-whatsapp-row">
+              <input
+                [ngModel]="contato.telefone2"
+                (ngModelChange)="onTelefone2Change($event)"
+                name="telefone2"
+                placeholder="Segundo número (opcional)"
+                inputmode="tel"
+              />
+              <button
+                type="button"
+                class="btn-whatsapp"
+                [disabled]="!podeWhatsapp(contato.telefone2)"
+                (click)="confirmarWhatsapp(contato.telefone2)"
+              >Confirmar no WhatsApp</button>
+            </div>
             <span class="campo-erro" *ngIf="erros.telefone2">{{ erros.telefone2 }}</span>
             <span class="campo-erro" *ngIf="msgDupTelefone2">{{ msgDupTelefone2 }}</span>
           </div>
@@ -172,54 +200,21 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
                 <span class="campo-erro" *ngIf="erros.contatosAlt?.[i]?.parentesco">{{ erros.contatosAlt![i].parentesco }}</span>
               </div>
               <span class="campo-erro" *ngIf="erros.contatosAlt?.[i]?.contato">{{ erros.contatosAlt![i].contato }}</span>
+              <button
+                type="button"
+                class="btn-whatsapp btn-whatsapp-alt"
+                [disabled]="!podeWhatsapp(c.celular) && !podeWhatsapp(c.telefone)"
+                (click)="avisarWhatsappAlt(i)"
+              >Avisar no WhatsApp</button>
             </div>
           </div>
 
           <div class="secao-contatos secao-endereco">
             <span class="secao-titulo">Endereço</span>
-            <div class="form-row end-cep-row">
-              <div class="form-group end-cep">
-                <label>CEP</label>
-                <input
-                  [ngModel]="contato.endereco!.cep"
-                  (ngModelChange)="onCepChange($event)"
-                  name="cep"
-                  placeholder="00000-000"
-                  inputmode="numeric"
-                  maxlength="9"
-                />
-                <span class="campo-verificando" *ngIf="buscandoCep">Consultando CEP...</span>
-                <span class="campo-erro" *ngIf="erroCep">{{ erroCep }}</span>
-              </div>
-              <div class="form-group end-logradouro">
-                <label>Logradouro</label>
-                <input [(ngModel)]="contato.endereco!.logradouro" name="logradouro" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Número</label>
-                <input [(ngModel)]="contato.endereco!.numero" name="numero" />
-              </div>
-              <div class="form-group">
-                <label>Complemento</label>
-                <input [(ngModel)]="contato.endereco!.complemento" name="complemento" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Bairro</label>
-                <input [(ngModel)]="contato.endereco!.bairro" name="bairro" />
-              </div>
-              <div class="form-group">
-                <label>Município</label>
-                <input [(ngModel)]="contato.endereco!.municipio" name="municipio" />
-              </div>
-              <div class="form-group" style="max-width:72px">
-                <label>UF</label>
-                <input [(ngModel)]="contato.endereco!.uf" name="uf" maxlength="2" />
-              </div>
-            </div>
+            <app-endereco-campo
+              [(endereco)]="contato.endereco!"
+              namePrefix="modal_cliente"
+            />
           </div>
         </div>
 
@@ -336,6 +331,15 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
       font-size: 12px; padding: 4px 12px;
       background: #2563EB; color: #fff; border-radius: 5px;
     }
+    .btn-whatsapp {
+      background: #16a34a; color: #fff; border: 0; border-radius: 6px;
+      font-size: 11px; font-weight: 700; padding: 8px 10px; cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-whatsapp:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-whatsapp-alt { margin-top: 8px; }
+    .tel-whatsapp-row { display: flex; gap: 8px; align-items: stretch; }
+    .tel-whatsapp-row input { flex: 1; min-width: 0; }
     .contato-card {
       background: #f8fafc; border: 1px solid #e2e8f0;
       border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
@@ -377,15 +381,12 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
   verificandoTelefone = false;
   hintAlt: (string | null)[] = [];
   buscandoAlt: boolean[] = [];
-  buscandoCep = false;
-  erroCep = '';
 
   private readonly debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private nomeAltAutofill: (string | null)[] = [];
 
   constructor(
     private service: ClientesService,
-    private cepService: CepService,
   ) {}
 
   get msgDupCpf(): string { return mensagemDuplicata('CPF/CNPJ', this.dupCpf); }
@@ -394,6 +395,26 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
   get msgDupTelefone2(): string { return mensagemDuplicata('Telefone', this.dupTelefone2); }
   get temDuplicidade(): boolean {
     return temDuplicata(this.dupCpf, this.dupCelular, this.dupTelefone, this.dupTelefone2);
+  }
+
+  podeWhatsapp(telefone?: string): boolean {
+    return podeEnviarWhatsapp(telefone);
+  }
+
+  confirmarWhatsapp(telefone?: string): void {
+    const erro = tentarWhatsappConfirmarNumero(this.contato.nome ?? '', telefone);
+    if (erro) avisarErroUsuario(erro);
+  }
+
+  avisarWhatsappAlt(i: number): void {
+    const alt = this.contato.contatos?.[i];
+    const numero = this.podeWhatsapp(alt?.celular) ? alt?.celular : alt?.telefone;
+    const erro = tentarWhatsappContatoAlternativo(
+      alt?.nome ?? '',
+      this.contato.nome ?? '',
+      numero,
+    );
+    if (erro) avisarErroUsuario(erro);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -421,8 +442,6 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
     this.hintAlt = Array(n).fill(null);
     this.buscandoAlt = Array(n).fill(false);
     this.nomeAltAutofill = Array(n).fill(null);
-    this.buscandoCep = false;
-    this.erroCep = '';
     this.erro = '';
     this.erros = {};
     this.limparDuplicatas();
@@ -492,19 +511,6 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
     }
   }
 
-  onCepChange(valor: string): void {
-    this.contato.endereco = this.contato.endereco ?? {};
-    this.contato.endereco.cep = formatarCep(valor);
-    this.erroCep = '';
-    const d = apenasDigitos(valor);
-    if (d.length < 8) {
-      cancelarVerificacao(this.debounceTimers, 'cep');
-      this.buscandoCep = false;
-      return;
-    }
-    agendarVerificacao(this.debounceTimers, 'cep', () => this.buscarCep(d), 350);
-  }
-
   private limparErroAlt(i: number): void {
     if (this.erros.contatosAlt?.[i]) delete this.erros.contatosAlt[i].contato;
   }
@@ -558,24 +564,6 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
         this.nomeAltAutofill[i] = alt.nome;
       }
       this.hintAlt[i] = `Nome da base: ${s.nome}`;
-    });
-  }
-
-  private buscarCep(cep: string): void {
-    this.buscandoCep = true;
-    this.erroCep = '';
-    this.cepService.consultar(cep).subscribe(end => {
-      this.buscandoCep = false;
-      if (!end) {
-        this.erroCep = 'CEP não encontrado.';
-        return;
-      }
-      this.contato.endereco = this.contato.endereco ?? {};
-      this.contato.endereco.cep = end.cep;
-      this.contato.endereco.logradouro = end.logradouro || this.contato.endereco.logradouro;
-      this.contato.endereco.bairro = end.bairro || this.contato.endereco.bairro;
-      this.contato.endereco.municipio = end.municipio || this.contato.endereco.municipio;
-      this.contato.endereco.uf = end.uf || this.contato.endereco.uf;
     });
   }
 

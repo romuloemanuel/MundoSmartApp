@@ -44,41 +44,65 @@
     <div class="form-row">
       <div class="form-group">
         <label>Celular <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
-        <input
-          [ngModel]="contato.celular"
-          (ngModelChange)="onCelularChange($event)"
-          name="celular"
-          placeholder="(00) 90000-0000"
-          inputmode="tel"
-        />
+        <div class="tel-whatsapp-row">
+          <input
+            [ngModel]="contato.celular"
+            (ngModelChange)="onCelularChange($event)"
+            name="celular"
+            placeholder="(00) 90000-0000"
+            inputmode="tel"
+          />
+          <button
+            type="button"
+            class="btn-whatsapp"
+            [disabled]="!podeWhatsapp(contato.celular)"
+            (click)="confirmarWhatsapp(contato.celular)"
+          >Confirmar no WhatsApp</button>
+        </div>
         <span class="campo-erro" *ngIf="msgDupCelular">{{ msgDupCelular }}</span>
         <span class="campo-verificando" *ngIf="verificandoCelular">Verificando celular...</span>
       </div>
       <div class="form-group">
         <label>Telefone <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
-        <input
-          [ngModel]="contato.telefone"
-          (ngModelChange)="onTelefoneChange($event)"
-          name="telefone"
-          placeholder="(00) 0000-0000"
-          inputmode="tel"
-        />
+        <div class="tel-whatsapp-row">
+          <input
+            [ngModel]="contato.telefone"
+            (ngModelChange)="onTelefoneChange($event)"
+            name="telefone"
+            placeholder="(00) 0000-0000"
+            inputmode="tel"
+          />
+          <button
+            type="button"
+            class="btn-whatsapp"
+            [disabled]="!podeWhatsapp(contato.telefone)"
+            (click)="confirmarWhatsapp(contato.telefone)"
+          >Confirmar no WhatsApp</button>
+        </div>
         <span class="campo-erro" *ngIf="msgDupTelefone">{{ msgDupTelefone }}</span>
         <span class="campo-verificando" *ngIf="verificandoTelefone">Verificando telefone...</span>
       </div>
     </div>
     <span class="campo-erro" *ngIf="erros.contato">{{ erros.contato }}</span>
-    <p class="secao-hint">Informe ao menos um: celular (9 ap&oacute;s o DDD) ou telefone fixo.</p>
+    <p class="secao-hint">Informe ao menos um: celular (9 ap&oacute;s o DDD) ou telefone fixo. Use Confirmar no WhatsApp no celular para validar o n&uacute;mero.</p>
 
     <div class="form-group">
       <label>Telefone 2 <span class="label-hint">(segundo n&uacute;mero opcional)</span></label>
-      <input
-        [ngModel]="contato.telefone2"
-        (ngModelChange)="onTelefone2Change($event)"
-        name="telefone2"
-        placeholder="(00) 00000-0000"
-        inputmode="tel"
-      />
+      <div class="tel-whatsapp-row">
+        <input
+          [ngModel]="contato.telefone2"
+          (ngModelChange)="onTelefone2Change($event)"
+          name="telefone2"
+          placeholder="(00) 00000-0000"
+          inputmode="tel"
+        />
+        <button
+          type="button"
+          class="btn-whatsapp"
+          [disabled]="!podeWhatsapp(contato.telefone2)"
+          (click)="confirmarWhatsapp(contato.telefone2)"
+        >Confirmar no WhatsApp</button>
+      </div>
       <span class="campo-erro" *ngIf="erros.telefone2">{{ erros.telefone2 }}</span>
       <span class="campo-erro" *ngIf="msgDupTelefone2">{{ msgDupTelefone2 }}</span>
     </div>
@@ -145,52 +169,19 @@
         <span class="campo-erro" *ngIf="erros.contatosAlt?.[i]?.parentesco">{{ erros.contatosAlt![i].parentesco }}</span>
       </div>
       <span class="campo-erro" *ngIf="erros.contatosAlt?.[i]?.contato">{{ erros.contatosAlt![i].contato }}</span>
+      <button
+        type="button"
+        class="btn-whatsapp btn-whatsapp-alt"
+        [disabled]="!podeWhatsapp(c.celular) && !podeWhatsapp(c.telefone)"
+        (click)="avisarWhatsappAlt(i)"
+      >Avisar no WhatsApp</button>
     </div>
 
     <h3 class="cliente-end-titulo">Endere&ccedil;o</h3>
-    <div class="form-row cliente-end-cep-row">
-      <div class="form-group cliente-end-cep">
-        <label>CEP</label>
-        <input
-          [ngModel]="contato.endereco!.cep"
-          (ngModelChange)="onCepChange($event)"
-          name="cep"
-          placeholder="00000-000"
-          inputmode="numeric"
-          maxlength="9"
-        />
-        <span class="campo-verificando" *ngIf="buscandoCep">Consultando CEP...</span>
-        <span class="campo-erro" *ngIf="erroCep">{{ erroCep }}</span>
-      </div>
-      <div class="form-group cliente-end-logradouro">
-        <label>Logradouro</label>
-        <input [(ngModel)]="contato.endereco!.logradouro" name="logradouro" />
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>N&uacute;mero</label>
-        <input [(ngModel)]="contato.endereco!.numero" name="numero" />
-      </div>
-      <div class="form-group">
-        <label>Complemento</label>
-        <input [(ngModel)]="contato.endereco!.complemento" name="complemento" />
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Bairro</label>
-        <input [(ngModel)]="contato.endereco!.bairro" name="bairro" />
-      </div>
-      <div class="form-group">
-        <label>Munic&iacute;pio</label>
-        <input [(ngModel)]="contato.endereco!.municipio" name="municipio" />
-      </div>
-      <div class="form-group" style="max-width:80px;flex:0 0 80px">
-        <label>UF</label>
-        <input [(ngModel)]="contato.endereco!.uf" name="uf" maxlength="2" />
-      </div>
-    </div>
+    <app-endereco-campo
+      [(endereco)]="contato.endereco!"
+      namePrefix="cliente"
+    />
 
     <div class="form-actions">
       <button type="submit" [disabled]="salvando || temDuplicidade">

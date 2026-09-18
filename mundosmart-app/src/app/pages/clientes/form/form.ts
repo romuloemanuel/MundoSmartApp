@@ -3,14 +3,13 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ClientesService } from '../../../services/clientes';
-import { CepService } from '../../../services/cep';
 import { BlingContato } from '../../../models/bling.models';
 import { ParentescoChips } from '../../../components/parentesco-chips/parentesco-chips';
+import { EnderecoCampo } from '../../../components/endereco-campo/endereco-campo';
 import {
   ErrosContatoForm,
   aplicarMascarasContato,
   apenasDigitos,
-  formatarCep,
   formatarCpfCnpj,
   formatarTelefone,
   formularioClienteValido,
@@ -29,35 +28,20 @@ import {
 } from '../../../utils/cliente-duplicata';
 import { of } from 'rxjs';
 import { avisarErroUsuario } from '../../../services/user-feedback.service';
+import {
+  podeEnviarWhatsapp,
+  tentarWhatsappConfirmarNumero,
+  tentarWhatsappContatoAlternativo,
+} from '../../../utils/whatsapp.util';
 import { catchError, map, switchMap } from 'rxjs/operators';
 
 @Component({
   selector: 'app-clientes-form',
-  imports: [CommonModule, FormsModule, ParentescoChips],
+  imports: [CommonModule, FormsModule, ParentescoChips, EnderecoCampo],
   templateUrl: './form.html',
   styles: [`
     .cliente-end-titulo {
       margin-top: 28px;
-    }
-    .cliente-end-cep-row {
-      align-items: flex-start;
-      gap: 20px;
-      margin-bottom: 4px;
-    }
-    .cliente-end-cep {
-      flex: 0 0 160px;
-      max-width: 160px;
-      min-width: 140px;
-    }
-    .cliente-end-logradouro {
-      flex: 1 1 auto;
-      min-width: 0;
-    }
-    .cliente-end-cep .campo-verificando,
-    .cliente-end-cep .campo-erro {
-      display: block;
-      margin-top: 6px;
-      line-height: 1.3;
     }
   `],
 })
@@ -79,8 +63,6 @@ export class ClientesForm implements OnInit, OnDestroy {
   /** Hint por índice do contato alternativo (nome sugerido da base). */
   hintAlt: (string | null)[] = [];
   buscandoAlt: boolean[] = [];
-  buscandoCep = false;
-  erroCep = '';
 
   private readonly debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Nome autofilled por índice — só sobrescreve se o usuário não editou. */
@@ -90,7 +72,6 @@ export class ClientesForm implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private service: ClientesService,
-    private cepService: CepService,
   ) {}
 
   get msgDupCpf(): string { return mensagemDuplicata('CPF/CNPJ', this.dupCpf); }
@@ -99,6 +80,26 @@ export class ClientesForm implements OnInit, OnDestroy {
   get msgDupTelefone2(): string { return mensagemDuplicata('Telefone', this.dupTelefone2); }
   get temDuplicidade(): boolean {
     return temDuplicata(this.dupCpf, this.dupCelular, this.dupTelefone, this.dupTelefone2);
+  }
+
+  podeWhatsapp(telefone?: string): boolean {
+    return podeEnviarWhatsapp(telefone);
+  }
+
+  confirmarWhatsapp(telefone?: string): void {
+    const erro = tentarWhatsappConfirmarNumero(this.contato.nome ?? '', telefone);
+    if (erro) avisarErroUsuario(erro);
+  }
+
+  avisarWhatsappAlt(i: number): void {
+    const alt = this.contato.contatos?.[i];
+    const numero = this.podeWhatsapp(alt?.celular) ? alt?.celular : alt?.telefone;
+    const erro = tentarWhatsappContatoAlternativo(
+      alt?.nome ?? '',
+      this.contato.nome ?? '',
+      numero,
+    );
+    if (erro) avisarErroUsuario(erro);
   }
 
   ngOnInit(): void {
@@ -235,37 +236,6 @@ export class ClientesForm implements OnInit, OnDestroy {
       this.hintAlt[i] = s.eClientePrincipal
         ? `Nome da base: ${s.nome} (já é cliente). Cadastro não é bloqueado.`
         : `Nome da base: ${s.nome}. Pode repetir em outros clientes.`;
-    });
-  }
-
-  onCepChange(valor: string): void {
-    this.contato.endereco = this.contato.endereco ?? {};
-    this.contato.endereco.cep = formatarCep(valor);
-    this.erroCep = '';
-    const d = apenasDigitos(valor);
-    if (d.length < 8) {
-      cancelarVerificacao(this.debounceTimers, 'cep');
-      this.buscandoCep = false;
-      return;
-    }
-    agendarVerificacao(this.debounceTimers, 'cep', () => this.buscarCep(d), 350);
-  }
-
-  private buscarCep(cep: string): void {
-    this.buscandoCep = true;
-    this.erroCep = '';
-    this.cepService.consultar(cep).subscribe(end => {
-      this.buscandoCep = false;
-      if (!end) {
-        this.erroCep = 'CEP não encontrado.';
-        return;
-      }
-      this.contato.endereco = this.contato.endereco ?? {};
-      this.contato.endereco.cep = end.cep;
-      this.contato.endereco.logradouro = end.logradouro || this.contato.endereco.logradouro;
-      this.contato.endereco.bairro = end.bairro || this.contato.endereco.bairro;
-      this.contato.endereco.municipio = end.municipio || this.contato.endereco.municipio;
-      this.contato.endereco.uf = end.uf || this.contato.endereco.uf;
     });
   }
 
