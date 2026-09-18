@@ -37,6 +37,10 @@ public interface IEstoqueLoteService
     Task<RelatorioFinanceiroEstoqueResponse> RelatorioFinanceiroAsync(int meses = 12);
     /// <summary>Cria lote a partir do estoque informado no cadastro da peça, se ainda não houver saldo em lotes.</summary>
     Task GarantirLoteCatalogoAsync(string pecaId);
+    /// <summary>
+    /// Recalcula quantidade total e por cor (tampa/vidro) a partir do saldo real dos lotes.
+    /// </summary>
+    Task RecalcularSaldosPorCorAsync();
 
     Task<RelatorioReposicaoHistorico> SalvarRelatorioReposicaoAsync(SalvarRelatorioReposicaoRequest request);
     Task<List<RelatorioReposicaoHistorico>> ListarRelatoriosReposicaoAsync(int limite = 10, string? statusConclusao = null);
@@ -799,23 +803,12 @@ public class EstoqueLoteService : IEstoqueLoteService
 
         await GarantirLoteCatalogoAsync(request.PecaId);
 
-        var filtroLote = Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, request.PecaId)
-            & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
-
-        if (!string.IsNullOrWhiteSpace(request.MarcaPeca))
-        {
-            var marca = request.MarcaPeca.Trim();
-            filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.MarcaPeca, marca);
-        }
-
         var cor = string.IsNullOrWhiteSpace(request.Cor) ? null : request.Cor.Trim();
-        if (!string.IsNullOrWhiteSpace(cor))
-            filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.Cor, cor);
-
-        var lotes = await _lotes.Find(filtroLote)
-            .SortBy(x => x.DataEntrada)
-            .ThenBy(x => x.CriadoEm)
-            .ToListAsync();
+        var lotes = await SelecionarLotesSaidaAsync(
+            request.PecaId,
+            request.MarcaPeca,
+            cor,
+            request.ModeloId);
 
         // Sem fallback para outra cor: a baixa deve ser exatamente da cor escolhida.
         if (lotes.Count == 0 && !string.IsNullOrWhiteSpace(cor))
@@ -823,20 +816,6 @@ public class EstoqueLoteService : IEstoqueLoteService
             throw new InvalidOperationException(
                 $"Estoque insuficiente da cor \"{cor}\" para \"{peca.Nome}\". " +
                 "Cadastre entrada dessa cor via Pedido de compra ou ajuste o estoque da peça.");
-        }
-
-        // Se filtrou por marca do fornecedor e não achou lote, tenta sem o filtro.
-        if (lotes.Count == 0 && !string.IsNullOrWhiteSpace(request.MarcaPeca))
-        {
-            var filtroSemMarca = Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, request.PecaId)
-                & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
-            if (!string.IsNullOrWhiteSpace(cor))
-                filtroSemMarca &= Builders<LoteEstoque>.Filter.Eq(x => x.Cor, cor);
-
-            lotes = await _lotes.Find(filtroSemMarca)
-                .SortBy(x => x.DataEntrada)
-                .ThenBy(x => x.CriadoEm)
-                .ToListAsync();
         }
 
         var disponivel = lotes.Sum(l => l.QuantidadeRestante);
@@ -1024,6 +1003,9 @@ public class EstoqueLoteService : IEstoqueLoteService
             PecaId = peca.Id!,
             PecaNome = peca.Nome,
             MarcaPeca = marcaPeca ?? peca.MarcaPeca,
+            ModeloId = string.IsNullOrWhiteSpace(request.ModeloId) ? null : request.ModeloId.Trim(),
+            ModeloNome = string.IsNullOrWhiteSpace(request.ModeloNome) ? null : request.ModeloNome.Trim(),
+            Cor = string.IsNullOrWhiteSpace(request.Cor) ? null : request.Cor.Trim(),
             QuantidadeInicial = quantidade,
             QuantidadeRestante = quantidade,
             CustoUnitario = 0,
@@ -1039,6 +1021,9 @@ public class EstoqueLoteService : IEstoqueLoteService
             PecaId = peca.Id!,
             PecaNome = peca.Nome,
             MarcaPeca = lote.MarcaPeca,
+            ModeloId = lote.ModeloId,
+            ModeloNome = lote.ModeloNome,
+            Cor = lote.Cor,
             LoteId = lote.Id,
             NumeroPedido = lote.NumeroPedido,
             Quantidade = quantidade,
@@ -1173,10 +1158,9 @@ public class EstoqueLoteService : IEstoqueLoteService
         if (!string.IsNullOrWhiteSpace(item.MarcaPeca))
             filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.MarcaPeca, item.MarcaPeca);
 
-        if (!string.IsNullOrWhiteSpace(item.Cor))
-            filtroLote &= Builders<LoteEstoque>.Filter.Eq(x => x.Cor, item.Cor);
-
         var lotes = await _lotes.Find(filtroLote).ToListAsync();
+        if (!string.IsNullOrWhiteSpace(item.Cor))
+            lotes = lotes.Where(l => CorIgual(l.Cor, item.Cor)).ToList();
         var total = lotes.Sum(l => l.QuantidadeRestante);
 
         // Se filtrou por marca do fornecedor e não achou lote, tenta sem o filtro (igual à saída).
@@ -1184,23 +1168,11 @@ public class EstoqueLoteService : IEstoqueLoteService
         {
             var filtroSemMarca = Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, item.PecaId)
                 & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
-            if (!string.IsNullOrWhiteSpace(item.Cor))
-                filtroSemMarca &= Builders<LoteEstoque>.Filter.Eq(x => x.Cor, item.Cor);
 
             lotes = await _lotes.Find(filtroSemMarca).ToListAsync();
+            if (!string.IsNullOrWhiteSpace(item.Cor))
+                lotes = lotes.Where(l => CorIgual(l.Cor, item.Cor)).ToList();
             total = lotes.Sum(l => l.QuantidadeRestante);
-        }
-
-        // Fallback: estoque por cor no cadastro da peça (quando não há lote com cor).
-        if (total == 0 && !string.IsNullOrWhiteSpace(item.Cor) && !string.IsNullOrWhiteSpace(item.ModeloId))
-        {
-            var peca = await _pecas.Find(x => x.Id == item.PecaId).FirstOrDefaultAsync();
-            var corEstoque = peca?.ModelosCompativeis
-                .FirstOrDefault(m => string.Equals(m.ModeloId, item.ModeloId, StringComparison.OrdinalIgnoreCase))
-                ?.Cores
-                ?.FirstOrDefault(c => string.Equals(c.Cor, item.Cor, StringComparison.OrdinalIgnoreCase));
-            if (corEstoque is not null)
-                total = Math.Max(0, corEstoque.Quantidade);
         }
 
         return total;
@@ -1554,7 +1526,16 @@ public class EstoqueLoteService : IEstoqueLoteService
         if (string.IsNullOrWhiteSpace(pecaId)) return;
 
         var peca = await _pecasRepo.ObterPorIdAsync(pecaId);
-        if (peca is null || peca.QuantidadeEstoque <= 0) return;
+        if (peca is null) return;
+
+        if (await PecaUsaCoresPorModeloAsync(peca))
+        {
+            // Tampa/vidro: o saldo por cor vem dos lotes. Não recria lote sem cor a partir do cadastro.
+            await SincronizarQuantidadePecaAsync(pecaId);
+            return;
+        }
+
+        if (peca.QuantidadeEstoque <= 0) return;
 
         var saldoLotes = await _lotes.Find(
                 Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, pecaId)
@@ -1599,21 +1580,132 @@ public class EstoqueLoteService : IEstoqueLoteService
         });
     }
 
+    public async Task RecalcularSaldosPorCorAsync()
+    {
+        var pecas = await _pecas.Find(FilterDefinition<PecaEstoque>.Empty).ToListAsync();
+        var ids = pecas
+            .Where(p => p.ModelosCompativeis.Any(m => (m.Cores?.Count ?? 0) > 0)
+                || InferirCategoriaPeca(p) is "Tampa traseira" or "Vidro Traseiro")
+            .Select(p => p.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToList();
+
+        foreach (var id in ids)
+            await SincronizarQuantidadePecaAsync(id!);
+
+        if (ids.Count > 0)
+            await _pecasRepo.InvalidarCacheReferenciaAsync();
+    }
+
     private async Task SincronizarQuantidadePecaAsync(string pecaId)
     {
-        var total = await _lotes.Find(
+        var lotes = await _lotes.Find(
                 Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, pecaId)
                 & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0))
             .ToListAsync();
 
-        var qtd = total.Sum(l => l.QuantidadeRestante);
         var peca = await _pecas.Find(x => x.Id == pecaId).FirstOrDefaultAsync();
         if (peca is null) return;
 
-        peca.QuantidadeEstoque = qtd;
+        var usaCores = await PecaUsaCoresPorModeloAsync(peca);
+        var lotesContabilizados = usaCores
+            ? lotes.Where(l => !string.IsNullOrWhiteSpace(l.Cor)).ToList()
+            : lotes;
+
+        peca.QuantidadeEstoque = lotesContabilizados.Sum(l => l.QuantidadeRestante);
+
+        if (usaCores)
+            AplicarSaldosCorDosLotes(peca, lotesContabilizados);
+
         peca.AtualizadoEm = DateTime.UtcNow;
         await _pecas.ReplaceOneAsync(x => x.Id == pecaId, peca);
     }
+
+    private static void AplicarSaldosCorDosLotes(PecaEstoque peca, IReadOnlyList<LoteEstoque> lotes)
+    {
+        foreach (var modelo in peca.ModelosCompativeis)
+        {
+            if (modelo.Cores is null || modelo.Cores.Count == 0) continue;
+            foreach (var corEstoque in modelo.Cores)
+            {
+                var corNorm = (corEstoque.Cor ?? "").Trim();
+                if (corNorm.Length == 0) continue;
+
+                var doModelo = lotes
+                    .Where(l => CorIgual(l.Cor, corNorm)
+                        && string.Equals(l.ModeloId, modelo.ModeloId, StringComparison.OrdinalIgnoreCase))
+                    .Sum(l => l.QuantidadeRestante);
+
+                if (doModelo > 0)
+                {
+                    corEstoque.Quantidade = doModelo;
+                    continue;
+                }
+
+                var modelosComCor = peca.ModelosCompativeis.Count(m =>
+                    (m.Cores ?? []).Any(c => CorIgual(c.Cor, corNorm)));
+                var semModelo = lotes
+                    .Where(l => CorIgual(l.Cor, corNorm) && string.IsNullOrWhiteSpace(l.ModeloId))
+                    .Sum(l => l.QuantidadeRestante);
+
+                corEstoque.Quantidade = modelosComCor == 1 ? semModelo : 0;
+            }
+        }
+    }
+
+    private async Task<List<LoteEstoque>> SelecionarLotesSaidaAsync(
+        string pecaId,
+        string? marcaPeca,
+        string? cor,
+        string? modeloId)
+    {
+        var filtro = Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, pecaId)
+            & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
+
+        if (!string.IsNullOrWhiteSpace(marcaPeca))
+            filtro &= Builders<LoteEstoque>.Filter.Eq(x => x.MarcaPeca, marcaPeca.Trim());
+
+        var lotes = await _lotes.Find(filtro)
+            .SortBy(x => x.DataEntrada)
+            .ThenBy(x => x.CriadoEm)
+            .ToListAsync();
+
+        if (lotes.Count == 0 && !string.IsNullOrWhiteSpace(marcaPeca))
+        {
+            var semMarca = Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, pecaId)
+                & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
+            lotes = await _lotes.Find(semMarca)
+                .SortBy(x => x.DataEntrada)
+                .ThenBy(x => x.CriadoEm)
+                .ToListAsync();
+        }
+
+        IEnumerable<LoteEstoque> candidatos = lotes;
+        if (!string.IsNullOrWhiteSpace(cor))
+            candidatos = candidatos.Where(l => CorIgual(l.Cor, cor));
+
+        if (!string.IsNullOrWhiteSpace(modeloId))
+        {
+            var doModelo = candidatos
+                .Where(l => string.Equals(l.ModeloId, modeloId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            candidatos = doModelo.Count > 0
+                ? doModelo
+                : candidatos.Where(l => string.IsNullOrWhiteSpace(l.ModeloId));
+        }
+
+        return candidatos.ToList();
+    }
+
+    private async Task<bool> PecaUsaCoresPorModeloAsync(PecaEstoque peca)
+    {
+        if (peca.ModelosCompativeis.Any(m => (m.Cores?.Count ?? 0) > 0))
+            return true;
+        return await _categoriasPeca.UsaCoresPorModeloAsync(InferirCategoriaPeca(peca));
+    }
+
+    private static bool CorIgual(string? a, string? b)
+        => string.Equals((a ?? "").Trim(), (b ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
 
     private async Task DecrementarEstoqueCorModeloAsync(
         string pecaId,
@@ -1630,8 +1722,19 @@ public class EstoqueLoteService : IEstoqueLoteService
 
         var corNorm = cor.Trim();
         var modeloNorm = modeloId.Trim();
-        var compat = peca.ModelosCompativeis
-            .FirstOrDefault(m => string.Equals(m.ModeloId, modeloNorm, StringComparison.OrdinalIgnoreCase));
+        var nomeNorm = modeloNome?.Trim();
+        var compat = peca.ModelosCompativeis.FirstOrDefault(m =>
+            string.Equals(m.ModeloId, modeloNorm, StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrWhiteSpace(nomeNorm)
+                && string.Equals(m.ModeloNome, nomeNorm, StringComparison.OrdinalIgnoreCase)));
+        if (compat is null)
+        {
+            var comEssaCor = peca.ModelosCompativeis
+                .Where(m => (m.Cores ?? []).Any(c => CorIgual(c.Cor, corNorm)))
+                .ToList();
+            if (comEssaCor.Count == 1)
+                compat = comEssaCor[0];
+        }
         if (compat is null) return;
 
         compat.Cores ??= [];

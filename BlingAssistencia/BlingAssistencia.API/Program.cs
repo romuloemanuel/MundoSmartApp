@@ -296,6 +296,8 @@ try
     Console.WriteLine("[MundoSmart API] Consulta de acessórios: só Bling (sem catálogo local).");
     var estoqueLote = app.Services.GetRequiredService<IEstoqueLoteService>();
     await estoqueLote.EnsureIndexesAsync();
+    await estoqueLote.RecalcularSaldosPorCorAsync();
+    Console.WriteLine("[MundoSmart API] Estoque por cor (tampa/vidro) alinhado aos lotes.");
     if (app.Environment.IsDevelopment())
         await pecasRepo.GarantirCatalogoDemonstracaoAsync();
     _ = await pecasRepo.ConsultarServicosValoresAsync("warmup");
