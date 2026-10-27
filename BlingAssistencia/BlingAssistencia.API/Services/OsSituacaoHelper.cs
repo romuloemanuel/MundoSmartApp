@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using MongoDB.Bson;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
@@ -22,10 +24,17 @@ public static class OsSituacaoHelper
     public const string AguardandoRetornoLoja = "Aguardando Retorno a Loja";
     /// <summary>Serviço pronto — aguardando o cliente retirar o aparelho.</summary>
     public const string AguardandoCliente = "Aguardando Cliente Retirar";
+    /// <summary>Cliente já retirou o aparelho e o pagamento ainda está pendente.</summary>
+    public const string RetiradoAguardandoPagamento = "Retirado aguardando pagamento";
+    /// <summary>Reparo especializado de placa. Fora do filtro padrão; técnico fixo Rômulo.</summary>
+    public const string ReparoAvancadoPlaca = "Reparo avançado em placa";
+    public const string TecnicoReparoAvancadoPlaca = "Rômulo";
+    /// <summary>Aparelho da loja Mundo Smart, sem prioridade. Fora do filtro padrão.</summary>
+    public const string CelularDaLoja = "Celular da loja";
     public const string Cancelado = "Cancelado";
     public const string Concluido = "Concluído";
 
-    /// <summary>Sentinela do filtro de lista: todas as situações, exceto Concluído e Cancelado.</summary>
+    /// <summary>Sentinela do filtro de lista: em andamento, sem Concluído, Cancelado, placa e celular da loja.</summary>
     public const string FiltroExcetoConcluido = "__exceto_concluido__";
 
     public const string AguardandoAprovacaoCliente = AguardandoAprovacao;
@@ -41,6 +50,7 @@ public static class OsSituacaoHelper
         EmTeste,
         AguardandoRetornoLoja,
         AguardandoCliente,
+        ReparoAvancadoPlaca,
         Cancelado,
         Concluido
     ];
@@ -55,6 +65,9 @@ public static class OsSituacaoHelper
         AguardandoAprovacao,
         AguardandoRetornoLoja,
         AguardandoCliente,
+        RetiradoAguardandoPagamento,
+        ReparoAvancadoPlaca,
+        CelularDaLoja,
         Cancelado,
         Concluido
     ];
@@ -77,6 +90,9 @@ public static class OsSituacaoHelper
             "aguardando aprovacao do cliente" or "aguardando aprovação do cliente" => AguardandoAprovacao,
             "aguardando retorno a loja" or "aguardando retorno à loja" or "aguardando retorno loja" or "retorno a loja" => AguardandoRetornoLoja,
             "aguardando cliente" or "aguardando cliente retirar" or "aguardando retirada" => AguardandoCliente,
+            "retirado aguardando pagamento" or "retirado aguardando pagto" => RetiradoAguardandoPagamento,
+            "reparo avançado em placa" or "reparo avancado em placa" or "reparo em placa" => ReparoAvancadoPlaca,
+            "celular da loja" or "celular loja" or "sem prioridade" => CelularDaLoja,
             "cancelada" or "cancelado" => Cancelado,
             "concluida" or "concluída" or "concluido" or "concluído" => Concluido,
             _ => SituacoesValidas.Contains(raw, StringComparer.OrdinalIgnoreCase) ? raw : raw
@@ -127,6 +143,63 @@ public static class OsSituacaoHelper
     public static bool EhFinalizada(string? situacao) =>
         EhConcluida(situacao) || EhCancelada(situacao);
 
+    public static bool EhReparoAvancadoPlaca(string? situacao) =>
+        string.Equals(Normalizar(situacao), ReparoAvancadoPlaca, StringComparison.OrdinalIgnoreCase);
+
+    public static bool EhCelularDaLoja(string? situacao) =>
+        string.Equals(Normalizar(situacao), CelularDaLoja, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Cadastro da própria loja, não um cliente externo.</summary>
+    public static bool ClienteEhLojaMundoSmart(string? nome)
+    {
+        var n = SemAcento(nome).Trim();
+        return n.Equals("mundo smart", StringComparison.OrdinalIgnoreCase)
+            || n.Equals("mundosmart", StringComparison.OrdinalIgnoreCase)
+            || n.StartsWith("mundo smart ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static void ValidarCelularDaLoja(string? situacao, string? clienteNome)
+    {
+        if (!EhCelularDaLoja(situacao)) return;
+        if (!ClienteEhLojaMundoSmart(clienteNome))
+            throw new ArgumentException("Celular da loja só pode ser usado no aparelho da Mundo Smart.");
+    }
+
+    /// <summary>Fora do filtro padrão da lista: Concluído, Cancelado, placa e celular da loja.</summary>
+    public static bool EhForaFiltroPadrao(string? situacao) =>
+        EhFinalizada(situacao) || EhReparoAvancadoPlaca(situacao) || EhCelularDaLoja(situacao);
+
+    /// <summary>
+    /// Reparo avançado em placa fica com Rômulo.
+    /// Nas demais situações devolve o técnico informado, sem alterar.
+    /// </summary>
+    public static string? ResolverTecnico(string? situacao, string? tecnicoNome)
+    {
+        if (!EhReparoAvancadoPlaca(situacao))
+            return tecnicoNome;
+
+        if (NomesEquivalentes(tecnicoNome, TecnicoReparoAvancadoPlaca))
+            return tecnicoNome!.Trim();
+        return TecnicoReparoAvancadoPlaca;
+    }
+
+    public static bool NomesEquivalentes(string? a, string? b) =>
+        string.Equals(SemAcento(a), SemAcento(b), StringComparison.OrdinalIgnoreCase);
+
+    public static string SemAcento(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor)) return "";
+        var formD = valor.Trim().Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(formD.Length);
+        foreach (var c in formD)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                sb.Append(c);
+        }
+
+        return sb.ToString().Normalize(NormalizationForm.FormC);
+    }
+
     /// <summary>
     /// Valores canônicos + legado (Concluída/Cancelada) para filtros Mongo Nin.
     /// Prefira <see cref="EhFinalizada"/> em memória quando possível.
@@ -146,17 +219,17 @@ public static class OsSituacaoHelper
         "cancelada",
     ];
 
-    /// <summary>Regex: só situações em andamento (exclui Concluído/Cancelado e variantes).</summary>
+    /// <summary>Regex: só situações do board padrão (exclui Concluído, Cancelado, placa e celular da loja).</summary>
     public static BsonRegularExpression SituacoesEmAndamentoRegex { get; } = CriarRegexEmAndamento();
 
     private static BsonRegularExpression CriarRegexEmAndamento()
     {
         var ativos = SituacoesValidas
-            .Where(s => !EhFinalizada(s))
+            .Where(s => !EhForaFiltroPadrao(s))
             .Append("Em andamento")
             .Select(Regex.Escape)
             .Distinct(StringComparer.OrdinalIgnoreCase);
-        // ^...$ com flag i — Cancelado/Concluído não entram.
+        // ^...$ com flag i — Cancelado, Concluído, placa e celular da loja não entram.
         return new BsonRegularExpression($"^\\s*({string.Join("|", ativos)})\\s*$", "i");
     }
 
@@ -171,7 +244,7 @@ public static class OsSituacaoHelper
     public static bool EhFiltroExcetoConcluido(string? situacao) =>
         string.Equals(situacao?.Trim(), FiltroExcetoConcluido, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Filtro padrão da lista: em andamento (exclui Concluído e Cancelado).</summary>
+    /// <summary>Filtro padrão da lista: em andamento (exclui Concluído, Cancelado, placa e celular da loja).</summary>
     public static bool EhFiltroExcetoFinalizadas(string? situacao) =>
         EhFiltroExcetoConcluido(situacao);
 

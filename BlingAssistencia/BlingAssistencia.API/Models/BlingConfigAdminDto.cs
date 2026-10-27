@@ -9,6 +9,17 @@ public class BlingConfigAdminDto
     public bool ConsultaProdutosHabilitada { get; set; }
     public int ConsultaProdutosSyncMinutos { get; set; }
     public long IdCampoPermitePersonalizacao { get; set; }
+    public bool VendasCelularesHabilitada { get; set; }
+    public string VendasCelularesCategoriaIds { get; set; } = string.Empty;
+    public string VendasCelularesCategoriaDescricoes { get; set; } = string.Empty;
+    public decimal VendasCelularesDescontoPercentual { get; set; }
+    public int VendasCelularesDiasLookback { get; set; }
+    public int VendasCelularesDiasHistoricoInicial { get; set; }
+    public int VendasCelularesSyncHora { get; set; }
+    public string VendasCelularesPalavrasUsado { get; set; } = string.Empty;
+    public string VendasCelularesPalavrasIphone { get; set; } = string.Empty;
+    public DateTime? VendasCelularesUltimaSyncEm { get; set; }
+    public string? VendasCelularesUltimoAviso { get; set; }
     public bool ModoLocal { get; set; }
     public bool Habilitado { get; set; }
     public bool TokenConectado { get; set; }
@@ -26,4 +37,13 @@ public class BlingConfigAdminSalvarDto
     public bool ConsultaProdutosHabilitada { get; set; }
     public int ConsultaProdutosSyncMinutos { get; set; }
     public long IdCampoPermitePersonalizacao { get; set; }
+    public bool VendasCelularesHabilitada { get; set; } = true;
+    public string? VendasCelularesCategoriaIds { get; set; }
+    public string? VendasCelularesCategoriaDescricoes { get; set; }
+    public decimal VendasCelularesDescontoPercentual { get; set; } = 10;
+    public int VendasCelularesDiasLookback { get; set; } = 3;
+    public int VendasCelularesDiasHistoricoInicial { get; set; } = 60;
+    public int VendasCelularesSyncHora { get; set; } = 6;
+    public string? VendasCelularesPalavrasUsado { get; set; }
+    public string? VendasCelularesPalavrasIphone { get; set; }
 }

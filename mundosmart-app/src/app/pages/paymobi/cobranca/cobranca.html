@@ -1,0 +1,320 @@
+<div class="page cobranca-page">
+  <div class="page-header">
+    <h2>Gerenciamento de cobrança</h2>
+    <div class="acoes-topo">
+      <a routerLink="/paymobi">Vendas PayMobi</a>
+      <a routerLink="/configuracoes/paymobi">Parametrizar alertas</a>
+      <button type="button" (click)="carregar()" [disabled]="carregando">
+        {{ carregando ? 'Atualizando…' : 'Atualizar' }}
+      </button>
+    </div>
+  </div>
+
+  <p class="hint">
+    Alerta no dia do vencimento (não envia se houver mais de 2 boletos atrasados, salvo se você alterar o limite).
+    Cobrança automática segue os prazos da configuração. Soneca pausa até a data combinada com o cliente; no dia a cobrança volta.
+    Marque <strong>não cobrar mais</strong> para encerrar o fluxo desta pessoa.
+  </p>
+
+  <div class="resumo" *ngIf="!carregando || itens.length">
+    <button type="button" class="card" [class.ativo]="fila === 'hoje'" (click)="fila = 'hoje'; aplicarFiltro()">
+      <span>Ação hoje</span>
+      <strong>{{ resumo.acaoHoje }}</strong>
+    </button>
+    <button type="button" class="card" [class.ativo]="fila === 'alerta'" (click)="fila = 'alerta'; aplicarFiltro()">
+      <span>Alerta de vencimento</span>
+      <strong>{{ resumo.alertaHoje }}</strong>
+    </button>
+    <button type="button" class="card" [class.ativo]="fila === 'cobranca'" (click)="fila = 'cobranca'; aplicarFiltro()">
+      <span>Cobrança</span>
+      <strong>{{ resumo.cobrancaHoje }}</strong>
+    </button>
+    <button type="button" class="card" [class.ativo]="fila === 'atraso'" (click)="fila = 'atraso'; aplicarFiltro()">
+      <span>Em atraso</span>
+      <strong>{{ resumo.atrasados }}</strong>
+    </button>
+    <button type="button" class="card" [class.ativo]="fila === 'soneca'" (click)="fila = 'soneca'; aplicarFiltro()">
+      <span>Soneca</span>
+      <strong>{{ resumo.soneca }}</strong>
+    </button>
+    <button type="button" class="card" [class.ativo]="fila === 'nao_cobrar'" (click)="fila = 'nao_cobrar'; aplicarFiltro()">
+      <span>Não cobrar</span>
+      <strong>{{ resumo.naoCobrar }}</strong>
+    </button>
+  </div>
+
+  <div class="filtros-bar">
+    <input
+      [(ngModel)]="termo"
+      (keyup.enter)="aplicarFiltro()"
+      placeholder="Cliente, telefone, IMEI ou contrato"
+      name="termoCobranca"
+    />
+    <select [(ngModel)]="fila" (ngModelChange)="aplicarFiltro()" name="filaCobranca">
+      <option value="todos">Fila (todos)</option>
+      <option value="hoje">Ação hoje</option>
+      <option value="alerta">Alerta de vencimento</option>
+      <option value="cobranca">Cobrança</option>
+      <option value="atraso">Em atraso</option>
+      <option value="soneca">Soneca</option>
+      <option value="nao_cobrar">Não cobrar mais</option>
+    </select>
+    <select [(ngModel)]="tipoFiltro" (ngModelChange)="aplicarFiltro()" name="tipoCobrancaFiltro">
+      <option value="">Status (todos)</option>
+      <option *ngFor="let t of tipos" [value]="t.id">{{ t.rotulo }}</option>
+    </select>
+    <button type="button" class="btn-buscar" (click)="aplicarFiltro()">Buscar</button>
+    <button type="button" class="btn-limpar" (click)="limparFiltros()">Limpar</button>
+  </div>
+
+  <p *ngIf="carregando" class="muted">Carregando…</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="!carregando && !itens.length" class="vazio">Nenhum contrato ativo nesta fila.</p>
+
+  <app-grid-paginator
+    *ngIf="itens.length"
+    [page]="grid.page"
+    [pageSize]="grid.pageSize"
+    [total]="itens.length"
+    (pageChange)="grid.onPageChange($event)"
+    (pageSizeChange)="grid.onPageSizeChange($event)"
+  />
+
+  <div class="grid-scroll" *ngIf="itens.length">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Cliente</th>
+          <th>Celular</th>
+          <th>Vencimento</th>
+          <th>Status</th>
+          <th>Próxima ação</th>
+          <th>Não cobrar</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let item of visiveis; trackBy: trackItem"
+          [class.row-hoje]="item.filaHoje"
+          [class.row-atraso]="item.parcelasAtraso > 0 && !item.filaHoje"
+          [class.row-pausa]="item.naoCobrarMais || item.sonecaAtiva"
+        >
+          <td class="col-atraso">
+            <span class="bolas-linha">
+              <span
+                *ngIf="item.parcelasAtraso > 0"
+                class="bola-atraso"
+                [title]="item.parcelasAtraso + ' parcela(s) em atraso'"
+              >{{ item.parcelasAtraso }}</span>
+              <span
+                class="bola-pago"
+                [title]="(item.boletosPagos || 0) + ' boleto(s) pago(s)'"
+              >{{ item.boletosPagos || 0 }}</span>
+            </span>
+          </td>
+          <td>
+            <strong>{{ item.clienteNome }}</strong>
+            <div class="sub" *ngIf="item.clienteTelefone">{{ item.clienteTelefone }}</div>
+            <div class="sub" *ngIf="item.clienteCpf">{{ item.clienteCpf }}</div>
+            <div class="sub" *ngIf="item.contratoNumero">Contrato {{ item.contratoNumero }}</div>
+          </td>
+          <td>
+            {{ item.aparelho || '—' }}
+            <div class="sub" *ngIf="item.aparelhoImei">IMEI {{ item.aparelhoImei }}</div>
+          </td>
+          <td>
+            <div *ngIf="item.vencimentoAtrasado">
+              Atrasado {{ dataCurta(item.vencimentoAtrasado) }}
+            </div>
+            <div *ngIf="item.proximoVencimento">
+              Próx. {{ dataCurta(item.proximoVencimento) }}
+            </div>
+            <div class="sub" *ngIf="item.valorDevido">{{ moeda(item.valorDevido) }}</div>
+          </td>
+          <td>
+            <select
+              [ngModel]="item.tipoCobranca"
+              (ngModelChange)="alterarTipo(item, $event)"
+              [disabled]="salvandoId === item.id"
+              [name]="'tipo-' + item.id"
+            >
+              <option *ngFor="let t of tipos" [ngValue]="t.id">{{ t.rotulo }}</option>
+            </select>
+          </td>
+          <td>
+            {{ item.proximaAcaoRotulo || '—' }}
+            <div class="sub" *ngIf="item.sonecaAtiva">Pausado até {{ dataCurta(item.sonecaAte) }}</div>
+            <div class="sub" *ngIf="item.motivoPausa && !item.sonecaAtiva && !item.naoCobrarMais">{{ item.motivoPausa }}</div>
+          </td>
+          <td>
+            <label class="chk">
+              <input
+                type="checkbox"
+                [ngModel]="item.naoCobrarMais"
+                (ngModelChange)="alterarNaoCobrar(item, $event)"
+                [disabled]="salvandoId === item.id"
+                [name]="'nao-' + item.id"
+              />
+              Não cobrar
+            </label>
+          </td>
+          <td class="col-acoes">
+            <button
+              type="button"
+              class="btn-link"
+              (click)="enviarWhatsapp(item)"
+              [disabled]="salvandoId === item.id || item.naoCobrarMais"
+            >WhatsApp</button>
+            <button type="button" class="btn-link" (click)="abrirSoneca(item)">Soneca</button>
+            <button
+              type="button"
+              class="btn-link"
+              *ngIf="item.sonecaAte"
+              (click)="limparSoneca(item)"
+            >Tirar soneca</button>
+            <button type="button" class="btn-link" (click)="abrirHistorico(item)">Histórico</button>
+            <a *ngIf="item.linkBoleto" [href]="item.linkBoleto" target="_blank" rel="noopener">Boleto</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="sonecaItem" (click)="sonecaItem = null">
+    <form class="modal-box" (click)="$event.stopPropagation()" (ngSubmit)="salvarSoneca()">
+      <div class="modal-header">
+        <h3>Soneca · {{ sonecaItem.clienteNome }}</h3>
+        <button type="button" class="modal-close" (click)="sonecaItem = null">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">
+          As cobranças deste contrato param até a data informada. No dia, o fluxo volta
+          (alerta ou cobrança, conforme o status).
+        </p>
+        <label>
+          Cobrar novamente em
+          <input type="date" [(ngModel)]="sonecaData" name="sonecaData" required />
+        </label>
+        <label>
+          Observação
+          <input [(ngModel)]="sonecaObs" name="sonecaObs" placeholder="Ex.: cliente disse que paga dia 15" />
+        </label>
+        <div class="modal-acoes">
+          <button type="submit">Salvar soneca</button>
+          <button type="button" (click)="sonecaItem = null">Cancelar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="historico" (click)="fecharHistorico()">
+    <div
+      class="modal-box hist-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hist-cobranca-titulo"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="modal-header">
+        <div class="hist-titulo">
+          <p class="hist-eyebrow">Histórico por interação</p>
+          <h3 id="hist-cobranca-titulo">{{ historico.clienteNome }}</h3>
+        </div>
+        <button type="button" class="modal-close" (click)="fecharHistorico()" aria-label="Fechar">✕</button>
+      </div>
+      <div class="modal-body hist-body">
+        <div class="hist-contrato">
+          <div>
+            <span>Contrato</span>
+            <strong>{{ historico.contratoNumero || '—' }}</strong>
+          </div>
+          <div>
+            <span>Aparelho</span>
+            <strong>{{ historico.aparelho || '—' }}</strong>
+          </div>
+          <div *ngIf="historico.clienteTelefone">
+            <span>Celular</span>
+            <strong>{{ historico.clienteTelefone }}</strong>
+          </div>
+          <div>
+            <span>Status atual</span>
+            <strong>{{ historico.tipoCobrancaRotulo || '—' }}</strong>
+          </div>
+        </div>
+
+        <div class="hist-chips">
+          <span class="hist-chip" *ngIf="historico.parcelasAtraso > 0">
+            {{ historico.parcelasAtraso }} boleto(s) em atraso
+          </span>
+          <span class="hist-chip pago" *ngIf="historico.boletosPagos">
+            {{ historico.boletosPagos }} pago(s)
+          </span>
+          <span class="hist-chip valor" *ngIf="historico.valorDevido">
+            {{ moeda(historico.valorDevido) }}
+          </span>
+          <span class="hist-chip soneca" *ngIf="historico.sonecaAtiva">
+            Soneca até {{ dataCurta(historico.sonecaAte) }}
+          </span>
+          <span class="hist-chip pausa" *ngIf="historico.naoCobrarMais">Não cobrar mais</span>
+        </div>
+
+        <p class="hist-count">
+          {{ historicoInteracoes.length }}
+          {{ historicoInteracoes.length === 1 ? 'interação registrada' : 'interações registradas' }}
+          <span *ngIf="historicoInteracoes.length">· a mais recente primeiro</span>
+        </p>
+
+        <ol class="hist-timeline" *ngIf="historicoInteracoes.length; else semInteracao">
+          <li
+            *ngFor="let a of historicoInteracoes; let i = index; trackBy: trackAcao"
+            [class]="'hist-item hist-' + classeAcao(a.tipo)"
+          >
+            <div class="hist-rail" aria-hidden="true">
+              <span class="hist-num">{{ numeroInteracao(i) }}</span>
+            </div>
+            <article class="hist-card">
+              <header class="hist-card-head">
+                <div class="hist-card-titulos">
+                  <span class="hist-badge">{{ rotuloAcao(a.tipo) }}</span>
+                  <span class="hist-canal" [class.enviada]="a.enviada">{{ canalInteracao(a) }}</span>
+                </div>
+                <time [attr.datetime]="a.em">{{ a.em | date:'dd/MM/yyyy HH:mm':'UTC' }}</time>
+              </header>
+              <p class="hist-interacao-label">Interação {{ numeroInteracao(i) }}</p>
+              <p class="hist-texto">{{ textoInteracao(a) }}</p>
+              <dl class="hist-meta">
+                <div>
+                  <dt>Quem</dt>
+                  <dd>{{ a.operador || 'Sistema' }}</dd>
+                </div>
+                <div>
+                  <dt>Modo</dt>
+                  <dd>{{ rotuloModo(a.modo) }}</dd>
+                </div>
+                <div *ngIf="a.vencimentoRef">
+                  <dt>Vencimento</dt>
+                  <dd>{{ dataCurta(a.vencimentoRef) }}</dd>
+                </div>
+                <div *ngIf="a.boletosAtraso">
+                  <dt>Em atraso na hora</dt>
+                  <dd>{{ a.boletosAtraso }} boleto(s)</dd>
+                </div>
+              </dl>
+            </article>
+          </li>
+        </ol>
+        <ng-template #semInteracao>
+          <div class="hist-vazio">
+            <strong>Ainda não há interações neste contrato.</strong>
+            <p>Cada WhatsApp, soneca, mudança de status ou “não cobrar” entra aqui como uma interação.</p>
+          </div>
+        </ng-template>
+      </div>
+      <footer class="hist-foot">
+        <button type="button" (click)="fecharHistorico()">Fechar</button>
+      </footer>
+    </div>
+  </div>
+</div>

@@ -44,6 +44,10 @@ import {
   OrcamentoDesistenciaPayload,
 } from '../../../components/orcamento-desistencia-modal/orcamento-desistencia-modal';
 import { avisarErroUsuario } from '../../../services/user-feedback.service';
+import {
+  abrirJanelaOrcamentoGridPdf,
+  montarHtmlOrcamentoGridPdf,
+} from '../../../utils/orcamento-grid-pdf.util';
 
 type FiltroValidade = '' | 'normal' | 'a-vencer' | 'vencidos';
 type FiltroSituacao = '' | 'Em aberto' | 'Convertido' | 'Não realizado' | 'Desistência';
@@ -308,6 +312,19 @@ type OrcamentoOrdenacaoCampo =
       font-size: 12px;
       color: #334155;
       white-space: nowrap;
+    }
+    .page-header-acoes {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn-exportar-pdf {
+      background: #fff;
+      color: #1e40af;
+      border: 1px solid #93c5fd;
+    }
+    .btn-exportar-pdf:hover:not(:disabled) {
+      background: #eff6ff;
     }
   `,
 })
@@ -727,6 +744,71 @@ export class OrcamentosLista implements OnInit {
     this.filtroFollowUpStatus = 'atrasado';
     this.filtroSituacao = 'Em aberto';
     this.aplicarFiltros();
+  }
+
+  /** Exporta a lista já filtrada e ordenada, não só a página visível. */
+  exportarPdf(): void {
+    const linhas = this.orcamentosFiltrados;
+    if (!linhas.length) {
+      avisarErroUsuario('Não há orçamentos para exportar com os filtros atuais.');
+      return;
+    }
+
+    const moeda = (valor: number) =>
+      valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const totalAVista = linhas.reduce((soma, o) => soma + this.valorAVista(o), 0);
+
+    const html = montarHtmlOrcamentoGridPdf(
+      linhas.map(o => ({
+        numero: o.numero || '—',
+        loja: this.siglaLoja(o) || '—',
+        cliente: o.contato?.nome || '—',
+        responsavel: o.responsavelOrcamento || '—',
+        aparelho: o.equipamento || `${o.marcaNome || ''} ${o.modeloNome || ''}`.trim() || '—',
+        situacao: o.osGeradaNumero
+          ? `${o.situacao || '—'} · OS #${o.osGeradaNumero}`
+          : (o.situacao || '—'),
+        revisitar: this.textoRevisitarPdf(o),
+        contatos: `${this.vezesContato(o)}/${this.followUpCiclo}`,
+        aVista: moeda(this.valorAVista(o)),
+        parcelado: this.labelParcelado(o),
+      })),
+      {
+        resumo: this.resumoFiltrosPdf(),
+        totalAVista: moeda(totalAVista),
+      },
+    );
+    abrirJanelaOrcamentoGridPdf(html);
+  }
+
+  private textoRevisitarPdf(o: BlingOrcamento): string {
+    if (!this.emAberto(o)) return '—';
+    const data = o.dataFollowUp?.slice(0, 10);
+    const dataFmt = data
+      ? new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR')
+      : 'Sem data';
+    return `${dataFmt} · ${this.labelFollowUp(o)}`;
+  }
+
+  private resumoFiltrosPdf(): string {
+    const partes = [
+      `${this.orcamentosFiltrados.length} de ${this.orcamentos.length}`,
+    ];
+    const situacao = this.situacoes.find(s => s.id === this.filtroSituacao);
+    if (situacao) partes.push(situacao.label);
+    if (this.filtroCliente.trim()) partes.push(`Busca: ${this.filtroCliente.trim()}`);
+    if (this.filtroLoja) partes.push(`Loja: ${labelLojaOs(this.filtroLoja)}`);
+    if (this.filtroResponsavel) partes.push(`Responsável: ${this.filtroResponsavel}`);
+    const validade = this.validades.find(v => v.id === this.filtroValidade);
+    if (validade && this.filtroValidade) partes.push(validade.label);
+    const follow = this.followUpStatusFiltro.find(f => f.id === this.filtroFollowUpStatus);
+    if (follow && this.filtroFollowUpStatus) partes.push(follow.label);
+    if (this.filtroFollowUpData) {
+      const data = new Date(`${this.filtroFollowUpData.slice(0, 10)}T12:00:00`)
+        .toLocaleDateString('pt-BR');
+      partes.push(`Revisita: ${data}`);
+    }
+    return partes.join(' · ');
   }
 
   /** normal | a-vencer | vencido | sem-data */

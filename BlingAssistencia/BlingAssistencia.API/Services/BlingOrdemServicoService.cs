@@ -225,7 +225,9 @@ public class BlingOrdemServicoService : IBlingOrdemServicoService
         {
             var situacaoAnterior = local.Situacao;
             local.Situacao = situacao;
-            if (!string.IsNullOrWhiteSpace(tecnicoNome))
+            if (OsSituacaoHelper.EhReparoAvancadoPlaca(situacao))
+                local.TecnicoNome = OsSituacaoHelper.ResolverTecnico(situacao, tecnicoNome ?? local.TecnicoNome);
+            else if (!string.IsNullOrWhiteSpace(tecnicoNome))
                 local.TecnicoNome = tecnicoNome.Trim();
             local.MotivoCancelamento = OsSituacaoHelper.EhCancelada(situacao)
                 ? motivoCancelamento?.Trim()

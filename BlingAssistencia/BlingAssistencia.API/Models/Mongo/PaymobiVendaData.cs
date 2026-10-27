@@ -86,6 +86,102 @@ public static class PaymobiStatusCobranca
     }
 }
 
+/// <summary>Fluxo operacional da cobrança (independente de ok/negociação/perdido financeiro).</summary>
+public static class PaymobiTipoCobranca
+{
+    public const string AlertaVencimento = "alerta_vencimento";
+    public const string CobrancaManual = "cobranca_manual";
+    public const string CobrancaAutomatica = "cobranca_automatica";
+    public const string RenegAuto = "reneg_auto";
+    public const string RenegManual = "reneg_manual";
+    public const string Extrajudicial = "extrajudicial";
+
+    public static readonly string[] Todos =
+    [
+        AlertaVencimento,
+        CobrancaManual,
+        CobrancaAutomatica,
+        RenegAuto,
+        RenegManual,
+        Extrajudicial,
+    ];
+
+    public static bool EhManualOperador(string? tipo) =>
+        NormalizarOuVazio(tipo) is CobrancaManual or RenegManual or Extrajudicial;
+
+    public static bool PausaAutomatico(string? tipo) =>
+        NormalizarOuVazio(tipo) is CobrancaManual or RenegAuto or RenegManual or Extrajudicial;
+
+    public static string NormalizarOuVazio(string? tipo)
+    {
+        var s = (tipo ?? "").Trim().ToLowerInvariant().Replace(' ', '_');
+        s = s switch
+        {
+            "alerta" or "alerta-vencimento" or "alertavencimento" => AlertaVencimento,
+            "manual" or "cobranca-manual" or "cobrançamanual" => CobrancaManual,
+            "automatica" or "auto" or "cobranca-automatica" or "cobrançaautomatica" => CobrancaAutomatica,
+            "renegociacao_auto" or "renegociacao-aut" or "reneg_aut" or "devolucao_aut" => RenegAuto,
+            "renegociacao_manual" or "renegociacao-manual" or "devolucao_manual" => RenegManual,
+            "extra" or "extra-judicial" or "extrajudicial" => Extrajudicial,
+            _ => s,
+        };
+        return Todos.Contains(s) ? s : "";
+    }
+
+    public static string Rotulo(string? tipo) => NormalizarOuVazio(tipo) switch
+    {
+        AlertaVencimento => "Alerta de vencimento",
+        CobrancaManual => "Cobrança manual",
+        CobrancaAutomatica => "Cobrança automática",
+        RenegAuto => "Renegociação/Devolução Aut.",
+        RenegManual => "Renegociação/Devolução Manual",
+        Extrajudicial => "Cobrança extrajudicial",
+        _ => "—",
+    };
+}
+
+public static class PaymobiAcaoCobrancaTipo
+{
+    public const string AlertaVencimento = "alerta_vencimento";
+    public const string Cobranca = "cobranca";
+    public const string Soneca = "soneca";
+    public const string LimparSoneca = "limpar_soneca";
+    public const string NaoCobrar = "nao_cobrar";
+    public const string RetomarCobranca = "retomar_cobranca";
+    public const string Status = "status";
+}
+
+public class PaymobiAcaoCobrancaData
+{
+    [BsonElement("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [BsonElement("em")]
+    public DateTime Em { get; set; } = DateTime.UtcNow;
+
+    [BsonElement("tipo")]
+    public string Tipo { get; set; } = string.Empty;
+
+    [BsonElement("modo")]
+    public string Modo { get; set; } = "manual";
+
+    [BsonElement("observacao")]
+    public string Observacao { get; set; } = string.Empty;
+
+    [BsonIgnoreIfNull]
+    [BsonElement("vencimentoRef")]
+    public DateTime? VencimentoRef { get; set; }
+
+    [BsonElement("boletosAtraso")]
+    public int BoletosAtraso { get; set; }
+
+    [BsonElement("operador")]
+    public string Operador { get; set; } = string.Empty;
+
+    [BsonElement("enviada")]
+    public bool Enviada { get; set; }
+}
+
 public class PaymobiBoletoData
 {
     [BsonElement("id")]
@@ -196,9 +292,35 @@ public class PaymobiVendaData
     [BsonElement("status")]
     public string Status { get; set; } = PaymobiStatus.Aberta;
 
-    /// <summary>Situação da cobrança: ok, negociacao, recuperacao, perdido.</summary>
+    /// <summary>Situação financeira da cobrança: ok, negociacao, recuperacao, perdido.</summary>
     [BsonElement("statusCobranca")]
     public string StatusCobranca { get; set; } = "";
+
+    /// <summary>Fluxo operacional: alerta, cobrança auto/manual, renegociação, extrajudicial.</summary>
+    [BsonElement("tipoCobranca")]
+    public string TipoCobranca { get; set; } = "";
+
+    [BsonElement("naoCobrarMais")]
+    public bool NaoCobrarMais { get; set; }
+
+    /// <summary>Até esta data (inclusive) as cobranças automáticas e alertas ficam pausados; no dia retoma.</summary>
+    [BsonIgnoreIfNull]
+    [BsonElement("sonecaAte")]
+    public DateTime? SonecaAte { get; set; }
+
+    [BsonIgnoreIfNull]
+    [BsonElement("proximaAcaoEm")]
+    public DateTime? ProximaAcaoEm { get; set; }
+
+    [BsonIgnoreIfNull]
+    [BsonElement("ultimaAcaoEm")]
+    public DateTime? UltimaAcaoEm { get; set; }
+
+    [BsonElement("ultimaAcaoTipo")]
+    public string UltimaAcaoTipo { get; set; } = "";
+
+    [BsonElement("acoesCobranca")]
+    public List<PaymobiAcaoCobrancaData> AcoesCobranca { get; set; } = [];
 
     [BsonElement("observacoes")]
     public string Observacoes { get; set; } = string.Empty;

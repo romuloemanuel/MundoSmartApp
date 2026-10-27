@@ -2,7 +2,7 @@ import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription, Observable, finalize } from 'rxjs';
+import { EMPTY, Observable, Subscription, expand, finalize, reduce } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { OrdensServicoService, OsFiltros } from '../../../services/ordens-servico';
 import { BlingOrdemServico } from '../../../models/bling.models';
@@ -14,8 +14,13 @@ import {
   osSituacaoAguardandoPeca,
   osSituacaoEmTeste,
   osSituacaoAguardandoRetornoLoja,
+  osSituacaoRetiradoAguardandoPagamento,
+  osSituacaoReparoAvancadoPlaca,
+  osSituacaoCelularDaLoja,
+  osSituacaoForaFiltroPadrao,
   osPrecisaEscolherTecnico,
-  situacoesDisponiveisPorLoja,
+  resolverTecnicoFixo,
+  situacoesDisponiveisParaCliente,
   ajustarSituacaoParaLoja,
 } from '../os-situacao.util';
 import {
@@ -57,13 +62,18 @@ import {
   OsUrgenciaNivel,
   labelUrgenciaNivel,
   osTemJustificativaAtraso,
+  resumirProblemaOs,
 } from '../../../utils/os-painel-tv.util';
 import { agoraDataBrasil } from '../../../utils/horario-brasil.util';
+import { abrirJanelaOsGridPdf, montarHtmlOsGridPdf } from '../../../utils/os-grid-pdf.util';
+import { avisarErroUsuario } from '../../../services/user-feedback.service';
+import { PendenciaCadastroCliente } from '../../../components/pendencia-cadastro-cliente/pendencia-cadastro-cliente';
+import { AtalhoCobrancaPaymobi } from '../../../components/atalho-cobranca-paymobi/atalho-cobranca-paymobi';
 
 @Component({
   selector: 'app-ordens-servico-lista',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, GridPaginator, GridAcoesOs, JustificativaAtrasoModal, AutocompleteCriavel],
+  imports: [CommonModule, FormsModule, RouterLink, GridPaginator, GridAcoesOs, JustificativaAtrasoModal, AutocompleteCriavel, PendenciaCadastroCliente, AtalhoCobrancaPaymobi],
   templateUrl: './lista.html',
   styles: [`
     :host {
@@ -185,6 +195,19 @@ import { agoraDataBrasil } from '../../../utils/horario-brasil.util';
       color: #0369a1;
       font-size: 12px;
     }
+    .page-header-acoes {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn-exportar-pdf {
+      background: #fff;
+      color: #1e40af;
+      border: 1px solid #93c5fd;
+    }
+    .btn-exportar-pdf:hover:not(:disabled) {
+      background: #eff6ff;
+    }
 
     .grid-situacao-select {
       width: 100%;
@@ -250,6 +273,24 @@ import { agoraDataBrasil } from '../../../utils/horario-brasil.util';
       background: #ffedd5;
       border-color: #fdba74;
       color: #9a3412;
+    }
+    .grid-situacao-badge--retirado-pagamento,
+    .grid-situacao-select--retirado-pagamento {
+      background: #ccfbf1;
+      border-color: #5eead4;
+      color: #115e59;
+    }
+    .grid-situacao-badge--reparo-placa,
+    .grid-situacao-select--reparo-placa {
+      background: #e0e7ff;
+      border-color: #a5b4fc;
+      color: #3730a3;
+    }
+    .grid-situacao-badge--celular-loja,
+    .grid-situacao-select--celular-loja {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #475569;
     }
     .grid-situacao-select--prazo-vencido {
       background: #fee2e2;
@@ -427,6 +468,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   ordens: BlingOrdemServico[] = [];
   totalRegistros = 0;
   carregando = false;
+  exportandoPdf = false;
   erro = '';
   filtrosAbertos = false;
   alterandoSituacaoId?: number;
@@ -660,26 +702,44 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   }
 
   private aplicarResposta(dados: { itens?: BlingOrdemServico[]; total?: number }): void {
-    let itens = Array.isArray(dados.itens) ? [...dados.itens] : [];
+    const local = this.aplicarFiltrosLocais(dados.itens ?? []);
+    let total = dados.total;
 
-    // Filtro padrão: não exibir Concluído/Cancelado (rede de segurança se a API atrasar).
-    // Busca por número ignora esse recorte — a OS específica deve aparecer.
-    if (this.filtros.situacao === SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO && !this.filtros.numero?.trim()) {
-      const antes = itens.length;
-      itens = itens.filter(os => !osSituacaoFinalizada(os.situacao));
-      const removidos = antes - itens.length;
-      if (removidos > 0 && typeof dados.total === 'number') {
-        dados = { ...dados, total: Math.max(0, dados.total - removidos) };
-      }
+    if (local.removidosPadrao > 0 && typeof total === 'number') {
+      total = Math.max(0, total - local.removidosPadrao);
     }
 
     if (this.filtroUrgencia) {
-      itens = itens.filter(os => this.nivelUrgencia(os) === this.filtroUrgencia);
+      this.totalRegistros = local.itens.length;
+      const start = (this.grid.page - 1) * this.grid.pageSize;
+      this.ordens = local.itens.slice(start, start + this.grid.pageSize);
+      return;
+    }
+
+    this.ordens = local.itens;
+    this.totalRegistros = total ?? this.ordens.length;
+  }
+
+  /** Mesmo recorte da grid: situação padrão, urgência e ordenação local. */
+  private aplicarFiltrosLocais(itens: BlingOrdemServico[]): { itens: BlingOrdemServico[]; removidosPadrao: number } {
+    let lista = [...itens];
+    let removidosPadrao = 0;
+
+    // Filtro padrão: não exibir Concluído, Cancelado, Reparo avançado em placa nem Celular da loja.
+    // Busca por número ignora esse recorte — a OS específica deve aparecer.
+    if (this.filtros.situacao === SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO && !this.filtros.numero?.trim()) {
+      const antes = lista.length;
+      lista = lista.filter(os => !osSituacaoForaFiltroPadrao(os.situacao));
+      removidosPadrao = antes - lista.length;
+    }
+
+    if (this.filtroUrgencia) {
+      lista = lista.filter(os => this.nivelUrgencia(os) === this.filtroUrgencia);
     }
 
     if (this.ordenacao.campo === 'urgencia') {
       const asc = this.ordenacao.direcao === 'asc';
-      itens.sort((a, b) => {
+      lista.sort((a, b) => {
         const da = ordemUrgenciaNivel(this.nivelUrgencia(a));
         const db = ordemUrgenciaNivel(this.nivelUrgencia(b));
         if (da !== db) return asc ? da - db : db - da;
@@ -689,15 +749,123 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       });
     }
 
-    if (this.filtroUrgencia) {
-      this.totalRegistros = itens.length;
-      const start = (this.grid.page - 1) * this.grid.pageSize;
-      this.ordens = itens.slice(start, start + this.grid.pageSize);
+    return { itens: lista, removidosPadrao };
+  }
+
+  /** Relatório da lista já filtrada, em todas as páginas, não só a página visível. */
+  exportarPdf(): void {
+    if (this.exportandoPdf || this.carregando || this.totalRegistros === 0) return;
+    this.exportandoPdf = true;
+    const tamanho = 100;
+    const base = this.montarFiltrosRequest();
+    const buscar = (pagina: number) =>
+      this.service.listar({ ...base, pagina, tamanhoPagina: tamanho });
+
+    buscar(1).pipe(
+      expand(res => {
+        const pagina = res.pagina || 1;
+        const qtd = res.itens?.length ?? 0;
+        const total = res.total ?? 0;
+        if (qtd === 0 || qtd < tamanho || pagina * tamanho >= total || pagina >= 30) {
+          return EMPTY;
+        }
+        return buscar(pagina + 1);
+      }),
+      map(res => res.itens ?? []),
+      reduce((acc, itens) => acc.concat(itens), [] as BlingOrdemServico[]),
+      finalize(() => { this.exportandoPdf = false; }),
+    ).subscribe({
+      next: itens => this.abrirPdf(itens),
+      error: () => avisarErroUsuario('Não foi possível gerar o relatório da lista.'),
+    });
+  }
+
+  private abrirPdf(itens: BlingOrdemServico[]): void {
+    const linhas = this.aplicarFiltrosLocais(itens).itens;
+    if (!linhas.length) {
+      avisarErroUsuario('Não há ordens de serviço para exportar com os filtros atuais.');
       return;
     }
 
-    this.ordens = itens;
-    this.totalRegistros = dados.total ?? this.ordens.length;
+    const moeda = (valor: number) =>
+      valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const total = linhas.reduce((soma, os) => soma + this.valorAVistaOs(os), 0);
+
+    const html = montarHtmlOsGridPdf(
+      linhas.map(os => {
+        const prazo = this.prazoPecaLabel(os);
+        return {
+          urgencia: labelUrgenciaNivel(this.nivelUrgencia(os)),
+          numero: os.numero || '—',
+          cliente: os.contato?.nome || '—',
+          retirar: os.contatoAviso?.nome?.trim() || '—',
+          modelo: this.equipamentoLabel(os) || '—',
+          servico: resumirProblemaOs(os),
+          imei: os.imei || '—',
+          situacao: prazo ? `${os.situacao || '—'} · até ${prazo}` : (os.situacao || '—'),
+          tecnico: os.tecnicoNome || '—',
+          retorno: os.retorno ? 'S' : 'N',
+          loja: this.siglaLoja(os) || '—',
+          entrada: this.formatarDataRelatorio(this.dataEntradaLabel(os)),
+          valor: moeda(this.valorAVistaOs(os)),
+        };
+      }),
+      {
+        resumo: this.resumoFiltrosPdf(linhas.length),
+        totalValor: moeda(total),
+      },
+    );
+    abrirJanelaOsGridPdf(html);
+  }
+
+  private resumoFiltrosPdf(qtd: number): string {
+    const partes = [`${qtd} OS`];
+    const situacao = this.situacoesFiltro.find(s => s.value === this.filtros.situacao);
+    if (situacao) partes.push(situacao.label);
+    if (this.filtros.numero?.trim()) partes.push(`Nº ${this.filtros.numero.trim()}`);
+    if (this.filtros.nome?.trim()) partes.push(`Nome: ${this.filtros.nome.trim()}`);
+    if (this.filtros.telefone?.trim()) partes.push(`Tel: ${this.filtros.telefone.trim()}`);
+    if (this.filtroUrgencia) {
+      const faixa = this.faixasUrgencia.find(f => f.id === this.filtroUrgencia);
+      if (faixa) partes.push(`${faixa.label} · ${faixa.descricao}`);
+    }
+    if (this.filtros.lojaOrigem) partes.push(labelLojaOs(this.filtros.lojaOrigem));
+    if (this.filtros.tecnicoNome) partes.push(`Técnico: ${this.filtros.tecnicoNome}`);
+    if (this.filtros.modeloNome?.trim()) partes.push(`Modelo: ${this.filtros.modeloNome.trim()}`);
+    if (this.filtros.imei?.trim()) partes.push(`IMEI: ${this.filtros.imei.trim()}`);
+    if (this.filtros.cpfCnpj?.trim()) partes.push(`CPF/CNPJ: ${this.filtros.cpfCnpj.trim()}`);
+    this.faixaDataPdf(partes, 'Cadastro', this.filtros.dataCadastroInicio, this.filtros.dataCadastroFim);
+    this.faixaDataPdf(partes, 'Atualização', this.filtros.dataAtualizacaoInicio, this.filtros.dataAtualizacaoFim);
+    this.faixaDataPdf(partes, 'Conclusão', this.filtros.dataConclusaoInicio, this.filtros.dataConclusaoFim);
+    if (this.filtros.retorno === true) partes.push('Retorno: Sim');
+    if (this.filtros.retorno === false) partes.push('Retorno: Não');
+    return partes.join(' · ');
+  }
+
+  private faixaDataPdf(partes: string[], rotulo: string, inicio?: string, fim?: string): void {
+    if (!inicio && !fim) return;
+    const ini = this.formatarDiaFiltro(inicio);
+    const ate = this.formatarDiaFiltro(fim);
+    if (ini && ate) partes.push(`${rotulo} ${ini}–${ate}`);
+    else if (ini) partes.push(`${rotulo} a partir de ${ini}`);
+    else partes.push(`${rotulo} até ${ate}`);
+  }
+
+  private formatarDiaFiltro(iso?: string): string {
+    const raw = (iso ?? '').slice(0, 10);
+    const [ano, mes, dia] = raw.split('-');
+    if (!ano || !mes || !dia) return '';
+    return `${dia}/${mes}/${ano}`;
+  }
+
+  /** Mesmo relógio da grid: horário de Brasília gravado como UTC. */
+  private formatarDataRelatorio(iso?: string | null): string {
+    if (!iso) return '—';
+    const data = new Date(iso);
+    if (Number.isNaN(data.getTime())) return '—';
+    const p = (n: number) => String(n).padStart(2, '0');
+    const ano = String(data.getUTCFullYear()).slice(-2);
+    return `${p(data.getUTCDate())}/${p(data.getUTCMonth() + 1)}/${ano} ${p(data.getUTCHours())}:${p(data.getUTCMinutes())}`;
   }
 
   onNumeroFiltroInput(valor: string): void {
@@ -837,7 +1005,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   }
 
   situacoesParaOs(os: BlingOrdemServico): string[] {
-    return situacoesDisponiveisPorLoja(os.lojaOrigem);
+    return situacoesDisponiveisParaCliente(os.lojaOrigem, os.contato?.nome, os.situacao);
   }
 
   situacaoExibida(os: BlingOrdemServico): string {
@@ -935,7 +1103,11 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       }
     }
 
-    if (osPrecisaEscolherTecnico(situacaoNormalizada, os.tecnicoNome, this.tecnicosAtivos)) {
+    const tecnicoFixo = resolverTecnicoFixo(situacaoNormalizada, this.tecnicosAtivos);
+    if (tecnicoFixo) {
+      tecnicoNome = tecnicoFixo;
+      os.tecnicoNome = tecnicoFixo;
+    } else if (osPrecisaEscolherTecnico(situacaoNormalizada, os.tecnicoNome, this.tecnicosAtivos)) {
       const escolhido = await this.tecnicoDialog.open({
         tecnicos: this.tecnicosAtivos,
         tecnicoAtual: os.tecnicoNome,
@@ -1052,6 +1224,9 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     if (osSituacaoEmTeste(os.situacao)) return 'grid-situacao-badge--em-teste';
     if (osSituacaoAguardandoRetornoLoja(os.situacao)) return 'grid-situacao-badge--retorno-loja';
     if (osSituacaoAguardandoCliente(os.situacao)) return 'grid-situacao-badge--aguardando-cliente';
+    if (osSituacaoRetiradoAguardandoPagamento(os.situacao)) return 'grid-situacao-badge--retirado-pagamento';
+    if (osSituacaoReparoAvancadoPlaca(os.situacao)) return 'grid-situacao-badge--reparo-placa';
+    if (osSituacaoCelularDaLoja(os.situacao)) return 'grid-situacao-badge--celular-loja';
     if (osSituacaoAguardandoPeca(os.situacao)) return 'grid-situacao-badge--aguardando-peca';
     return '';
   }
@@ -1065,6 +1240,9 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     if (osSituacaoEmTeste(os.situacao)) return 'grid-situacao-select--em-teste';
     if (osSituacaoAguardandoRetornoLoja(os.situacao)) return 'grid-situacao-select--retorno-loja';
     if (osSituacaoAguardandoCliente(os.situacao)) return 'grid-situacao-select--aguardando-cliente';
+    if (osSituacaoRetiradoAguardandoPagamento(os.situacao)) return 'grid-situacao-select--retirado-pagamento';
+    if (osSituacaoReparoAvancadoPlaca(os.situacao)) return 'grid-situacao-select--reparo-placa';
+    if (osSituacaoCelularDaLoja(os.situacao)) return 'grid-situacao-select--celular-loja';
     return '';
   }
 

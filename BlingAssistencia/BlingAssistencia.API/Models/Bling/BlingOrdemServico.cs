@@ -83,6 +83,13 @@ public class BlingOrdemServico
     public int? GarantiaDias { get; set; }
     /// <summary>Prazo de garantia combinado com o cliente, em meses (padrão do orçamento).</summary>
     public int? GarantiaMeses { get; set; }
+    /// <summary>IMEI + CPF batem com venda de celular da loja (Bling).</summary>
+    public bool DescontoManutencaoElegivel { get; set; }
+    public decimal? DescontoManutencaoPercentual { get; set; }
+    public bool DescontoManutencaoAplicado { get; set; }
+    public string? DescontoManutencaoVendaId { get; set; }
+    public string? DescontoManutencaoProduto { get; set; }
+    public DateTime? DescontoManutencaoDataVenda { get; set; }
     public List<OsFotoAparelhoInfo>? FotosAparelho { get; set; }
 }
 

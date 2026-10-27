@@ -12,6 +12,7 @@ import {
   normalizarSituacaoOs,
   osSituacaoAguardandoPeca,
   osSituacaoPreAssistencia,
+  osSituacaoCelularDaLoja,
 } from '../config/os-situacao.config';
 import { equipamentoGridLabel } from './os-grid-display.util';
 
@@ -165,7 +166,9 @@ export function labelUrgenciaNivel(nivel: OsUrgenciaNivel): string {
 }
 
 export function osAbertaNoPainel(situacao?: string | null): boolean {
-  return !osSituacaoFinalizada(situacao) && !osSituacaoPreAssistencia(situacao);
+  return !osSituacaoFinalizada(situacao)
+    && !osSituacaoPreAssistencia(situacao)
+    && !osSituacaoCelularDaLoja(situacao);
 }
 
 export function resumirProblemaOs(

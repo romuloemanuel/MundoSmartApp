@@ -124,6 +124,12 @@ internal static class BlingLocalMappings
                 : local.GarantiaDias is > 0
                     ? (int)Math.Round(local.GarantiaDias.Value / 30.0)
                     : null,
+            DescontoManutencaoElegivel = local.DescontoManutencaoElegivel,
+            DescontoManutencaoPercentual = local.DescontoManutencaoPercentual,
+            DescontoManutencaoAplicado = local.DescontoManutencaoAplicado,
+            DescontoManutencaoVendaId = local.DescontoManutencaoVendaId,
+            DescontoManutencaoProduto = local.DescontoManutencaoProduto,
+            DescontoManutencaoDataVenda = local.DescontoManutencaoDataVenda,
             FotosAparelho = local.FotosAparelho?.Select(f => new OsFotoAparelhoInfo
             {
                 Id = f.Id,
@@ -341,6 +347,18 @@ internal static class BlingLocalMappings
             : local.GarantiaMeses is > 0
                 ? local.GarantiaMeses * 30
                 : existente?.GarantiaDias;
+        local.DescontoManutencaoElegivel = os.DescontoManutencaoElegivel;
+        local.DescontoManutencaoPercentual = os.DescontoManutencaoPercentual is > 0
+            ? os.DescontoManutencaoPercentual
+            : existente?.DescontoManutencaoPercentual;
+        local.DescontoManutencaoAplicado = os.DescontoManutencaoAplicado;
+        local.DescontoManutencaoVendaId = string.IsNullOrWhiteSpace(os.DescontoManutencaoVendaId)
+            ? existente?.DescontoManutencaoVendaId
+            : os.DescontoManutencaoVendaId.Trim();
+        local.DescontoManutencaoProduto = string.IsNullOrWhiteSpace(os.DescontoManutencaoProduto)
+            ? existente?.DescontoManutencaoProduto
+            : os.DescontoManutencaoProduto.Trim();
+        local.DescontoManutencaoDataVenda = os.DescontoManutencaoDataVenda ?? existente?.DescontoManutencaoDataVenda;
         local.Itens = os.Itens ?? [];
         local.OsNumero = os.Numero ?? local.OsNumero;
         // Fotos / token de intake: só via endpoints dedicados — não apagar no PUT da OS.
@@ -451,7 +469,7 @@ internal static class BlingLocalMappings
         {
             if (OsSituacaoHelper.EhFiltroExcetoConcluido(filtros.Situacao))
             {
-                lista = lista.Where(o => !OsSituacaoHelper.EhFinalizada(o.Situacao)).ToList();
+                lista = lista.Where(o => !OsSituacaoHelper.EhForaFiltroPadrao(o.Situacao)).ToList();
             }
             else
             {

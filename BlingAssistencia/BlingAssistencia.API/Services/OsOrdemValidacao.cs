@@ -40,6 +40,7 @@ public static class OsOrdemValidacao
         os.Situacao = OsSituacaoHelper.AjustarParaLoja(os.Situacao, os.LojaOrigem);
         OsSituacaoHelper.ValidarMotivoCancelamento(os.Situacao, os.MotivoCancelamento);
         OsSituacaoHelper.ValidarSituacaoPorLoja(os.Situacao, os.LojaOrigem);
+        OsSituacaoHelper.ValidarCelularDaLoja(os.Situacao, os.Contato?.Nome);
 
         if (OsSituacaoHelper.EhAguardandoPeca(os.Situacao)
             && !OsSituacaoHelper.DataUtilValida(os.DataPrazoPeca))
@@ -75,7 +76,8 @@ public static class OsOrdemValidacao
     }
 
     /// <summary>
-    /// Exige técnico cadastrado e ativo em: Aguardando Cliente Retirar, Concluído e Cancelado.
+    /// Exige técnico cadastrado e ativo em teste, retorno à loja, retirada, reparo em placa, concluído e cancelado.
+    /// Reparo avançado em placa é atribuído a Rômulo antes desta validação.
     /// </summary>
     public static async Task ValidarTecnicoAsync(
         string? situacao,

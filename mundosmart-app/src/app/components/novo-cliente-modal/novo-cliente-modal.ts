@@ -48,6 +48,7 @@ import {
 
         <div class="modal-body">
           <p *ngIf="erro" class="erro">{{ erro }}</p>
+          <p *ngIf="hintPendencia" class="hint-pendencia">{{ hintPendencia }}</p>
 
           <div class="form-group">
             <label>Nome <span class="campo-obrigatorio" aria-hidden="true">*</span></label>
@@ -352,6 +353,11 @@ import {
       background: transparent; color: #dc2626; border: none;
       font-size: 14px; cursor: pointer; padding: 0;
     }
+    .hint-pendencia {
+      color: #9a3412; font-size: 13px; line-height: 1.4;
+      background: #fff7ed; border: 1px solid #fdba74;
+      padding: 8px 12px; border-radius: 6px; margin-bottom: 14px;
+    }
     .erro {
       color: #dc2626; font-size: 13px;
       background: #fef2f2; border: 1px solid #fca5a5;
@@ -361,6 +367,7 @@ import {
 })
 export class NovoClienteModal implements OnChanges, OnDestroy {
   @Input() clienteEdicao?: BlingContato;
+  @Input() hintPendencia?: string;
   @Output() clienteCriado = new EventEmitter<BlingContato>();
   @Output() clienteAtualizado = new EventEmitter<BlingContato>();
   @Output() fecharModal = new EventEmitter<void>();
@@ -418,7 +425,7 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['clienteEdicao']) this.inicializarFormulario();
+    if (changes['clienteEdicao'] || changes['hintPendencia']) this.inicializarFormulario();
   }
 
   ngOnDestroy(): void {
@@ -434,6 +441,17 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
         contatos: (this.clienteEdicao.contatos ?? []).map(c => ({ ...c })),
         endereco: this.clienteEdicao.endereco ?? {},
       });
+    } else if (this.clienteEdicao) {
+      this.editando = false;
+      this.contato = aplicarMascarasContato({
+        nome: this.clienteEdicao.nome || '',
+        cpfCnpj: this.clienteEdicao.cpfCnpj,
+        email: this.clienteEdicao.email,
+        telefone: this.clienteEdicao.telefone,
+        celular: this.clienteEdicao.celular,
+        contatos: [],
+        endereco: {},
+      });
     } else {
       this.editando = false;
       this.contato = { nome: '', contatos: [], endereco: {} };
@@ -445,6 +463,10 @@ export class NovoClienteModal implements OnChanges, OnDestroy {
     this.erro = '';
     this.erros = {};
     this.limparDuplicatas();
+    const doc = apenasDigitos(this.contato.cpfCnpj);
+    if (!this.editando && (doc.length === 11 || doc.length === 14) && validarCpfCnpj(this.contato.cpfCnpj)) {
+      agendarVerificacao(this.debounceTimers, 'cpf', () => this.verificarCpf());
+    }
   }
 
   private limparDuplicatas(): void {

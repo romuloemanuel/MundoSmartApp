@@ -48,6 +48,7 @@ builder.Services.AddSingleton<IDocumentoModeloRepository, DocumentoModeloReposit
     builder.Services.AddSingleton<IPaymobiVendaRepository, PaymobiVendaRepository>();
 builder.Services.AddSingleton<IPaymobiConfigRepository, PaymobiConfigRepository>();
 builder.Services.AddSingleton<IPaymobiSyncService, PaymobiSyncService>();
+builder.Services.AddSingleton<IPaymobiCobrancaGestaoService, PaymobiCobrancaGestaoService>();
 builder.Services.AddHttpClient("PaymobiFin", client =>
 {
     client.BaseAddress = new Uri("https://api-v2.paymobi.com.br/");
@@ -74,8 +75,13 @@ builder.Services.AddHttpClient("BlingProdutos", client =>
 });
 builder.Services.AddSingleton<IBlingProdutoAcessorioRepository, BlingProdutoAcessorioRepository>();
 builder.Services.AddSingleton<IBlingProdutoConsultaService, BlingProdutoConsultaService>();
+builder.Services.AddSingleton<IBlingVendaCelularRepository, BlingVendaCelularRepository>();
+builder.Services.AddSingleton<IClienteAparelhoCompradoService, ClienteAparelhoCompradoService>();
+builder.Services.AddSingleton<IBlingVendaCelularSyncService, BlingVendaCelularSyncService>();
 builder.Services.AddHostedService<BlingProdutoSyncHostedService>();
+builder.Services.AddHostedService<BlingVendaCelularSyncHostedService>();
 builder.Services.AddHostedService<PaymobiSyncHostedService>();
+builder.Services.AddHostedService<PaymobiCobrancaHostedService>();
 builder.Services.AddScoped<IOsIntakeService, OsIntakeService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IOsHistoricoRepository, OsHistoricoRepository>();
@@ -294,6 +300,10 @@ try
     await app.Services.GetRequiredService<IBlingEffectiveSettings>().EnsureLoadedAsync();
     await acessoriosRepo.GarantirSeedAsync();
     Console.WriteLine("[MundoSmart API] Consulta de acessórios: só Bling (sem catálogo local).");
+    var vendasCelRepo = app.Services.GetRequiredService<IBlingVendaCelularRepository>();
+    await vendasCelRepo.EnsureIndexesAsync();
+    var vinculoCel = app.Services.GetRequiredService<IClienteAparelhoCompradoService>();
+    await vinculoCel.RecalcularPendenciasAsync();
     var estoqueLote = app.Services.GetRequiredService<IEstoqueLoteService>();
     await estoqueLote.EnsureIndexesAsync();
     await estoqueLote.RecalcularSaldosPorCorAsync();

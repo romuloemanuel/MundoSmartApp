@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { PaymobiConfig, PaymobiVendasService } from '../../../services/paymobi-vendas.service';
+import { PaymobiCobrancaConfig, PaymobiConfig, PaymobiVendasService } from '../../../services/paymobi-vendas.service';
 import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
 
 @Component({
@@ -15,6 +15,7 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
         <h2>PayMobi</h2>
         <div class="acoes">
           <a routerLink="/paymobi">Ver vendas</a>
+          <a routerLink="/paymobi/cobranca">Gerenciar cobrança</a>
           <button type="button" (click)="salvar()" [disabled]="salvando">
             {{ salvando ? 'Salvando…' : 'Salvar' }}
           </button>
@@ -64,6 +65,63 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
           Última busca de vendas: {{ dataCurta(ultimaSincronizacao) }} — {{ ultimoTotalImportado }} vendas.
         </p>
       </form>
+
+      <form class="form form-wide" (ngSubmit)="salvarCobranca()">
+        <h3>Alerta de vencimento</h3>
+        <p class="campo-hint">
+          No dia do pagamento enviamos o lembrete. Quem tem mais boletos atrasados do que o limite não recebe alerta.
+          Placeholders: {{ placeholdersCobranca }}.
+        </p>
+        <label class="chk">
+          <input type="checkbox" [(ngModel)]="alertaHabilitado" name="alertaHabilitado" />
+          Enviar alerta no dia do vencimento
+        </label>
+        <label>
+          Hora (Brasília)
+          <input type="number" min="0" max="23" [(ngModel)]="alertaHora" name="alertaHora" />
+        </label>
+        <label>
+          Não alertar se tiver mais de N boletos atrasados
+          <input type="number" min="0" [(ngModel)]="alertaMaxAtraso" name="alertaMaxAtraso" />
+          <span class="campo-hint">Padrão 2. Com 3 ou mais atrasados o cliente sai do alerta do dia.</span>
+        </label>
+        <label>
+          Mensagem do alerta
+          <textarea [(ngModel)]="alertaMensagem" name="alertaMensagem" rows="3" placeholder="Deixe vazio para usar o texto padrão."></textarea>
+        </label>
+
+        <h3>Cobrança automática</h3>
+        <p class="campo-hint">
+          Exemplo: boleto venceu dia 5, primeira cobrança depois de 2 dias (dia 7). Se o cliente pedir para pagar dia 15, use a soneca na tela de cobrança.
+        </p>
+        <label class="chk">
+          <input type="checkbox" [(ngModel)]="autoHabilitada" name="autoHabilitada" />
+          Gerar fila de cobrança automática
+        </label>
+        <label>
+          Dias após o vencimento (primeira cobrança)
+          <input type="number" min="0" [(ngModel)]="autoDiasAposVencimento" name="autoDiasAposVencimento" />
+        </label>
+        <label>
+          Repetir a cada (dias)
+          <input type="number" min="1" [(ngModel)]="autoRepetirDias" name="autoRepetirDias" />
+        </label>
+        <label>
+          Hora (Brasília)
+          <input type="number" min="0" max="23" [(ngModel)]="autoHora" name="autoHora" />
+        </label>
+        <label class="chk">
+          <input type="checkbox" [(ngModel)]="autoSoDiasUteis" name="autoSoDiasUteis" />
+          Só em dias úteis
+        </label>
+        <label>
+          Mensagem da cobrança
+          <textarea [(ngModel)]="autoMensagem" name="autoMensagem" rows="3" placeholder="Deixe vazio para usar o texto padrão."></textarea>
+        </label>
+        <button type="submit" [disabled]="salvandoCobranca">
+          {{ salvandoCobranca ? 'Salvando…' : 'Salvar cobrança' }}
+        </button>
+      </form>
     </div>
   `,
   styles: [`
@@ -81,7 +139,9 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
       display: flex;
       flex-direction: column;
       gap: 12px;
+      margin-bottom: 16px;
     }
+    .form-wide { max-width: 640px; }
     .form h3 { margin: 8px 0 0; font-size: 15px; }
     .form label {
       display: flex;
@@ -91,12 +151,28 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
       font-weight: 600;
       color: #475569;
     }
-    .form input {
+    .form label.chk {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+    }
+    .form input, .form textarea {
       padding: 8px;
       border: 1px solid #cbd5e1;
       border-radius: 6px;
       font-size: 14px;
       font-weight: 500;
+      font-family: inherit;
+    }
+    .form button[type='submit'] {
+      align-self: flex-start;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 0;
+      background: #0f172a;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
     }
     .campo-hint { font-size: 12px; color: #64748b; margin: 0; font-weight: 400; }
   `],
@@ -111,8 +187,20 @@ export class ConfigPaymobiPage implements OnInit {
   ultimaSincronizacao = '';
   ultimoTotalImportado = 0;
   salvando = false;
+  salvandoCobranca = false;
   erro = '';
   ok = false;
+  alertaHabilitado = true;
+  alertaHora = 9;
+  alertaMaxAtraso = 2;
+  alertaMensagem = '';
+  autoHabilitada = true;
+  autoDiasAposVencimento = 2;
+  autoRepetirDias = 3;
+  autoHora = 10;
+  autoSoDiasUteis = true;
+  autoMensagem = '';
+  readonly placeholdersCobranca = '{nome}, {aparelho}, {vencimento}, {valor}, {atraso}';
 
   constructor(private api: PaymobiVendasService) {}
 
@@ -131,6 +219,10 @@ export class ConfigPaymobiPage implements OnInit {
       error: () => {
         this.erro = 'Não foi possível carregar a configuração.';
       },
+    });
+    this.api.cobrancaConfig().subscribe({
+      next: cfg => this.aplicarCobranca(cfg),
+      error: () => { /* custos já carregaram */ },
     });
   }
 
@@ -164,6 +256,47 @@ export class ConfigPaymobiPage implements OnInit {
         avisarErroUsuario(this.erro);
       },
     });
+  }
+
+  salvarCobranca(): void {
+    this.salvandoCobranca = true;
+    this.erro = '';
+    this.api.salvarCobrancaConfig({
+      alertaHabilitado: this.alertaHabilitado,
+      alertaHora: Number(this.alertaHora) || 0,
+      alertaMaxAtraso: Number(this.alertaMaxAtraso) || 0,
+      alertaMensagem: this.alertaMensagem,
+      autoHabilitada: this.autoHabilitada,
+      autoDiasAposVencimento: Number(this.autoDiasAposVencimento) || 0,
+      autoRepetirDias: Number(this.autoRepetirDias) || 1,
+      autoHora: Number(this.autoHora) || 0,
+      autoSoDiasUteis: this.autoSoDiasUteis,
+      autoMensagem: this.autoMensagem,
+    }).subscribe({
+      next: cfg => {
+        this.salvandoCobranca = false;
+        this.aplicarCobranca(cfg);
+        avisarSucessoUsuario('Parametrização da cobrança salva.');
+      },
+      error: err => {
+        this.salvandoCobranca = false;
+        this.erro = err?.error?.erro || 'Não foi possível salvar a cobrança.';
+        avisarErroUsuario(this.erro);
+      },
+    });
+  }
+
+  private aplicarCobranca(cfg: PaymobiCobrancaConfig): void {
+    this.alertaHabilitado = cfg.alertaHabilitado !== false;
+    this.alertaHora = Number(cfg.alertaHora) >= 0 ? Number(cfg.alertaHora) : 9;
+    this.alertaMaxAtraso = Number(cfg.alertaMaxAtraso) >= 0 ? Number(cfg.alertaMaxAtraso) : 2;
+    this.alertaMensagem = cfg.alertaMensagem ?? '';
+    this.autoHabilitada = cfg.autoHabilitada !== false;
+    this.autoDiasAposVencimento = Number(cfg.autoDiasAposVencimento) >= 0 ? Number(cfg.autoDiasAposVencimento) : 2;
+    this.autoRepetirDias = Number(cfg.autoRepetirDias) >= 1 ? Number(cfg.autoRepetirDias) : 3;
+    this.autoHora = Number(cfg.autoHora) >= 0 ? Number(cfg.autoHora) : 10;
+    this.autoSoDiasUteis = cfg.autoSoDiasUteis !== false;
+    this.autoMensagem = cfg.autoMensagem ?? '';
   }
 
   dataCurta(iso: string | undefined): string {

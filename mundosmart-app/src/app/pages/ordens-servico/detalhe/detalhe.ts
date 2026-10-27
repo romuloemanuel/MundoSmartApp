@@ -14,7 +14,8 @@ import {
   osSituacaoCancelada,
   osSituacaoAguardandoPeca,
   osPrecisaEscolherTecnico,
-  situacoesDisponiveisPorLoja,
+  resolverTecnicoFixo,
+  situacoesDisponiveisParaCliente,
   ajustarSituacaoParaLoja,
 } from '../os-situacao.util';
 import { TecnicosService, Tecnico } from '../../../services/tecnicos';
@@ -36,7 +37,11 @@ export class OrdensServicoDetalhe implements OnInit {
   private tecnicosAtivos: Tecnico[] = [];
 
   get situacoes(): string[] {
-    return situacoesDisponiveisPorLoja(this.os?.lojaOrigem);
+    return situacoesDisponiveisParaCliente(
+      this.os?.lojaOrigem,
+      this.os?.contato?.nome,
+      this.os?.situacao,
+    );
   }
   readonly labelTipoServico = labelTipoServicoOs;
   readonly labelPagamentoAcordado = labelPagamentoAcordadoOs;
@@ -107,7 +112,10 @@ export class OrdensServicoDetalhe implements OnInit {
     }
 
     let tecnicoNome: string | undefined;
-    if (osPrecisaEscolherTecnico(situacaoAjustada, this.os.tecnicoNome, this.tecnicosAtivos)) {
+    const tecnicoFixo = resolverTecnicoFixo(situacaoAjustada, this.tecnicosAtivos);
+    if (tecnicoFixo) {
+      tecnicoNome = tecnicoFixo;
+    } else if (osPrecisaEscolherTecnico(situacaoAjustada, this.os.tecnicoNome, this.tecnicosAtivos)) {
       const escolhido = await this.tecnicoDialog.open({
         tecnicos: this.tecnicosAtivos,
         tecnicoAtual: this.os.tecnicoNome,

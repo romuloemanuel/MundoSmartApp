@@ -1,7 +1,18 @@
 <div class="page">
   <div class="page-header">
     <h2>Orçamentos</h2>
-    <button (click)="novo()">+ Novo Orçamento</button>
+    <div class="page-header-acoes">
+      <button
+        type="button"
+        class="btn-exportar-pdf"
+        (click)="exportarPdf()"
+        [disabled]="carregando || orcamentosFiltrados.length === 0"
+        title="Abre a lista filtrada para imprimir ou salvar em PDF"
+      >
+        Exportar PDF
+      </button>
+      <button type="button" (click)="novo()">+ Novo Orçamento</button>
+    </div>
   </div>
 
   <div class="filtros-bar" *ngIf="!carregando">

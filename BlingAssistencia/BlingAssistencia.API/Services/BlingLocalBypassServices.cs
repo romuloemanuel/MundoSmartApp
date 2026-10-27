@@ -160,11 +160,11 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
         var itens = paginado.Itens.Select(BlingLocalMappings.ParaOrdemServicoLista).ToList();
 
         var total = paginado.Total;
-        // Rede de segurança: filtro padrão nunca devolve Concluído/Cancelado.
+        // Rede de segurança: filtro padrão nunca devolve Concluído, Cancelado, placa ou celular da loja.
         if (OsSituacaoHelper.EhFiltroExcetoFinalizadas(filtros?.Situacao))
         {
             var antes = itens.Count;
-            itens = itens.Where(o => !OsSituacaoHelper.EhFinalizada(o.Situacao)).ToList();
+            itens = itens.Where(o => !OsSituacaoHelper.EhForaFiltroPadrao(o.Situacao)).ToList();
             var removidos = antes - itens.Count;
             if (removidos > 0)
                 total = Math.Max(0, total - removidos);
@@ -205,6 +205,8 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
         local.BlingId = id;
         local.OsNumero ??= id.ToString();
         local.Situacao ??= OsSituacaoHelper.Aberto;
+        if (OsSituacaoHelper.EhReparoAvancadoPlaca(local.Situacao))
+            local.TecnicoNome = OsSituacaoHelper.ResolverTecnico(local.Situacao, local.TecnicoNome);
         local.DataEntrada ??= HorarioBrasil.Agora;
         local.Data ??= local.DataEntrada;
         OsSituacaoHelper.AplicarDatasPorSituacao(local, null);
@@ -230,6 +232,8 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
         local.BlingId = id;
         local.MongoId = existente.MongoId;
         local.CriadoEm = existente.CriadoEm;
+        if (OsSituacaoHelper.EhReparoAvancadoPlaca(local.Situacao))
+            local.TecnicoNome = OsSituacaoHelper.ResolverTecnico(local.Situacao, local.TecnicoNome);
         // Mobile pode ter anexado fotos enquanto a OS era editada no balcão.
         var fresco = await _localRepo.ObterPorBlingIdAsync(id);
         local.FotosAparelho = fresco?.FotosAparelho?.ToList()
@@ -299,6 +303,7 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
         situacao = OsSituacaoHelper.AjustarParaLoja(situacao, local.LojaOrigem);
         OsSituacaoHelper.ValidarMotivoCancelamento(situacao, motivoCancelamento);
         OsSituacaoHelper.ValidarSituacaoPorLoja(situacao, local.LojaOrigem);
+        OsSituacaoHelper.ValidarCelularDaLoja(situacao, local.ContatoNome);
 
         var situacaoAnterior = local.Situacao;
 
@@ -306,7 +311,9 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
             throw new InvalidOperationException("Não é possível alterar a situação de uma OS concluída ou cancelada.");
 
         local.Situacao = situacao;
-        if (!string.IsNullOrWhiteSpace(tecnicoNome))
+        if (OsSituacaoHelper.EhReparoAvancadoPlaca(situacao))
+            local.TecnicoNome = OsSituacaoHelper.ResolverTecnico(situacao, tecnicoNome ?? local.TecnicoNome);
+        else if (!string.IsNullOrWhiteSpace(tecnicoNome))
             local.TecnicoNome = tecnicoNome.Trim();
         local.MotivoCancelamento = OsSituacaoHelper.EhCancelada(situacao)
             ? motivoCancelamento?.Trim()

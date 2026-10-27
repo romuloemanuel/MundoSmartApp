@@ -167,6 +167,12 @@ export interface BlingOrdemServico {
   senhaDispositivoTipo?: '' | 'numerica' | 'desenho' | 'nao_deixou' | 'sem_senha';
   /** PIN/senha alfanumérica, índices do desenho, ou marcadores sem_senha/nao_deixou */
   senhaDispositivo?: string;
+  descontoManutencaoElegivel?: boolean;
+  descontoManutencaoPercentual?: number;
+  descontoManutencaoAplicado?: boolean;
+  descontoManutencaoVendaId?: string;
+  descontoManutencaoProduto?: string;
+  descontoManutencaoDataVenda?: string;
   fotosAparelho?: OsFotoAparelho[];
 }
 

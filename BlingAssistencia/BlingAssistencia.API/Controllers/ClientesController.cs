@@ -9,10 +9,12 @@ namespace MundoSmart.BlingAssistencia.API.Controllers;
 public class ClientesController : ControllerBase
 {
     private readonly IBlingClienteService _service;
+    private readonly IClienteAparelhoCompradoService _aparelhosComprados;
 
-    public ClientesController(IBlingClienteService service)
+    public ClientesController(IBlingClienteService service, IClienteAparelhoCompradoService aparelhosComprados)
     {
         _service = service;
+        _aparelhosComprados = aparelhosComprados;
     }
 
     [HttpGet]
@@ -63,6 +65,7 @@ public class ClientesController : ControllerBase
         try
         {
             var criado = await _service.CriarAsync(contato);
+            await _aparelhosComprados.VincularClienteAsync(criado);
             return CreatedAtAction(nameof(Obter), new { id = criado.Id }, criado);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("CPF/CNPJ") || ex.Message.Contains("Telefone"))
@@ -81,6 +84,7 @@ public class ClientesController : ControllerBase
         try
         {
             var atualizado = await _service.AtualizarAsync(id, contato);
+            await _aparelhosComprados.VincularClienteAsync(atualizado);
             return Ok(atualizado);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("CPF/CNPJ") || ex.Message.Contains("Telefone"))

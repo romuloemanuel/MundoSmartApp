@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MundoSmart.BlingAssistencia.API.Models;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
 using MundoSmart.BlingAssistencia.API.Repositories;
 using MundoSmart.BlingAssistencia.API.Services;
@@ -13,11 +15,16 @@ public class PaymobiVendasController : ControllerBase
 {
     private readonly IPaymobiVendaRepository _repo;
     private readonly IPaymobiSyncService _sync;
+    private readonly IPaymobiCobrancaGestaoService _cobranca;
 
-    public PaymobiVendasController(IPaymobiVendaRepository repo, IPaymobiSyncService sync)
+    public PaymobiVendasController(
+        IPaymobiVendaRepository repo,
+        IPaymobiSyncService sync,
+        IPaymobiCobrancaGestaoService cobranca)
     {
         _repo = repo;
         _sync = sync;
+        _cobranca = cobranca;
     }
 
     [HttpGet("config")]
@@ -176,4 +183,88 @@ public class PaymobiVendasController : ControllerBase
         var atualizado = await _repo.RemoverParcelaManualAsync(id, boletoId, cancellationToken);
         return atualizado is null ? NotFound() : Ok(atualizado);
     }
+
+    [HttpGet("cobranca")]
+    public async Task<IActionResult> ListarCobranca(
+        [FromQuery] string? fila,
+        [FromQuery] string? tipo,
+        [FromQuery] string? termo,
+        CancellationToken cancellationToken)
+        => Ok(await _cobranca.ListarAsync(fila, tipo, termo, cancellationToken));
+
+    [HttpGet("cobranca/resumo")]
+    public async Task<IActionResult> ResumoCobranca(CancellationToken cancellationToken)
+        => Ok(await _cobranca.ResumoAsync(cancellationToken));
+
+    [HttpGet("cobranca/config")]
+    public async Task<IActionResult> ConfigCobranca(CancellationToken cancellationToken)
+        => Ok(await _cobranca.ObterConfigAsync(cancellationToken));
+
+    [HttpPut("cobranca/config")]
+    public async Task<IActionResult> SalvarConfigCobranca(
+        [FromBody] PaymobiCobrancaConfigDto? body,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _cobranca.SalvarConfigAsync(body ?? new PaymobiCobrancaConfigDto(), cancellationToken));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
+    [HttpPost("cobranca/processar")]
+    public async Task<IActionResult> ProcessarCobranca(CancellationToken cancellationToken)
+        => Ok(new { atualizados = await _cobranca.ProcessarFilaAsync(cancellationToken) });
+
+    [HttpPut("vendas/{id}/gestao-cobranca")]
+    public async Task<IActionResult> AtualizarGestaoCobranca(
+        string id,
+        [FromBody] PaymobiGestaoCobrancaRequest? body,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var atualizado = await _cobranca.AtualizarGestaoAsync(
+                id, body ?? new PaymobiGestaoCobrancaRequest(), NomeOperador(), cancellationToken);
+            return atualizado is null ? NotFound() : Ok(atualizado);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    [HttpPost("vendas/{id}/acao-cobranca")]
+    public async Task<IActionResult> RegistrarAcaoCobranca(
+        string id,
+        [FromBody] PaymobiRegistrarAcaoCobrancaRequest? body,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var atualizado = await _cobranca.RegistrarAcaoAsync(
+                id, body ?? new PaymobiRegistrarAcaoCobrancaRequest(), NomeOperador(), cancellationToken);
+            return atualizado is null ? NotFound() : Ok(atualizado);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    private string NomeOperador() =>
+        User.FindFirstValue(ClaimTypes.Name)
+        ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? "sistema";
 }

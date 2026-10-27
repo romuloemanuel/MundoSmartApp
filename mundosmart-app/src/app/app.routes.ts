@@ -105,6 +105,13 @@ export const routes: Routes = [
           import('./pages/contratos/contratos').then(m => m.ContratosPage),
       },
       {
+        path: 'paymobi/cobranca',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./pages/paymobi/cobranca/cobranca').then(m => m.PaymobiCobrancaPage),
+        title: 'Gerenciamento de cobrança',
+      },
+      {
         path: 'paymobi',
         canActivate: [adminGuard],
         loadComponent: () =>
@@ -129,6 +136,7 @@ export const routes: Routes = [
           import('./pages/vendas-celulares/consultar-desconto/consultar-desconto').then(
             m => m.ConsultarClienteDescontoPage,
           ),
+        title: 'Consultar Cliente Desconto',
       },
       { path: 'estoque', component: EstoquePage },
       { path: 'estoque/lotes-retorno', component: LotesRetornoPage },

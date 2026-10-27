@@ -5,13 +5,11 @@ import {
   CalculoJurosConfig,
   OpcaoParcela,
   ResultadoLiquido,
-  CALCULO_JUROS_DEFAULT,
   calcularLiquido,
   carregarCalculoJurosConfig,
   formatarMoedaBr,
   formatarTaxaPct,
   gerarOpcoesParcelas,
-  salvarCalculoJurosConfig,
 } from '../../config/calculo-juros.config';
 
 type ModoCalculo = 'parcelas' | 'liquido';
@@ -44,8 +42,8 @@ export class CalculoJurosPage implements OnInit {
 
   get subModo(): string {
     return this.modo === 'parcelas'
-      ? 'Tabela da maquininha (1x ~2,99%; demais com rótulo 1,49%). Calibrada nos seus valores.'
-      : 'Valor cobrado → líquido pela mesma tabela.';
+      ? 'Parcelamento mensal: taxa da maquininha de cada parcela, com 5% a mais só sobre a taxa.'
+      : 'Valor cobrado → líquido pela mesma taxa (maquininha + 5% sobre a taxa).';
   }
 
   selecionarModo(modo: ModoCalculo): void {
@@ -57,21 +55,6 @@ export class CalculoJurosPage implements OnInit {
   onValorChange(): void {
     this.opcaoSelecionada = null;
     this.recalcular();
-  }
-
-  onConfigChange(): void {
-    this.cfg = {
-      taxa1xPct: Math.max(0, Number(this.cfg.taxa1xPct) || 0),
-      taxaMensalPct: Math.max(0, Number(this.cfg.taxaMensalPct) || 0),
-      maxParcelas: Math.min(18, Math.max(1, Math.round(Number(this.cfg.maxParcelas) || 18))),
-    };
-    salvarCalculoJurosConfig(this.cfg);
-    this.recalcular();
-  }
-
-  restaurarPadrao(): void {
-    this.cfg = { ...CALCULO_JUROS_DEFAULT };
-    this.onConfigChange();
   }
 
   selecionarOpcao(op: OpcaoParcela): void {

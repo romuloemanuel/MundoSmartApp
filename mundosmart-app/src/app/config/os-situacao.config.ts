@@ -17,10 +17,23 @@ export const SITUACAO_OS_AGUARDANDO_APROVACAO = 'Aguardando aprovação do clien
 export const SITUACAO_OS_AGUARDANDO_RETORNO_LOJA = 'Aguardando Retorno a Loja';
 /** Serviço pronto — aguardando o cliente retirar o aparelho. */
 export const SITUACAO_OS_AGUARDANDO_CLIENTE = 'Aguardando Cliente Retirar';
+/** Cliente já retirou o aparelho e o pagamento ainda está pendente. */
+export const SITUACAO_OS_RETIRADO_AGUARDANDO_PAGAMENTO = 'Retirado aguardando pagamento';
+/**
+ * Reparo especializado de placa.
+ * Fica fora do filtro padrão da lista e é atribuído ao técnico Rômulo.
+ */
+export const SITUACAO_OS_REPARO_AVANCADO_PLACA = 'Reparo avançado em placa';
+export const TECNICO_OS_REPARO_AVANCADO_PLACA = 'Rômulo';
+/**
+ * Aparelho da própria loja, sem prioridade de conserto.
+ * Fora do filtro padrão da lista e do painel.
+ */
+export const SITUACAO_OS_CELULAR_DA_LOJA = 'Celular da loja';
 export const SITUACAO_OS_CANCELADO = 'Cancelado';
 export const SITUACAO_OS_CONCLUIDO = 'Concluído';
 
-/** Valor do filtro de lista: todas as situações, exceto Concluído e Cancelado. */
+/** Valor do filtro de lista: em andamento, sem Concluído, Cancelado, placa e celular da loja. */
 export const SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO = '__exceto_concluido__';
 
 /** Padrão para nova OS (todas as lojas). */
@@ -44,12 +57,15 @@ export const SITUACOES_OS: string[] = [
   SITUACAO_OS_AGUARDANDO_APROVACAO,
   SITUACAO_OS_AGUARDANDO_RETORNO_LOJA,
   SITUACAO_OS_AGUARDANDO_CLIENTE,
+  SITUACAO_OS_RETIRADO_AGUARDANDO_PAGAMENTO,
+  SITUACAO_OS_REPARO_AVANCADO_PLACA,
+  SITUACAO_OS_CELULAR_DA_LOJA,
   SITUACAO_OS_CANCELADO,
   SITUACAO_OS_CONCLUIDO,
 ];
 
 export const SITUACOES_OS_FILTRO: { value: string; label: string }[] = [
-  { value: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO, label: 'Todas (exceto Concluído e Cancelado)' },
+  { value: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO, label: 'Todas (exceto Concluído, Cancelado, placa e celular da loja)' },
   { value: '', label: 'Todas' },
   ...SITUACOES_OS.map(s => ({ value: s, label: s })),
 ];
@@ -77,6 +93,14 @@ const ALIASES: Record<string, string> = {
   'aguardando cliente': SITUACAO_OS_AGUARDANDO_CLIENTE,
   'aguardando cliente retirar': SITUACAO_OS_AGUARDANDO_CLIENTE,
   'aguardando retirada': SITUACAO_OS_AGUARDANDO_CLIENTE,
+  'retirado aguardando pagamento': SITUACAO_OS_RETIRADO_AGUARDANDO_PAGAMENTO,
+  'retirado aguardando pagto': SITUACAO_OS_RETIRADO_AGUARDANDO_PAGAMENTO,
+  'reparo avançado em placa': SITUACAO_OS_REPARO_AVANCADO_PLACA,
+  'reparo avancado em placa': SITUACAO_OS_REPARO_AVANCADO_PLACA,
+  'reparo em placa': SITUACAO_OS_REPARO_AVANCADO_PLACA,
+  'celular da loja': SITUACAO_OS_CELULAR_DA_LOJA,
+  'celular loja': SITUACAO_OS_CELULAR_DA_LOJA,
+  'sem prioridade': SITUACAO_OS_CELULAR_DA_LOJA,
   cancelada: SITUACAO_OS_CANCELADO,
   cancelado: SITUACAO_OS_CANCELADO,
   concluida: SITUACAO_OS_CONCLUIDO,
@@ -114,6 +138,55 @@ export function osSituacaoAguardandoCliente(situacao?: string | null): boolean {
   return normalizarSituacaoOs(situacao) === SITUACAO_OS_AGUARDANDO_CLIENTE;
 }
 
+export function osSituacaoRetiradoAguardandoPagamento(situacao?: string | null): boolean {
+  return normalizarSituacaoOs(situacao) === SITUACAO_OS_RETIRADO_AGUARDANDO_PAGAMENTO;
+}
+
+export function osSituacaoReparoAvancadoPlaca(situacao?: string | null): boolean {
+  return normalizarSituacaoOs(situacao) === SITUACAO_OS_REPARO_AVANCADO_PLACA;
+}
+
+export function osSituacaoCelularDaLoja(situacao?: string | null): boolean {
+  return normalizarSituacaoOs(situacao) === SITUACAO_OS_CELULAR_DA_LOJA;
+}
+
+/** Cliente da própria loja (cadastro Mundo Smart), não um cliente externo. */
+export function clienteEhLojaMundoSmart(nome?: string | null): boolean {
+  const n = semAcento(nome ?? '').trim();
+  return n === 'mundo smart' || n === 'mundosmart' || n.startsWith('mundo smart ');
+}
+
+/** Fora do filtro padrão da lista (Concluído, Cancelado, placa e celular da loja). */
+export function osSituacaoForaFiltroPadrao(situacao?: string | null): boolean {
+  const s = normalizarSituacaoOs(situacao);
+  return (
+    s === SITUACAO_OS_CONCLUIDO
+    || s === SITUACAO_OS_CANCELADO
+    || s === SITUACAO_OS_REPARO_AVANCADO_PLACA
+    || s === SITUACAO_OS_CELULAR_DA_LOJA
+  );
+}
+
+/** Técnico já definido pela situação. Reparo em placa fica com Rômulo (aceita o nome cadastrado). */
+export function tecnicoFixoDaSituacao(situacao?: string | null): string | null {
+  return osSituacaoReparoAvancadoPlaca(situacao) ? TECNICO_OS_REPARO_AVANCADO_PLACA : null;
+}
+
+export function resolverTecnicoFixo(
+  situacao: string | null | undefined,
+  tecnicos: Array<{ nome: string }> = [],
+): string | null {
+  const fixo = tecnicoFixoDaSituacao(situacao);
+  if (!fixo) return null;
+  const alvo = semAcento(fixo);
+  const encontrado = tecnicos.find(t => semAcento(t.nome) === alvo);
+  return encontrado?.nome ?? fixo;
+}
+
+function semAcento(valor: string): string {
+  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 export function osSituacaoEmTeste(situacao?: string | null): boolean {
   return normalizarSituacaoOs(situacao) === SITUACAO_OS_EM_TESTE;
 }
@@ -129,6 +202,7 @@ export function osSituacaoExigeTecnico(situacao?: string | null): boolean {
     s === SITUACAO_OS_EM_TESTE
     || s === SITUACAO_OS_AGUARDANDO_RETORNO_LOJA
     || s === SITUACAO_OS_AGUARDANDO_CLIENTE
+    || s === SITUACAO_OS_REPARO_AVANCADO_PLACA
     || s === SITUACAO_OS_CONCLUIDO
     || s === SITUACAO_OS_CANCELADO
   );
@@ -151,6 +225,22 @@ export function osPrecisaEscolherTecnico(
 /** Situações permitidas (todas as lojas). */
 export function situacoesDisponiveisPorLoja(_lojaOrigem?: string | null): string[] {
   return [...SITUACOES_OS];
+}
+
+/**
+ * Celular da loja só entra na lista quando o cliente é a Mundo Smart,
+ * ou quando a OS já está nessa situação (para poder sair dela).
+ */
+export function situacoesDisponiveisParaCliente(
+  lojaOrigem?: string | null,
+  clienteNome?: string | null,
+  situacaoAtual?: string | null,
+): string[] {
+  const todas = situacoesDisponiveisPorLoja(lojaOrigem);
+  if (clienteEhLojaMundoSmart(clienteNome) || osSituacaoCelularDaLoja(situacaoAtual)) {
+    return todas;
+  }
+  return todas.filter(s => s !== SITUACAO_OS_CELULAR_DA_LOJA);
 }
 
 /** Normaliza a situação; padrão Aberto quando vazia. */

@@ -1,10 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { BlingContato } from '../../../models/bling.models';
-import { ClientesService } from '../../../services/clientes';
-import { avisarErroUsuario } from '../../../services/user-feedback.service';
+import {
+  BlingVendaCelular,
+  BlingVendaCelularDesconto,
+  BlingVendaCelularService,
+} from '../../../services/bling-venda-celular.service';
+import { AppAuthService } from '../../../services/app-auth';
+import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
 import { formatarCpfCnpj, apenasDigitos } from '../../../utils/contato-validacao';
 
 @Component({
@@ -15,9 +19,14 @@ import { formatarCpfCnpj, apenasDigitos } from '../../../utils/contato-validacao
     <div class="page">
       <div class="page-header">
         <h2>Consultar Cliente Desconto</h2>
+        <div class="acoes" *ngIf="isAdmin">
+          <button type="button" class="secundario" (click)="sincronizar()" [disabled]="sincronizando">
+            {{ sincronizando ? 'Importando…' : 'Importar vendas do Bling' }}
+          </button>
+        </div>
       </div>
       <p class="hint">
-        Aparelhos comercializados pela Mundo Smart têm desconto na assistência técnica.
+        Aparelhos novos e iPhones usados vendidos pela Mundo Smart (Bling) têm desconto na assistência.
         O desconto é garantido pelo <strong>CPF atrelado ao IMEI</strong> do aparelho.
       </p>
 
@@ -44,50 +53,118 @@ import { formatarCpfCnpj, apenasDigitos } from '../../../utils/contato-validacao
       </form>
 
       <p *ngIf="erro" class="erro">{{ erro }}</p>
-      <p class="aviso" *ngIf="imei && buscou">
-        A consulta pelo IMEI (vínculo com o CPF) entra neste fluxo em breve.
-      </p>
-      <p *ngIf="!carregando && buscou && clientes.length === 0 && !erro">
-        Nenhum cliente encontrado para essa consulta.
+
+      <div class="resultado" *ngIf="!carregando && resultado" [class.ok]="resultado.elegivel" [class.off]="!resultado.elegivel">
+        <strong>{{ resultado.elegivel ? 'Desconto liberado' : 'Sem desconto automático' }}</strong>
+        <p>{{ resultado.motivo }}</p>
+        <p *ngIf="resultado.elegivel">Percentual: <strong>{{ resultado.descontoPercentual | number:'1.0-2' }}%</strong></p>
+      </div>
+
+      <p *ngIf="!carregando && buscou && !resultado?.vendas?.length && !erro">
+        Nenhuma venda importada do Bling para essa consulta.
       </p>
 
-      <table class="data-grid" *ngIf="!carregando && clientes.length > 0">
+      <table class="data-grid" *ngIf="!carregando && vendasVisiveis.length > 0">
         <thead>
           <tr>
-            <th>Nome</th>
-            <th>CPF/CNPJ</th>
-            <th>Telefone</th>
+            <th>Data</th>
+            <th>Cliente</th>
+            <th>CPF</th>
+            <th>Aparelho</th>
             <th>IMEI</th>
-            <th></th>
+            <th>Tipo</th>
+            <th>Pedido</th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let c of clientes">
-            <td>{{ c.nome }}</td>
-            <td>{{ c.cpfCnpj || '-' }}</td>
-            <td>{{ c.celular || c.telefone || '-' }}</td>
-            <td>—</td>
-            <td><a *ngIf="c.id" [routerLink]="['/clientes', c.id]">Abrir cadastro</a></td>
+          <tr *ngFor="let v of vendasVisiveis">
+            <td>{{ v.dataVenda | date:'dd/MM/yyyy' }}</td>
+            <td>{{ v.clienteNome || '-' }}</td>
+            <td>{{ formatarDoc(v.clienteCpf) }}</td>
+            <td>{{ v.produtoNome || '-' }}</td>
+            <td>{{ v.imei || '-' }}</td>
+            <td>{{ rotuloTipo(v.tipo) }}</td>
+            <td>{{ v.pedidoNumero || '-' }}</td>
           </tr>
         </tbody>
       </table>
+
+      <section class="recentes" *ngIf="isAdmin">
+        <h3>Últimas vendas importadas</h3>
+        <p class="hint" *ngIf="!recentes.length && !carregandoRecentes">Nenhuma venda importada ainda. Use «Importar vendas do Bling».</p>
+        <table class="data-grid" *ngIf="recentes.length">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Cliente</th>
+              <th>CPF</th>
+              <th>Aparelho</th>
+              <th>IMEI</th>
+              <th>Tipo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let v of recentes">
+              <td>{{ v.dataVenda | date:'dd/MM/yyyy' }}</td>
+              <td>{{ v.clienteNome || '-' }}</td>
+              <td>{{ formatarDoc(v.clienteCpf) }}</td>
+              <td>{{ v.produtoNome || '-' }}</td>
+              <td>{{ v.imei || '-' }}</td>
+              <td>{{ rotuloTipo(v.tipo) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="hint">
+          Categoria e percentual ficam em
+          <a routerLink="/configuracoes/bling">Configurações → Bling</a>.
+        </p>
+      </section>
     </div>
   `,
   styles: [`
-    .hint { color: #64748b; font-size: 13px; margin: 0 0 16px; max-width: 640px; line-height: 1.45; }
-    .aviso { color: #64748b; font-size: 13px; margin: 0 0 12px; }
-    td a { color: #1d4ed8; font-weight: 600; text-decoration: none; }
+    .page-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .acoes { display: flex; gap: 8px; }
+    .secundario { background: #fff; color: #0d0d0d; border: 1px solid #cbd5e1; }
+    .hint { color: #64748b; font-size: 13px; margin: 0 0 16px; max-width: 720px; line-height: 1.45; }
+    .erro { color: #b91c1c; margin-bottom: 12px; }
+    .resultado {
+      margin: 0 0 16px; padding: 12px 14px; border-radius: 10px; font-size: 13px; line-height: 1.45; max-width: 720px;
+    }
+    .resultado.ok { background: #dcfce7; border: 1px solid #86efac; color: #166534; }
+    .resultado.off { background: #f8fafc; border: 1px solid #e2e8f0; color: #334155; }
+    .resultado p { margin: 6px 0 0; }
+    .recentes { margin-top: 28px; }
+    .recentes h3 { font-size: 15px; margin: 0 0 10px; }
+    td a, .hint a { color: #1d4ed8; font-weight: 600; text-decoration: none; }
   `],
 })
-export class ConsultarClienteDescontoPage {
+export class ConsultarClienteDescontoPage implements OnInit {
   cpf = '';
   imei = '';
   carregando = false;
+  sincronizando = false;
+  carregandoRecentes = false;
   buscou = false;
   erro = '';
-  clientes: BlingContato[] = [];
+  resultado: BlingVendaCelularDesconto | null = null;
+  recentes: BlingVendaCelular[] = [];
 
-  constructor(private clientesApi: ClientesService) {}
+  constructor(
+    private api: BlingVendaCelularService,
+    private appAuth: AppAuthService,
+  ) {}
+
+  get isAdmin(): boolean {
+    return this.appAuth.isAdmin();
+  }
+
+  get vendasVisiveis(): BlingVendaCelular[] {
+    return this.resultado?.vendas ?? [];
+  }
+
+  ngOnInit(): void {
+    if (this.isAdmin) this.carregarRecentes();
+  }
 
   onCpfChange(valor: string): void {
     this.cpf = formatarCpfCnpj(valor);
@@ -95,6 +172,16 @@ export class ConsultarClienteDescontoPage {
 
   onImeiChange(valor: string): void {
     this.imei = apenasDigitos(valor).slice(0, 15);
+  }
+
+  formatarDoc(valor?: string): string {
+    return formatarCpfCnpj(valor) || '—';
+  }
+
+  rotuloTipo(tipo?: string): string {
+    if (tipo === 'iphone_usado') return 'iPhone usado';
+    if (tipo === 'novo') return 'Novo';
+    return tipo || '—';
   }
 
   consultar(): void {
@@ -108,22 +195,49 @@ export class ConsultarClienteDescontoPage {
     this.carregando = true;
     this.erro = '';
     this.buscou = true;
-    this.clientes = [];
+    this.resultado = null;
 
-    if (!cpf) {
-      this.carregando = false;
-      return;
-    }
-
-    this.clientesApi.listar(cpf).subscribe({
-      next: lista => {
-        this.clientes = lista ?? [];
+    this.api.consultarDesconto(cpf, imei).subscribe({
+      next: res => {
+        this.resultado = res;
         this.carregando = false;
       },
-      error: () => {
-        this.clientes = [];
+      error: err => {
         this.carregando = false;
-        this.erro = 'Não foi possível consultar o cliente.';
+        this.erro = err?.error?.erro || 'Não foi possível consultar o desconto.';
+      },
+    });
+  }
+
+  sincronizar(): void {
+    this.sincronizando = true;
+    this.erro = '';
+    this.api.sincronizar({ historicoCompleto: this.recentes.length === 0 }).subscribe({
+      next: res => {
+        this.sincronizando = false;
+        if (res.ok) {
+          avisarSucessoUsuario(`${res.importadas} novas, ${res.atualizadas} atualizadas.`);
+        } else {
+          this.erro = res.aviso || 'Importação sem dados novos.';
+        }
+        this.carregarRecentes();
+      },
+      error: err => {
+        this.sincronizando = false;
+        this.erro = err?.error?.erro || 'Não foi possível importar as vendas do Bling.';
+      },
+    });
+  }
+
+  private carregarRecentes(): void {
+    this.carregandoRecentes = true;
+    this.api.listar().subscribe({
+      next: lista => {
+        this.recentes = lista ?? [];
+        this.carregandoRecentes = false;
+      },
+      error: () => {
+        this.carregandoRecentes = false;
       },
     });
   }

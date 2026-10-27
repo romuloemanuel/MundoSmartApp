@@ -24,6 +24,7 @@ public interface IPaymobiVendaRepository
     Task<int> AplicarCustoAparelhoAsync(decimal custo, bool somenteSemCusto, CancellationToken cancellationToken = default);
     Task<int> ConcretizarTodasAsync(CancellationToken cancellationToken = default);
     Task<int> AplicarStatusCobrancaPadraoAsync(CancellationToken cancellationToken = default);
+    Task SubstituirGestaoAsync(PaymobiVendaData item, CancellationToken cancellationToken = default);
 }
 
 public class PaymobiVendaRepository : IPaymobiVendaRepository
@@ -53,6 +54,15 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
             new CreateIndexModel<PaymobiVendaData>(
                 Builders<PaymobiVendaData>.IndexKeys.Ascending(x => x.PaymobiSellId),
                 new CreateIndexOptions { Sparse = true }),
+            cancellationToken: cancellationToken);
+        await _col.Indexes.CreateOneAsync(
+            new CreateIndexModel<PaymobiVendaData>(
+                Builders<PaymobiVendaData>.IndexKeys.Ascending(x => x.TipoCobranca)),
+            cancellationToken: cancellationToken);
+        await _col.Indexes.CreateOneAsync(
+            new CreateIndexModel<PaymobiVendaData>(
+                Builders<PaymobiVendaData>.IndexKeys.Ascending(x => x.NaoCobrarMais)
+                    .Ascending(x => x.ProximaAcaoEm)),
             cancellationToken: cancellationToken);
     }
 
@@ -348,6 +358,8 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
         if (item.DataVenda == default) item.DataVenda = DateTime.UtcNow;
         item.Cobrancas ??= [];
         item.Boletos ??= [];
+        item.AcoesCobranca ??= [];
+        item.TipoCobranca = PaymobiTipoCobranca.NormalizarOuVazio(item.TipoCobranca);
         return item;
     }
 
@@ -535,6 +547,29 @@ public class PaymobiVendaRepository : IPaymobiVendaRepository
             if (result.ModifiedCount > 0) n++;
         }
         return n;
+    }
+
+    public async Task SubstituirGestaoAsync(PaymobiVendaData item, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(item.Id))
+            throw new ArgumentException("Venda sem identificador.");
+        item.AcoesCobranca ??= [];
+        item.TipoCobranca = PaymobiTipoCobranca.NormalizarOuVazio(item.TipoCobranca);
+        item.AtualizadoEm = DateTime.UtcNow;
+        var result = await _col.UpdateOneAsync(
+            Builders<PaymobiVendaData>.Filter.Eq(x => x.Id, item.Id),
+            Builders<PaymobiVendaData>.Update
+                .Set(x => x.TipoCobranca, item.TipoCobranca)
+                .Set(x => x.NaoCobrarMais, item.NaoCobrarMais)
+                .Set(x => x.SonecaAte, item.SonecaAte)
+                .Set(x => x.ProximaAcaoEm, item.ProximaAcaoEm)
+                .Set(x => x.UltimaAcaoEm, item.UltimaAcaoEm)
+                .Set(x => x.UltimaAcaoTipo, item.UltimaAcaoTipo ?? "")
+                .Set(x => x.AcoesCobranca, item.AcoesCobranca)
+                .Set(x => x.AtualizadoEm, item.AtualizadoEm),
+            cancellationToken: cancellationToken);
+        if (result.MatchedCount == 0)
+            throw new KeyNotFoundException();
     }
 
     /// <summary>

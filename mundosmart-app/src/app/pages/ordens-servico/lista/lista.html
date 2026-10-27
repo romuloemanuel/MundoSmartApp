@@ -1,8 +1,22 @@
 <div class="page">
   <div class="page-header">
     <h2>Ordens de Servi&ccedil;o</h2>
-    <button (click)="nova()">+ Nova OS</button>
+    <div class="page-header-acoes">
+      <button
+        type="button"
+        class="btn-exportar-pdf"
+        (click)="exportarPdf()"
+        [disabled]="carregando || exportandoPdf || totalRegistros === 0"
+        title="Abre a lista filtrada para imprimir ou salvar em PDF"
+      >
+        {{ exportandoPdf ? 'Gerando...' : 'Exportar PDF' }}
+      </button>
+      <button (click)="nova()">+ Nova OS</button>
+    </div>
   </div>
+
+  <app-pendencia-cadastro-cliente />
+  <app-atalho-cobranca-paymobi />
 
   <div class="filtros-bar">
     <input

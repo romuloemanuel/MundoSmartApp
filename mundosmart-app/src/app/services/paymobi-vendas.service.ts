@@ -88,6 +88,97 @@ export interface PaymobiVenda {
   valorBoletosPagos?: number;
 }
 
+export type PaymobiTipoCobranca =
+  | 'alerta_vencimento'
+  | 'cobranca_manual'
+  | 'cobranca_automatica'
+  | 'reneg_auto'
+  | 'reneg_manual'
+  | 'extrajudicial';
+
+export const TIPOS_COBRANCA: { id: PaymobiTipoCobranca; rotulo: string }[] = [
+  { id: 'alerta_vencimento', rotulo: 'Alerta de vencimento' },
+  { id: 'cobranca_manual', rotulo: 'Cobrança manual' },
+  { id: 'cobranca_automatica', rotulo: 'Cobrança automática' },
+  { id: 'reneg_auto', rotulo: 'Renegociação/Devolução Aut.' },
+  { id: 'reneg_manual', rotulo: 'Renegociação/Devolução Manual' },
+  { id: 'extrajudicial', rotulo: 'Cobrança extrajudicial' },
+];
+
+export interface PaymobiCobrancaAcao {
+  id: string;
+  em: string;
+  tipo: string;
+  modo?: string;
+  observacao?: string;
+  vencimentoRef?: string;
+  boletosAtraso?: number;
+  operador?: string;
+  enviada?: boolean;
+}
+
+export interface PaymobiCobrancaItem {
+  id: string;
+  clienteNome: string;
+  clienteTelefone?: string;
+  clienteCpf?: string;
+  aparelho?: string;
+  aparelhoImei?: string;
+  contratoNumero?: string;
+  dataVenda?: string;
+  status?: PaymobiStatus;
+  parcelasAtraso: number;
+  boletosPagos?: number;
+  valorDevido?: number;
+  valorParcela?: number;
+  proximoVencimento?: string;
+  vencimentoAtrasado?: string;
+  tipoCobranca: PaymobiTipoCobranca | '';
+  tipoCobrancaRotulo?: string;
+  naoCobrarMais: boolean;
+  sonecaAte?: string;
+  sonecaAtiva?: boolean;
+  proximaAcaoEm?: string;
+  proximaAcaoRotulo?: string;
+  filaHoje?: boolean;
+  filaAlerta?: boolean;
+  filaCobranca?: boolean;
+  pendenteEnvio?: boolean;
+  motivoPausa?: string;
+  mensagemSugerida?: string;
+  linkBoleto?: string;
+  acoes?: PaymobiCobrancaAcao[];
+}
+
+export interface PaymobiCobrancaResumo {
+  contratos: number;
+  acaoHoje: number;
+  alertaHoje: number;
+  cobrancaHoje: number;
+  soneca: number;
+  naoCobrar: number;
+  atrasados: number;
+  pendenteEnvio: number;
+}
+
+export interface PaymobiCobrancaLista {
+  resumo: PaymobiCobrancaResumo;
+  itens: PaymobiCobrancaItem[];
+}
+
+export interface PaymobiCobrancaConfig {
+  alertaHabilitado: boolean;
+  alertaHora: number;
+  alertaMaxAtraso: number;
+  alertaMensagem: string;
+  autoHabilitada: boolean;
+  autoDiasAposVencimento: number;
+  autoRepetirDias: number;
+  autoHora: number;
+  autoSoDiasUteis: boolean;
+  autoMensagem: string;
+}
+
 export interface PaymobiConfig {
   email: string;
   senhaConfigurada: boolean;
@@ -177,5 +268,45 @@ export class PaymobiVendasService {
     senha?: string;
   }): Observable<PaymobiConfig> {
     return this.http.put<PaymobiConfig>(`${environment.apiUrl}/paymobi/custos`, body);
+  }
+
+  cobranca(params?: { fila?: string; tipo?: string; termo?: string }): Observable<PaymobiCobrancaLista> {
+    let httpParams = new HttpParams();
+    if (params?.fila) httpParams = httpParams.set('fila', params.fila);
+    if (params?.tipo) httpParams = httpParams.set('tipo', params.tipo);
+    if (params?.termo?.trim()) httpParams = httpParams.set('termo', params.termo.trim());
+    return this.http.get<PaymobiCobrancaLista>(`${environment.apiUrl}/paymobi/cobranca`, { params: httpParams });
+  }
+
+  cobrancaResumo(): Observable<PaymobiCobrancaResumo> {
+    return this.http.get<PaymobiCobrancaResumo>(`${environment.apiUrl}/paymobi/cobranca/resumo`);
+  }
+
+  cobrancaConfig(): Observable<PaymobiCobrancaConfig> {
+    return this.http.get<PaymobiCobrancaConfig>(`${environment.apiUrl}/paymobi/cobranca/config`);
+  }
+
+  salvarCobrancaConfig(body: PaymobiCobrancaConfig): Observable<PaymobiCobrancaConfig> {
+    return this.http.put<PaymobiCobrancaConfig>(`${environment.apiUrl}/paymobi/cobranca/config`, body);
+  }
+
+  atualizarGestaoCobranca(
+    id: string,
+    body: {
+      tipoCobranca?: string;
+      naoCobrarMais?: boolean;
+      sonecaAte?: string | null;
+      limparSoneca?: boolean;
+      observacao?: string;
+    },
+  ): Observable<PaymobiCobrancaItem> {
+    return this.http.put<PaymobiCobrancaItem>(`${this.api}/${id}/gestao-cobranca`, body);
+  }
+
+  registrarAcaoCobranca(
+    id: string,
+    body: { tipo: string; observacao?: string; enviada?: boolean },
+  ): Observable<PaymobiCobrancaItem> {
+    return this.http.post<PaymobiCobrancaItem>(`${this.api}/${id}/acao-cobranca`, body);
   }
 }

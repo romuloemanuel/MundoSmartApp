@@ -50,11 +50,45 @@ public class ClienteLocalData
     [BsonElement("contatos")]
     public List<ContatoPrincipalLocal> Contatos { get; set; } = [];
 
+    /// <summary>Aparelhos comprados na loja (vendas Bling de celular) para desconto de manutenção.</summary>
+    [BsonElement("aparelhosComprados")]
+    public List<ClienteAparelhoComprado> AparelhosComprados { get; set; } = [];
+
     [BsonElement("criadoEm")]
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
 
     [BsonElement("atualizadoEm")]
     public DateTime AtualizadoEm { get; set; } = DateTime.UtcNow;
+}
+
+public class ClienteAparelhoComprado
+{
+    [BsonElement("vendaId")]
+    public string? VendaId { get; set; }
+
+    [BsonElement("imei")]
+    public string Imei { get; set; } = string.Empty;
+
+    [BsonElement("marca")]
+    public string Marca { get; set; } = string.Empty;
+
+    [BsonElement("modelo")]
+    public string Modelo { get; set; } = string.Empty;
+
+    [BsonElement("marcaId")]
+    public string? MarcaId { get; set; }
+
+    [BsonElement("modeloId")]
+    public string? ModeloId { get; set; }
+
+    [BsonElement("cor")]
+    public string Cor { get; set; } = string.Empty;
+
+    [BsonElement("configuracao")]
+    public string Configuracao { get; set; } = string.Empty;
+
+    [BsonElement("dataVenda")]
+    public DateTime DataVenda { get; set; }
 }
 
 public class ContatoPrincipalLocal

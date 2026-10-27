@@ -140,12 +140,18 @@
             name="situacao"
             [class.situacao-aguardando-cliente]="os.situacao === situacaoAguardandoCliente"
             [class.situacao-aguardando-peca]="os.situacao === 'Aguardando Peça'"
+            [class.situacao-retirado-pagamento]="os.situacao === situacaoRetiradoPagamento"
+            [class.situacao-reparo-placa]="os.situacao === situacaoReparoPlaca"
+            [class.situacao-celular-loja]="os.situacao === situacaoCelularLoja"
             required
           >
             <option *ngFor="let s of situacoesDisponiveis" [ngValue]="s">{{ s }}</option>
           </select>
           <span class="campo-hint" *ngIf="os.situacao === situacaoPadraoAtual">Padr&atilde;o</span>
           <span class="campo-hint" *ngIf="os.situacao === situacaoAguardandoCliente">Servi&ccedil;o pronto — aguardando retirada</span>
+          <span class="campo-hint" *ngIf="os.situacao === situacaoRetiradoPagamento">Aparelho retirado — pagamento pendente</span>
+          <span class="campo-hint" *ngIf="os.situacao === situacaoReparoPlaca">Fora do board padr&atilde;o — t&eacute;cnico R&ocirc;mulo</span>
+          <span class="campo-hint" *ngIf="os.situacao === situacaoCelularLoja">Aparelho da Mundo Smart — fora da fila de conserto</span>
           <span class="campo-hint" *ngIf="os.situacao === 'Aberto' || os.situacao === 'Em transporte'">
             Tempo de urg&ecirc;ncia inicia em &ldquo;Na assist&ecirc;ncia&rdquo;
           </span>
@@ -395,6 +401,10 @@
           <p class="campo-hint" *ngIf="os.marcaNome && os.modeloNome">
             Marca: <strong>{{ os.marcaNome }}</strong>
           </p>
+          <div class="os-aviso-passivel" *ngIf="mostrarAvisoPassivel">
+            <strong>Passível de Desconto, averiguar IMEI e documento do cliente</strong>
+            <div *ngIf="passivelAparelhoLabel">Aparelho comprado: {{ passivelAparelhoLabel }}</div>
+          </div>
         </div>
       </div>
 
@@ -420,9 +430,29 @@
             name="imei"
             placeholder="000000000000000"
             inputmode="numeric"
+            (ngModelChange)="onImeiChange($event)"
           />
           <span class="campo-hint">IMEI tem 15 dígitos.</span>
           <span class="campo-aviso" *ngIf="alertaImei">{{ alertaImei }}</span>
+          <div
+            class="os-aviso-desconto"
+            *ngIf="descontoConsulta"
+            [class.off]="!os.descontoManutencaoElegivel"
+          >
+            <strong *ngIf="os.descontoManutencaoElegivel">Desconto de {{ os.descontoManutencaoPercentual | number:'1.0-2' }}% na manutenção</strong>
+            <strong *ngIf="!os.descontoManutencaoElegivel">Sem desconto automático</strong>
+            <div>{{ descontoConsulta.motivo }}</div>
+            <div *ngIf="os.descontoManutencaoProduto">
+              Aparelho: {{ os.descontoManutencaoProduto }}
+            </div>
+            <button
+              type="button"
+              *ngIf="podeAplicarDescontoManutencao"
+              (click)="aplicarDescontoManutencaoNosItens()"
+            >
+              Aplicar desconto nos itens
+            </button>
+          </div>
         </div>
         <div class="form-group">
           <label>N&uacute;mero de S&eacute;rie</label>
@@ -557,12 +587,15 @@
           <select
             [(ngModel)]="os.tecnicoNome"
             name="tecnicoNome"
-            [disabled]="somenteLeitura"
+            [disabled]="somenteLeitura || !!tecnicoFixoAtual"
           >
             <option value="">Selecione...</option>
             <option *ngFor="let t of opcoesTecnico" [value]="t.nome">{{ t.nome }}</option>
           </select>
-          <p class="campo-hint" *ngIf="tecnicoObrigatorio && !somenteLeitura">
+          <p class="campo-hint" *ngIf="tecnicoFixoAtual && !somenteLeitura">
+            Reparo avan&ccedil;ado em placa fica com {{ tecnicoFixoAtual }}.
+          </p>
+          <p class="campo-hint" *ngIf="tecnicoObrigatorio && !tecnicoFixoAtual && !somenteLeitura">
             Obrigatório para Aguardando Cliente Retirar, Concluído e Cancelado.
           </p>
           <p class="campo-erro" *ngIf="temErroCampo('tecnicoNome')">{{ mensagemErroCampo('tecnicoNome') }}</p>

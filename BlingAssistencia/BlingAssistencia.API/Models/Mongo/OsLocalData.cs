@@ -207,6 +207,24 @@ public class OsLocalData
     [BsonElement("senhaDispositivo")]
     public string? SenhaDispositivo { get; set; }
 
+    [BsonElement("descontoManutencaoElegivel")]
+    public bool DescontoManutencaoElegivel { get; set; }
+
+    [BsonElement("descontoManutencaoPercentual")]
+    public decimal? DescontoManutencaoPercentual { get; set; }
+
+    [BsonElement("descontoManutencaoAplicado")]
+    public bool DescontoManutencaoAplicado { get; set; }
+
+    [BsonElement("descontoManutencaoVendaId")]
+    public string? DescontoManutencaoVendaId { get; set; }
+
+    [BsonElement("descontoManutencaoProduto")]
+    public string? DescontoManutencaoProduto { get; set; }
+
+    [BsonElement("descontoManutencaoDataVenda")]
+    public DateTime? DescontoManutencaoDataVenda { get; set; }
+
     [BsonElement("intakeToken")]
     public string? IntakeToken { get; set; }
 

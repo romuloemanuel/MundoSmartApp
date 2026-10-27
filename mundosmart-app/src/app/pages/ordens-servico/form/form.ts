@@ -43,13 +43,20 @@ import {
 import {
   ajustarSituacaoParaLoja,
   situacaoPadraoPorLoja,
-  situacoesDisponiveisPorLoja,
+  situacoesDisponiveisParaCliente,
   osSituacaoAguardandoPeca,
   osSituacaoExigeTecnico,
   osPrecisaEscolherTecnico,
   prazoPecaPadraoDatetimeLocal,
+  tecnicoFixoDaSituacao,
+  resolverTecnicoFixo,
   PRAZO_AGUARDANDO_PECA_DIAS_PADRAO,
   SITUACAO_OS_AGUARDANDO_CLIENTE,
+  SITUACAO_OS_RETIRADO_AGUARDANDO_PAGAMENTO,
+  SITUACAO_OS_REPARO_AVANCADO_PLACA,
+  SITUACAO_OS_CELULAR_DA_LOJA,
+  osSituacaoCelularDaLoja,
+  clienteEhLojaMundoSmart,
 } from '../../../config/os-situacao.config';
 import {
   LOJA_OS_PADRAO,
@@ -74,8 +81,14 @@ import {
 import { agruparPecasPorCategoria, categoriaUsaCoresPorModelo, labelPecaCatalogo } from '../../../config/peca-categoria.config';
 import { agoraDatetimeLocalBrasil, formatarDatetimeLocalBrasil, paraIsoOperacionalBrasil } from '../../../utils/horario-brasil.util';
 import { mensagemAlertaImei } from '../../../utils/imei.util';
+import { apenasDigitos } from '../../../utils/contato-validacao';
 import { AcrescimoEstoqueConfigService } from '../../../services/acrescimo-estoque-config.service';
-import { avisarAvisoUsuario, avisarErroUsuario } from '../../../services/user-feedback.service';
+import { avisarAvisoUsuario, avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
+import {
+  BlingVendaCelularDesconto,
+  BlingVendaCelularPassivel,
+  BlingVendaCelularService,
+} from '../../../services/bling-venda-celular.service';
 
 type ContatoAlternativoOpcao = {
   indice: number;
@@ -251,6 +264,24 @@ type ContatoAlternativoOpcao = {
       color: #9a3412;
       font-weight: 600;
     }
+    select.situacao-retirado-pagamento {
+      background: #ccfbf1;
+      border-color: #5eead4;
+      color: #115e59;
+      font-weight: 600;
+    }
+    select.situacao-reparo-placa {
+      background: #e0e7ff;
+      border-color: #a5b4fc;
+      color: #3730a3;
+      font-weight: 600;
+    }
+    select.situacao-celular-loja {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #475569;
+      font-weight: 600;
+    }
     .os-itens-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
     .os-item-estoque-ok { font-size: 11px; color: #166534; }
     .os-item-estoque-pendente { font-size: 11px; color: #b45309; }
@@ -335,6 +366,35 @@ type ContatoAlternativoOpcao = {
       line-height: 1.45;
     }
     .os-aviso-orcamento strong { color: #1d4ed8; }
+    .os-aviso-desconto {
+      margin: 8px 0 0;
+      padding: 10px 12px;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      background: #dcfce7;
+      color: #166534;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .os-aviso-desconto.off {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+      color: #475569;
+    }
+    .os-aviso-desconto button {
+      margin-top: 8px;
+    }
+    .os-aviso-passivel {
+      margin: 8px 0 0;
+      padding: 10px 12px;
+      border: 1px solid #fdba74;
+      border-radius: 8px;
+      background: #fff7ed;
+      color: #9a3412;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .os-aviso-passivel strong { color: #c2410c; }
     .justificativas-atraso-lista {
       list-style: none;
       margin: 0 0 10px;
@@ -415,6 +475,9 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   novoAcessorio = '';
   novaJustificativaAtraso = '';
   clienteCompleto?: BlingContato;
+  descontoConsulta: BlingVendaCelularDesconto | null = null;
+  descontoConsultando = false;
+  passivelDesconto: BlingVendaCelularPassivel | null = null;
   modalContatoAlternativoAberto = false;
   modalIntakeAberto = false;
   /** Após criar OS: ao fechar o intake, pergunta impressão e nova OS. */
@@ -444,6 +507,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   private modoRota: 'nova' | 'editar' | 'visualizar' | null = null;
   private chavePrefillNova = '';
   private osRequestSub?: Subscription;
+  private descontoSub?: Subscription;
+  private descontoTimer: ReturnType<typeof setTimeout> | null = null;
+  private passivelSub?: Subscription;
+  private passivelTimer: ReturnType<typeof setTimeout> | null = null;
   private situacaoAoCarregar = '';
   private conclusaoConfirmada = false;
   /** Evita que combineLate overwrite um prefill já aplicado. */
@@ -490,9 +557,16 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   readonly lojaPadrao = LOJA_OS_PADRAO;
   readonly prazoPecaDiasPadrao = PRAZO_AGUARDANDO_PECA_DIAS_PADRAO;
   readonly situacaoAguardandoCliente = SITUACAO_OS_AGUARDANDO_CLIENTE;
+  readonly situacaoRetiradoPagamento = SITUACAO_OS_RETIRADO_AGUARDANDO_PAGAMENTO;
+  readonly situacaoReparoPlaca = SITUACAO_OS_REPARO_AVANCADO_PLACA;
+  readonly situacaoCelularLoja = SITUACAO_OS_CELULAR_DA_LOJA;
 
   get situacoesDisponiveis(): string[] {
-    return situacoesDisponiveisPorLoja(this.os.lojaOrigem);
+    return situacoesDisponiveisParaCliente(
+      this.os.lojaOrigem,
+      this.os.contato?.nome,
+      this.os.situacao,
+    );
   }
 
   get situacaoPadraoAtual(): string {
@@ -562,6 +636,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
 
   get tecnicoObrigatorio(): boolean {
     return osSituacaoExigeTecnico(this.os.situacao);
+  }
+
+  get tecnicoFixoAtual(): string | null {
+    return tecnicoFixoDaSituacao(this.os.situacao);
   }
 
   /** Ativos + valor atual da OS se ainda não estiver na lista (legado). */
@@ -640,6 +718,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     private orcamentoPrefill: OrcamentoOsPrefillService,
     private appAuth: AppAuthService,
     private acrescimoEstoque: AcrescimoEstoqueConfigService,
+    private vendasCelular: BlingVendaCelularService,
     private cdr: ChangeDetectorRef,
   ) {
     // getCurrentNavigation() só funciona no constructor (em ngOnInit já é null).
@@ -764,6 +843,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.osRequestSub?.unsubscribe();
+    this.descontoSub?.unsubscribe();
+    if (this.descontoTimer) clearTimeout(this.descontoTimer);
+    this.passivelSub?.unsubscribe();
+    if (this.passivelTimer) clearTimeout(this.passivelTimer);
   }
 
   /** Assistência vinculada: campo travado (só Admin/Root escolhe livremente). */
@@ -1197,6 +1280,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     }
     if (this.os.modeloId) this.carregarPecasModelo(this.os.modeloId);
     this.sincronizarValorParcelaEditavelOs();
+    this.agendarConsultaDesconto();
+    this.agendarConsultaPassivel();
   }
 
   private normalizarItemOs(item: BlingOrdemServicoItem): BlingOrdemServicoItem {
@@ -1229,12 +1314,18 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
 
   onClienteSelecionado(cliente: BlingContato | null): void {
     this.os.contato = this.montarContatoRefOs(cliente);
+    if (osSituacaoCelularDaLoja(this.os.situacao) && !clienteEhLojaMundoSmart(cliente?.nome)) {
+      this.os.situacao = situacaoPadraoPorLoja(this.os.lojaOrigem);
+    }
 
     if (cliente?.id != null) {
       this.os.preferenciaContatoSelecionado = false;
       this.aplicarClienteParaAviso(cliente);
     } else {
+      this.os.cpfCnpj = undefined;
       this.limparContatosAlternativos();
+      this.agendarConsultaDesconto();
+      this.agendarConsultaPassivel();
     }
   }
 
@@ -1305,6 +1396,9 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   ): void {
     this.clienteCompleto = cliente;
     this.contatosAlternativosDisponiveis = this.montarOpcoesContato(cliente);
+    if (cliente.cpfCnpj) this.os.cpfCnpj = cliente.cpfCnpj;
+    this.agendarConsultaDesconto();
+    this.agendarConsultaPassivel();
 
     const indice = this.resolverIndiceContato(opts?.indiceSalvo);
     if (indice !== undefined) {
@@ -1445,6 +1539,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     this.os.modeloNome = item?.nome;
     this.os.marcaId = item?.marcaId;
     this.os.marcaNome = item?.marcaNome;
+    this.agendarConsultaPassivel();
     if (!item) {
       this.os.marcaId = undefined;
       this.os.marcaNome = undefined;
@@ -1807,9 +1902,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     const loja = this.os.lojaOrigem;
     item.valorSugeridoMinimo = this.acrescimoEstoque.aplicarNoSugerido(minimo, loja);
     item.valorSugeridoTroca = this.acrescimoEstoque.aplicarNoSugerido(troca, loja);
-    const cobrado = item.valorSugeridoTroca ?? item.valorSugeridoMinimo ?? 0;
+    const cobrado = this.comDescontoManutencao(item.valorSugeridoTroca ?? item.valorSugeridoMinimo ?? 0);
     item.valorAcontado = cobrado;
     item.valorUnitario = cobrado;
+    if (this.os.descontoManutencaoElegivel) this.os.descontoManutencaoAplicado = true;
   }
 
   private reaplicarAcrescimoEstoqueNosItens(): void {
@@ -2013,6 +2109,121 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     return mensagemAlertaImei(this.os.imei);
   }
 
+  onImeiChange(valor: string): void {
+    this.os.imei = apenasDigitos(valor).slice(0, 15);
+    this.agendarConsultaDesconto();
+  }
+
+  get podeAplicarDescontoManutencao(): boolean {
+    return !!this.os.descontoManutencaoElegivel
+      && !this.os.descontoManutencaoAplicado
+      && !this.somenteLeitura
+      && (this.os.itens ?? []).some(i => (i.valorAcontado ?? i.valorUnitario ?? 0) > 0);
+  }
+
+  get mostrarAvisoPassivel(): boolean {
+    return !!this.passivelDesconto?.passivel && !this.os.descontoManutencaoElegivel;
+  }
+
+  get passivelAparelhoLabel(): string {
+    const a = this.passivelDesconto?.aparelhos?.[0];
+    if (!a) return '';
+    const nome = [a.marca, a.modelo].filter(s => !!s?.trim()).join(' ') || a.produtoNome || '';
+    const extra = [a.cor, a.configuracao].filter(s => !!s?.trim()).join(' · ');
+    return extra ? `${nome} · ${extra}` : nome;
+  }
+
+  aplicarDescontoManutencaoNosItens(): void {
+    const pct = Number(this.os.descontoManutencaoPercentual) || 0;
+    if (pct <= 0 || this.os.descontoManutencaoAplicado) return;
+    for (const item of this.os.itens ?? []) {
+      const atual = Number(item.valorAcontado ?? item.valorUnitario ?? 0) || 0;
+      if (atual <= 0) continue;
+      const novo = this.comDescontoManutencao(atual);
+      item.valorAcontado = novo;
+      item.valorUnitario = novo;
+    }
+    this.os.descontoManutencaoAplicado = true;
+    this.usarSomaItensNasOpcoesPagamento();
+    avisarSucessoUsuario(`Desconto de ${pct}% aplicado na manutenção.`);
+  }
+
+  private comDescontoManutencao(valor: number): number {
+    const pct = Number(this.os.descontoManutencaoPercentual) || 0;
+    if (!this.os.descontoManutencaoElegivel || pct <= 0) return valor;
+    return Math.round(valor * (1 - pct / 100) * 100) / 100;
+  }
+
+  private agendarConsultaDesconto(): void {
+    if (this.descontoTimer) clearTimeout(this.descontoTimer);
+    this.descontoTimer = setTimeout(() => this.consultarDescontoManutencao(), 400);
+  }
+
+  private agendarConsultaPassivel(): void {
+    if (this.passivelTimer) clearTimeout(this.passivelTimer);
+    this.passivelTimer = setTimeout(() => this.consultarPassivelDesconto(), 300);
+  }
+
+  private consultarPassivelDesconto(): void {
+    const clienteId = this.os.contato?.id;
+    const cpf = apenasDigitos(this.os.cpfCnpj || this.clienteCompleto?.cpfCnpj || '');
+    const modeloId = this.os.modeloId?.trim();
+    const modeloNome = this.os.modeloNome?.trim();
+    if ((!clienteId && !cpf) || (!modeloId && !modeloNome)) {
+      this.passivelDesconto = null;
+      return;
+    }
+
+    this.passivelSub?.unsubscribe();
+    this.passivelSub = this.vendasCelular.consultarPassivel({
+      clienteId,
+      cpf,
+      modeloId,
+      modeloNome,
+      marcaNome: this.os.marcaNome,
+    }).subscribe({
+      next: res => {
+        this.passivelDesconto = res?.passivel ? res : null;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.passivelDesconto = null;
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  private consultarDescontoManutencao(): void {
+    const cpf = apenasDigitos(this.os.cpfCnpj || this.clienteCompleto?.cpfCnpj || '');
+    const imei = apenasDigitos(this.os.imei);
+    if (!cpf && !imei) {
+      this.descontoConsulta = null;
+      this.os.descontoManutencaoElegivel = false;
+      return;
+    }
+
+    this.descontoConsultando = true;
+    this.descontoSub?.unsubscribe();
+    this.descontoSub = this.vendasCelular.consultarDesconto(cpf, imei).subscribe({
+      next: res => {
+        this.descontoConsulta = res;
+        this.descontoConsultando = false;
+        this.os.descontoManutencaoElegivel = !!res.elegivel;
+        this.os.descontoManutencaoPercentual = res.descontoPercentual;
+        const venda = res.vendas?.[0];
+        this.os.descontoManutencaoVendaId = venda?.id;
+        this.os.descontoManutencaoProduto = venda?.produtoNome;
+        this.os.descontoManutencaoDataVenda = venda?.dataVenda;
+        if (!res.elegivel) this.os.descontoManutencaoAplicado = false;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.descontoConsultando = false;
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
   valorParcelaPagamento(): number | null {
     const total = this.os.formaPagamento === 'parcelado'
       ? (this.os.valorAPrazo ?? this.os.valorTotalAcordado ?? this.totalOsItens)
@@ -2164,7 +2375,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       this.conclusaoConfirmada = false;
     }
 
-    if (osPrecisaEscolherTecnico(situacaoNormalizada, this.os.tecnicoNome, this.tecnicosAtivos)) {
+    const tecnicoFixo = resolverTecnicoFixo(situacaoNormalizada, this.tecnicosAtivos);
+    if (tecnicoFixo) {
+      this.os.tecnicoNome = tecnicoFixo;
+    } else if (osPrecisaEscolherTecnico(situacaoNormalizada, this.os.tecnicoNome, this.tecnicosAtivos)) {
       const escolhido = await this.tecnicoDialog.open({
         tecnicos: this.tecnicosAtivos,
         tecnicoAtual: this.os.tecnicoNome,
@@ -2325,6 +2539,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   async salvar(event?: Event): Promise<void> {
     if (this.somenteLeitura) return;
     event?.preventDefault();
+    const tecnicoFixo = resolverTecnicoFixo(this.os.situacao, this.tecnicosAtivos);
+    if (tecnicoFixo) this.os.tecnicoNome = tecnicoFixo;
     this.tentouSalvar = true;
     this.errosApiPorCampo = {};
     const validacao = this.validarOs();

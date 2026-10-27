@@ -10,6 +10,17 @@ export interface BlingConfigAdmin {
   consultaProdutosHabilitada: boolean;
   consultaProdutosSyncMinutos: number;
   idCampoPermitePersonalizacao: number;
+  vendasCelularesHabilitada: boolean;
+  vendasCelularesCategoriaIds: string;
+  vendasCelularesCategoriaDescricoes: string;
+  vendasCelularesDescontoPercentual: number;
+  vendasCelularesDiasLookback: number;
+  vendasCelularesDiasHistoricoInicial: number;
+  vendasCelularesSyncHora: number;
+  vendasCelularesPalavrasUsado: string;
+  vendasCelularesPalavrasIphone: string;
+  vendasCelularesUltimaSyncEm?: string | null;
+  vendasCelularesUltimoAviso?: string | null;
   modoLocal: boolean;
   habilitado: boolean;
   tokenConectado: boolean;
@@ -25,6 +36,15 @@ export interface BlingConfigAdminSalvar {
   consultaProdutosHabilitada: boolean;
   consultaProdutosSyncMinutos: number;
   idCampoPermitePersonalizacao: number;
+  vendasCelularesHabilitada: boolean;
+  vendasCelularesCategoriaIds: string;
+  vendasCelularesCategoriaDescricoes: string;
+  vendasCelularesDescontoPercentual: number;
+  vendasCelularesDiasLookback: number;
+  vendasCelularesDiasHistoricoInicial: number;
+  vendasCelularesSyncHora: number;
+  vendasCelularesPalavrasUsado: string;
+  vendasCelularesPalavrasIphone: string;
 }
 
 @Injectable({ providedIn: 'root' })

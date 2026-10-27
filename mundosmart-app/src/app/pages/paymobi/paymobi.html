@@ -2,6 +2,7 @@
   <div class="page-header">
     <h2>Vendas no boleto</h2>
     <div class="acoes-topo">
+      <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi/cobranca">Gerenciar cobrança</a>
       <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/paymobi">Configuração</a>
       <button type="button" (click)="buscarNaPaymobi()" [disabled]="sincronizando">
         {{ sincronizando ? 'Buscando…' : 'Buscar vendas' }}

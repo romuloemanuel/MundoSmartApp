@@ -342,6 +342,7 @@ public class OrdensServicoController : ControllerBase
         {
             os.LojaOrigem = LojaAcessoHelper.AplicarNaCriacao(User, os.LojaOrigem);
             OsOrdemValidacao.Validar(os);
+            os.TecnicoNome = await TecnicoDaSituacaoAsync(os.Situacao, os.TecnicoNome);
             await OsOrdemValidacao.ValidarTecnicoAsync(os.Situacao, os.TecnicoNome, _tecnicos);
             var criado = await _service.CriarAsync(os);
             return CreatedAtAction(nameof(Obter), new { id = criado.Id }, criado);
@@ -368,6 +369,7 @@ public class OrdensServicoController : ControllerBase
             await GarantirAcessoOsAsync(id);
             os.LojaOrigem = LojaAcessoHelper.AplicarNaCriacao(User, os.LojaOrigem);
             OsOrdemValidacao.Validar(os);
+            os.TecnicoNome = await TecnicoDaSituacaoAsync(os.Situacao, os.TecnicoNome);
             await OsOrdemValidacao.ValidarTecnicoAsync(os.Situacao, os.TecnicoNome, _tecnicos);
             var atualizado = await _service.AtualizarAsync(id, os);
             return Ok(atualizado);
@@ -398,9 +400,11 @@ public class OrdensServicoController : ControllerBase
             await GarantirAcessoOsAsync(id);
             var existente = await _localRepo.ObterPorBlingIdAsync(id)
                 ?? throw new KeyNotFoundException($"Ordem de Serviço {id} não encontrada.");
-            var tecnicoNome = !string.IsNullOrWhiteSpace(request.TecnicoNome)
-                ? request.TecnicoNome.Trim()
-                : existente.TecnicoNome;
+            var tecnicoNome = await TecnicoDaSituacaoAsync(
+                request.Situacao,
+                !string.IsNullOrWhiteSpace(request.TecnicoNome)
+                    ? request.TecnicoNome.Trim()
+                    : existente.TecnicoNome);
             await OsOrdemValidacao.ValidarTecnicoAsync(request.Situacao, tecnicoNome, _tecnicos);
             await _service.AlterarSituacaoAsync(
                 id,
@@ -603,6 +607,21 @@ public class OrdensServicoController : ControllerBase
 
     private bool UsuarioEhAdminOuRoot() =>
         User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Root);
+
+    /// <summary>
+    /// Reparo avançado em placa grava o nome cadastrado do técnico Rômulo.
+    /// Nas demais situações o técnico informado segue inalterado.
+    /// </summary>
+    private async Task<string?> TecnicoDaSituacaoAsync(string? situacao, string? tecnicoNome)
+    {
+        if (!OsSituacaoHelper.EhReparoAvancadoPlaca(situacao))
+            return tecnicoNome;
+
+        var ativos = await _tecnicos.ListarAsync(apenasAtivos: true);
+        var cadastrado = ativos.FirstOrDefault(t =>
+            OsSituacaoHelper.NomesEquivalentes(t.Nome, OsSituacaoHelper.TecnicoReparoAvancadoPlaca));
+        return cadastrado?.Nome ?? OsSituacaoHelper.TecnicoReparoAvancadoPlaca;
+    }
 }
 
 public record AlterarSituacaoRequest(

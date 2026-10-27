@@ -24,7 +24,12 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <div class="brand-sub">Assist&ecirc;ncia &amp; Eletr&ocirc;nicos</div>
         </div>
         <nav>
-          <a routerLink="/ordens-servico" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Ordens de Servi&ccedil;o</a>
+          <a
+            routerLink="/ordens-servico"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="matchOsLista"
+            (click)="fecharMenuSeEstreito()"
+          >Ordens de Servi&ccedil;o</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/comissoes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Comiss&otilde;es</a>
           <a routerLink="/painel-tv" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" (click)="fecharMenuSeEstreito()">Painel TV</a>
           <a routerLink="/estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Pe&ccedil;as &amp; Estoque</a>
@@ -52,6 +57,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
             <div class="nav-submenu" *ngIf="submenuCelularesAberto">
               <a routerLink="/vendas-celulares/payjoy" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas Payjoy</a>
               <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas PayMobi</a>
+              <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi/cobranca" routerLinkActive="active" (click)="aoClicarItemCelulares()">Gerenciamento de cobrança</a>
               <a routerLink="/vendas-celulares/iniciar-paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Iniciar uma Venda Paymobi</a>
               <a routerLink="/vendas-celulares/consultar-desconto" routerLinkActive="active" (click)="aoClicarItemCelulares()">Consultar Cliente Desconto</a>
             </div>
@@ -171,6 +177,12 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
 export class AppShell implements OnInit {
   menuAberto = true;
   submenuCelularesAberto = false;
+  readonly matchOsLista = {
+    paths: 'subset' as const,
+    queryParams: 'ignored' as const,
+    fragment: 'ignored' as const,
+    matrixParams: 'ignored' as const,
+  };
 
   constructor(
     public blingAuth: BlingAuthService,

@@ -25,36 +25,14 @@
   </nav>
 
   <button type="button" class="link-taxas" (click)="mostrarTaxas = !mostrarTaxas">
-    {{ mostrarTaxas ? 'Ocultar rótulos' : 'Rótulos de taxa (2,99% / 1,49%)' }}
+    {{ mostrarTaxas ? 'Ocultar taxas' : 'Ver taxas do parcelamento' }}
   </button>
 
   <section class="taxas" *ngIf="mostrarTaxas">
     <p class="hint" style="margin:0">
-      Os valores vêm da tabela calibrada (1 / 5 / 10 / 15 / 18x). Aqui só muda o texto «Taxa …» na grade.
+      Cada parcela usa a taxa da maquininha daquela quantidade, com 5% a mais somente sobre o percentual.
+      Ex.: 1x era 3,00% e passa a 3,15%; 12x era 12,73% e passa a 13,37%.
     </p>
-    <label class="campo">
-      <span>Rótulo 1x</span>
-      <input
-        type="number"
-        min="0"
-        step="0.01"
-        [(ngModel)]="cfg.taxa1xPct"
-        name="taxa1x"
-        (ngModelChange)="onConfigChange()"
-      />
-    </label>
-    <label class="campo">
-      <span>Rótulo 2x–18x</span>
-      <input
-        type="number"
-        min="0"
-        step="0.01"
-        [(ngModel)]="cfg.taxaMensalPct"
-        name="taxaMensal"
-        (ngModelChange)="onConfigChange()"
-      />
-    </label>
-    <button type="button" class="btn-sec" (click)="restaurarPadrao()">Restaurar 2,99 / 1,49</button>
   </section>
 
   <ng-container *ngIf="modo === 'parcelas'">

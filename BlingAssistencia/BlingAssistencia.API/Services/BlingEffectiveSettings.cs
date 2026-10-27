@@ -13,6 +13,7 @@ public interface IBlingEffectiveSettings
     Task EnsureLoadedAsync(CancellationToken cancellationToken = default);
     Task<BlingConfigAdminDto> ObterAdminAsync(CancellationToken cancellationToken = default);
     Task<BlingConfigAdminDto> SalvarAdminAsync(BlingConfigAdminSalvarDto dto, CancellationToken cancellationToken = default);
+    Task RegistrarSyncVendasCelularesAsync(string? aviso, CancellationToken cancellationToken = default);
 }
 
 public class BlingEffectiveSettings : IBlingEffectiveSettings
@@ -63,6 +64,17 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
             ConsultaProdutosHabilitada = s.ConsultaProdutosHabilitada,
             ConsultaProdutosSyncMinutos = Math.Max(5, s.ConsultaProdutosSyncMinutos),
             IdCampoPermitePersonalizacao = s.IdCampoPermitePersonalizacao,
+            VendasCelularesHabilitada = s.VendasCelularesHabilitada,
+            VendasCelularesCategoriaIds = s.VendasCelularesCategoriaIds ?? "",
+            VendasCelularesCategoriaDescricoes = s.VendasCelularesCategoriaDescricoes ?? "",
+            VendasCelularesDescontoPercentual = s.VendasCelularesDescontoPercentual,
+            VendasCelularesDiasLookback = s.VendasCelularesDiasLookback,
+            VendasCelularesDiasHistoricoInicial = s.VendasCelularesDiasHistoricoInicial,
+            VendasCelularesSyncHora = s.VendasCelularesSyncHora,
+            VendasCelularesPalavrasUsado = s.VendasCelularesPalavrasUsado ?? "",
+            VendasCelularesPalavrasIphone = s.VendasCelularesPalavrasIphone ?? "",
+            VendasCelularesUltimaSyncEm = s.VendasCelularesUltimaSyncEm,
+            VendasCelularesUltimoAviso = s.VendasCelularesUltimoAviso,
             ModoLocal = s.ModoLocal,
             Habilitado = s.Habilitado,
             TemOverrideMongo = _override is not null,
@@ -108,12 +120,46 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
             IdCampoPermitePersonalizacao = dto.IdCampoPermitePersonalizacao < 0
                 ? 0
                 : dto.IdCampoPermitePersonalizacao,
+            VendasCelularesHabilitada = dto.VendasCelularesHabilitada,
+            VendasCelularesCategoriaIds = (dto.VendasCelularesCategoriaIds ?? existente.VendasCelularesCategoriaIds ?? "").Trim(),
+            VendasCelularesCategoriaDescricoes = string.IsNullOrWhiteSpace(dto.VendasCelularesCategoriaDescricoes)
+                ? (existente.VendasCelularesCategoriaDescricoes ?? "Celular,Celulares,Smartphone")
+                : dto.VendasCelularesCategoriaDescricoes.Trim(),
+            VendasCelularesDescontoPercentual = dto.VendasCelularesDescontoPercentual < 0
+                ? 0
+                : Math.Min(100, dto.VendasCelularesDescontoPercentual),
+            VendasCelularesDiasLookback = dto.VendasCelularesDiasLookback > 0
+                ? Math.Clamp(dto.VendasCelularesDiasLookback, 1, 30)
+                : (existente.VendasCelularesDiasLookback ?? 3),
+            VendasCelularesDiasHistoricoInicial = dto.VendasCelularesDiasHistoricoInicial > 0
+                ? Math.Clamp(dto.VendasCelularesDiasHistoricoInicial, 1, 730)
+                : (existente.VendasCelularesDiasHistoricoInicial ?? 60),
+            VendasCelularesSyncHora = Math.Clamp(dto.VendasCelularesSyncHora, 0, 23),
+            VendasCelularesPalavrasUsado = string.IsNullOrWhiteSpace(dto.VendasCelularesPalavrasUsado)
+                ? (existente.VendasCelularesPalavrasUsado ?? "usado,seminovo,semi-novo,semi novo")
+                : dto.VendasCelularesPalavrasUsado.Trim(),
+            VendasCelularesPalavrasIphone = string.IsNullOrWhiteSpace(dto.VendasCelularesPalavrasIphone)
+                ? (existente.VendasCelularesPalavrasIphone ?? "iphone")
+                : dto.VendasCelularesPalavrasIphone.Trim(),
+            VendasCelularesUltimaSyncEm = existente.VendasCelularesUltimaSyncEm,
+            VendasCelularesUltimoAviso = existente.VendasCelularesUltimoAviso,
         };
 
         await _repo.SalvarAsync(doc, cancellationToken);
         await RecarregarAsync(cancellationToken);
         _log.LogInformation("Config Bling salva por admin (clientId={Id}, sync={Min}min)", clientId, syncMin);
         return await ObterAdminAsync(cancellationToken);
+    }
+
+    public async Task RegistrarSyncVendasCelularesAsync(string? aviso, CancellationToken cancellationToken = default)
+    {
+        var existente = await _repo.ObterAsync(cancellationToken) ?? new BlingConfigData();
+        existente.VendasCelularesUltimaSyncEm = DateTime.UtcNow;
+        var avisoTrim = (aviso ?? "").Trim();
+        if (avisoTrim.Length > 400) avisoTrim = avisoTrim[..400];
+        existente.VendasCelularesUltimoAviso = avisoTrim;
+        await _repo.SalvarAsync(existente, cancellationToken);
+        await RecarregarAsync(cancellationToken);
     }
 
     private async Task RecarregarAsync(CancellationToken cancellationToken)
@@ -157,6 +203,26 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
             s.ConsultaProdutosSyncMinutos = o.ConsultaProdutosSyncMinutos.Value;
         if (o.IdCampoPermitePersonalizacao is not null)
             s.IdCampoPermitePersonalizacao = o.IdCampoPermitePersonalizacao.Value;
+        if (o.VendasCelularesHabilitada is not null)
+            s.VendasCelularesHabilitada = o.VendasCelularesHabilitada.Value;
+        if (o.VendasCelularesCategoriaIds is not null)
+            s.VendasCelularesCategoriaIds = o.VendasCelularesCategoriaIds;
+        if (o.VendasCelularesCategoriaDescricoes is not null)
+            s.VendasCelularesCategoriaDescricoes = o.VendasCelularesCategoriaDescricoes;
+        if (o.VendasCelularesDescontoPercentual is not null)
+            s.VendasCelularesDescontoPercentual = o.VendasCelularesDescontoPercentual.Value;
+        if (o.VendasCelularesDiasLookback is > 0)
+            s.VendasCelularesDiasLookback = o.VendasCelularesDiasLookback.Value;
+        if (o.VendasCelularesDiasHistoricoInicial is > 0)
+            s.VendasCelularesDiasHistoricoInicial = o.VendasCelularesDiasHistoricoInicial.Value;
+        if (o.VendasCelularesSyncHora is not null)
+            s.VendasCelularesSyncHora = Math.Clamp(o.VendasCelularesSyncHora.Value, 0, 23);
+        if (!string.IsNullOrWhiteSpace(o.VendasCelularesPalavrasUsado))
+            s.VendasCelularesPalavrasUsado = o.VendasCelularesPalavrasUsado;
+        if (!string.IsNullOrWhiteSpace(o.VendasCelularesPalavrasIphone))
+            s.VendasCelularesPalavrasIphone = o.VendasCelularesPalavrasIphone;
+        s.VendasCelularesUltimaSyncEm = o.VendasCelularesUltimaSyncEm;
+        s.VendasCelularesUltimoAviso = o.VendasCelularesUltimoAviso;
         return s;
     }
 
@@ -180,5 +246,16 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
         ClientSecret = s.ClientSecret,
         RedirectUri = s.RedirectUri,
         ExigirAutenticacao = s.ExigirAutenticacao,
+        VendasCelularesHabilitada = s.VendasCelularesHabilitada,
+        VendasCelularesCategoriaIds = s.VendasCelularesCategoriaIds,
+        VendasCelularesCategoriaDescricoes = s.VendasCelularesCategoriaDescricoes,
+        VendasCelularesDescontoPercentual = s.VendasCelularesDescontoPercentual,
+        VendasCelularesDiasLookback = s.VendasCelularesDiasLookback,
+        VendasCelularesDiasHistoricoInicial = s.VendasCelularesDiasHistoricoInicial,
+        VendasCelularesSyncHora = s.VendasCelularesSyncHora,
+        VendasCelularesPalavrasUsado = s.VendasCelularesPalavrasUsado,
+        VendasCelularesPalavrasIphone = s.VendasCelularesPalavrasIphone,
+        VendasCelularesUltimaSyncEm = s.VendasCelularesUltimaSyncEm,
+        VendasCelularesUltimoAviso = s.VendasCelularesUltimoAviso,
     };
 }
