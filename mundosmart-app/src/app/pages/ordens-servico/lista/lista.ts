@@ -26,6 +26,8 @@ import {
 import {
   SITUACOES_OS_FILTRO,
   SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
+  SITUACAO_OS_REPARO_AVANCADO_PLACA,
+  SITUACAO_OS_CELULAR_DA_LOJA,
   situacaoPadraoPorLoja,
 } from '../../../config/os-situacao.config';
 import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
@@ -207,6 +209,29 @@ import { AtalhoCobrancaPaymobi } from '../../../components/atalho-cobranca-paymo
     }
     .btn-exportar-pdf:hover:not(:disabled) {
       background: #eff6ff;
+    }
+    .btn-atalho {
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+      border-radius: 5px;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      color: #334155;
+    }
+    .btn-atalho:hover {
+      background: #f8fafc;
+    }
+    .btn-atalho.ativa-placa {
+      background: #e0e7ff;
+      border-color: #6366f1;
+      color: #312e81;
+    }
+    .btn-atalho.ativa-loja {
+      background: #f1f5f9;
+      border-color: #475569;
+      color: #0f172a;
     }
 
     .grid-situacao-select {
@@ -483,6 +508,8 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   readonly grid = new GridPaginationState();
   ordenacao: OsOrdenacao = { ...OS_ORDENACAO_PADRAO };
   private loadSub?: Subscription;
+  /** Datas de cadastro guardadas enquanto um atalho (placa ou loja) está ligado. */
+  private datasAntesAtalho: { inicio: string; fim: string } | null = null;
   private readonly onScrollAviso = () => this.fecharContatoAviso();
   /** Filtro local por bolinha de urgência (baseado na data de entrada). */
   filtroUrgencia: '' | OsPainelTvNivel = '';
@@ -587,6 +614,51 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.loadSub?.unsubscribe();
     document.removeEventListener('scroll', this.onScrollAviso, true);
+  }
+
+  get filtroPlacaAtivo(): boolean {
+    return this.filtros.situacao === SITUACAO_OS_REPARO_AVANCADO_PLACA;
+  }
+
+  get filtroLojaAtivo(): boolean {
+    return this.filtros.situacao === SITUACAO_OS_CELULAR_DA_LOJA;
+  }
+
+  onSituacaoFiltroChange(): void {
+    if (!this.filtroPlacaAtivo && !this.filtroLojaAtivo) {
+      this.restaurarDatasAtalho();
+    }
+    this.buscarComFiltros();
+  }
+
+  /** Atalho da lista: só placa, ou só celular da loja. O segundo clique volta ao filtro padrão. */
+  alternarAtalho(qual: 'placa' | 'loja'): void {
+    const destino = qual === 'placa'
+      ? SITUACAO_OS_REPARO_AVANCADO_PLACA
+      : SITUACAO_OS_CELULAR_DA_LOJA;
+    if (this.filtros.situacao === destino) {
+      this.filtros.situacao = SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
+      this.restaurarDatasAtalho();
+      this.buscarComFiltros();
+      return;
+    }
+    if (!this.filtroPlacaAtivo && !this.filtroLojaAtivo) {
+      this.datasAntesAtalho = {
+        inicio: this.filtros.dataCadastroInicio ?? '',
+        fim: this.filtros.dataCadastroFim ?? '',
+      };
+    }
+    this.filtros.situacao = destino;
+    this.filtros.dataCadastroInicio = '';
+    this.filtros.dataCadastroFim = '';
+    this.buscarComFiltros();
+  }
+
+  private restaurarDatasAtalho(): void {
+    if (!this.datasAntesAtalho) return;
+    this.filtros.dataCadastroInicio = this.datasAntesAtalho.inicio;
+    this.filtros.dataCadastroFim = this.datasAntesAtalho.fim;
+    this.datasAntesAtalho = null;
   }
 
   buscarComFiltros(): void {
@@ -877,6 +949,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   }
 
   limparFiltros(): void {
+    this.datasAntesAtalho = null;
     this.filtros = {
       situacao: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
       nome: '',
