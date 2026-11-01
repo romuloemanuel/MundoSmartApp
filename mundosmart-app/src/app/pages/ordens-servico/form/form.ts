@@ -85,6 +85,7 @@ import { apenasDigitos } from '../../../utils/contato-validacao';
 import { AcrescimoEstoqueConfigService } from '../../../services/acrescimo-estoque-config.service';
 import { avisarAvisoUsuario, avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
 import {
+  BlingVendaCelular,
   BlingVendaCelularDesconto,
   BlingVendaCelularPassivel,
   BlingVendaCelularService,
@@ -2125,10 +2126,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     return !!this.passivelDesconto?.passivel && !this.os.descontoManutencaoElegivel;
   }
 
-  get passivelAparelhoLabel(): string {
-    const a = this.passivelDesconto?.aparelhos?.[0];
-    if (!a) return '';
-    const nome = [a.marca, a.modelo].filter(s => !!s?.trim()).join(' ') || a.produtoNome || '';
+  rotuloAparelhoVendido(a: BlingVendaCelular): string {
+    const nome = [a.marca, a.modelo].filter(s => !!s?.trim()).join(' ') || a.produtoNome || 'Aparelho';
     const extra = [a.cor, a.configuracao].filter(s => !!s?.trim()).join(' · ');
     return extra ? `${nome} · ${extra}` : nome;
   }

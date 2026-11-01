@@ -402,8 +402,13 @@
             Marca: <strong>{{ os.marcaNome }}</strong>
           </p>
           <div class="os-aviso-passivel" *ngIf="mostrarAvisoPassivel">
-            <strong>Passível de Desconto, averiguar IMEI e documento do cliente</strong>
-            <div *ngIf="passivelAparelhoLabel">Aparelho comprado: {{ passivelAparelhoLabel }}</div>
+            <strong>Cliente pode ser elegível à promoção</strong>
+            <div *ngFor="let a of passivelDesconto?.aparelhos">
+              Aparelho vendido: {{ rotuloAparelhoVendido(a) }}
+              <div *ngIf="a.imei">IMEI da venda: {{ a.imei }}</div>
+              <div *ngIf="a.dataVenda">Vendido em {{ a.dataVenda | date:'dd/MM/yyyy':'UTC' }}</div>
+            </div>
+            <div>Valide o IMEI do aparelho que entrou na assistência antes de aplicar o desconto.</div>
           </div>
         </div>
       </div>

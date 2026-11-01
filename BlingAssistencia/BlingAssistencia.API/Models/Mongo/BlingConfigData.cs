@@ -38,6 +38,12 @@ public class BlingConfigData
     [BsonElement("vendasCelularesDescontoPercentual")]
     public decimal? VendasCelularesDescontoPercentual { get; set; }
 
+    [BsonElement("vendasCelularesDescontoVendaMaxPercentual")]
+    public decimal? VendasCelularesDescontoVendaMaxPercentual { get; set; }
+
+    [BsonElement("vendasCelularesAcrescimoFinanciadoraMaxPercentual")]
+    public decimal? VendasCelularesAcrescimoFinanciadoraMaxPercentual { get; set; }
+
     [BsonElement("vendasCelularesDiasLookback")]
     public int? VendasCelularesDiasLookback { get; set; }
 

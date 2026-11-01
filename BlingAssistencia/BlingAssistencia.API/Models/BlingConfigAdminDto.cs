@@ -13,6 +13,8 @@ public class BlingConfigAdminDto
     public string VendasCelularesCategoriaIds { get; set; } = string.Empty;
     public string VendasCelularesCategoriaDescricoes { get; set; } = string.Empty;
     public decimal VendasCelularesDescontoPercentual { get; set; }
+    public decimal VendasCelularesDescontoVendaMaxPercentual { get; set; }
+    public decimal VendasCelularesAcrescimoFinanciadoraMaxPercentual { get; set; }
     public int VendasCelularesDiasLookback { get; set; }
     public int VendasCelularesDiasHistoricoInicial { get; set; }
     public int VendasCelularesSyncHora { get; set; }
@@ -41,6 +43,8 @@ public class BlingConfigAdminSalvarDto
     public string? VendasCelularesCategoriaIds { get; set; }
     public string? VendasCelularesCategoriaDescricoes { get; set; }
     public decimal VendasCelularesDescontoPercentual { get; set; } = 10;
+    public decimal VendasCelularesDescontoVendaMaxPercentual { get; set; } = 5;
+    public decimal VendasCelularesAcrescimoFinanciadoraMaxPercentual { get; set; } = 10;
     public int VendasCelularesDiasLookback { get; set; } = 3;
     public int VendasCelularesDiasHistoricoInicial { get; set; } = 60;
     public int VendasCelularesSyncHora { get; set; } = 6;

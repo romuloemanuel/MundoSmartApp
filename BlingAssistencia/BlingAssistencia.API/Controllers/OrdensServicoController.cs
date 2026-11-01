@@ -19,6 +19,7 @@ public class OrdensServicoController : ControllerBase
     private readonly ITecnicoRepository _tecnicos;
     private readonly IOsHistoricoService _historico;
     private readonly IEstoqueLoteService _estoqueLote;
+    private readonly IAparelhoLojaService _aparelhosLoja;
     private readonly IWebHostEnvironment _env;
 
     public OrdensServicoController(
@@ -27,6 +28,7 @@ public class OrdensServicoController : ControllerBase
         ITecnicoRepository tecnicos,
         IOsHistoricoService historico,
         IEstoqueLoteService estoqueLote,
+        IAparelhoLojaService aparelhosLoja,
         IWebHostEnvironment env)
     {
         _service = service;
@@ -34,6 +36,7 @@ public class OrdensServicoController : ControllerBase
         _tecnicos = tecnicos;
         _historico = historico;
         _estoqueLote = estoqueLote;
+        _aparelhosLoja = aparelhosLoja;
         _env = env;
     }
 
@@ -345,6 +348,7 @@ public class OrdensServicoController : ControllerBase
             os.TecnicoNome = await TecnicoDaSituacaoAsync(os.Situacao, os.TecnicoNome);
             await OsOrdemValidacao.ValidarTecnicoAsync(os.Situacao, os.TecnicoNome, _tecnicos);
             var criado = await _service.CriarAsync(os);
+            await VincularCustoAparelhoAsync(criado, os);
             return CreatedAtAction(nameof(Obter), new { id = criado.Id }, criado);
         }
         catch (ArgumentException ex)
@@ -372,6 +376,8 @@ public class OrdensServicoController : ControllerBase
             os.TecnicoNome = await TecnicoDaSituacaoAsync(os.Situacao, os.TecnicoNome);
             await OsOrdemValidacao.ValidarTecnicoAsync(os.Situacao, os.TecnicoNome, _tecnicos);
             var atualizado = await _service.AtualizarAsync(id, os);
+            atualizado.Id ??= id;
+            await VincularCustoAparelhoAsync(atualizado, os);
             return Ok(atualizado);
         }
         catch (UnauthorizedAccessException ex)
@@ -595,6 +601,25 @@ public class OrdensServicoController : ControllerBase
         catch (ArgumentException ex)
         {
             return BadRequest(new { erro = ex.Message });
+        }
+    }
+
+    private async Task VincularCustoAparelhoAsync(BlingOrdemServico os, BlingOrdemServico enviado)
+    {
+        try
+        {
+            if (os.Itens is not { Count: > 0 } && enviado.Itens is { Count: > 0 })
+                os.Itens = enviado.Itens;
+            if (string.IsNullOrWhiteSpace(os.Imei))
+                os.Imei = enviado.Imei;
+            if (string.IsNullOrWhiteSpace(os.Numero))
+                os.Numero = enviado.Numero;
+            os.Id ??= enviado.Id;
+            await _aparelhosLoja.RegistrarCustoOsAsync(os);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[aparelhos-loja] custo da OS {os.Id} não vinculado: {ex.Message}");
         }
     }
 

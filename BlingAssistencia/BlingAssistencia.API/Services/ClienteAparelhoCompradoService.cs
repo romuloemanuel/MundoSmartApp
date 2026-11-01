@@ -19,6 +19,8 @@ public interface IClienteAparelhoCompradoService
         string? modeloNome,
         string? marcaNome,
         CancellationToken cancellationToken = default);
+    Task RegistrarCompradoAsync(long clienteId, ClienteAparelhoComprado aparelho, CancellationToken cancellationToken = default);
+    Task RemoverCompradoAsync(long clienteId, string imei, CancellationToken cancellationToken = default);
 }
 
 public sealed class ClienteAparelhoCompradoService : IClienteAparelhoCompradoService
@@ -194,11 +196,59 @@ public sealed class ClienteAparelhoCompradoService : IClienteAparelhoCompradoSer
         {
             Passivel = true,
             Motivo = string.IsNullOrWhiteSpace(resumo)
-                ? "Passível de Desconto, averiguar IMEI e documento do cliente"
-                : $"Passível de Desconto, averiguar IMEI e documento do cliente. Compra na loja: {resumo}.",
+                ? "Cliente pode ser elegível à promoção. Valide o IMEI do aparelho que entrou na assistência."
+                : $"Cliente pode ser elegível à promoção. Aparelho vendido: {resumo}. Valide o IMEI.",
             Aparelhos = match.Select(BlingVendaCelularMapper.ParaDto).ToList(),
         };
     }
+
+    public async Task RegistrarCompradoAsync(
+        long clienteId,
+        ClienteAparelhoComprado aparelho,
+        CancellationToken cancellationToken = default)
+    {
+        if (clienteId <= 0) return;
+        var cliente = await _clientes.ObterPorBlingIdAsync(clienteId);
+        if (cliente is null) return;
+
+        cliente.AparelhosComprados ??= [];
+        var imei = new string((aparelho.Imei ?? "").Where(char.IsDigit).ToArray());
+        var existente = cliente.AparelhosComprados.FirstOrDefault(a =>
+            (!string.IsNullOrEmpty(imei) && ImeiDe(a.Imei) == imei)
+            || (!string.IsNullOrWhiteSpace(aparelho.VendaId) && a.VendaId == aparelho.VendaId));
+        if (existente is null)
+        {
+            existente = new ClienteAparelhoComprado();
+            cliente.AparelhosComprados.Add(existente);
+        }
+
+        existente.VendaId = aparelho.VendaId;
+        existente.Imei = imei;
+        existente.Marca = aparelho.Marca;
+        existente.Modelo = aparelho.Modelo;
+        existente.MarcaId = aparelho.MarcaId;
+        existente.ModeloId = aparelho.ModeloId;
+        existente.Cor = aparelho.Cor;
+        existente.Configuracao = aparelho.Configuracao;
+        existente.DataVenda = aparelho.DataVenda;
+        await _clientes.SalvarAsync(cliente);
+    }
+
+    public async Task RemoverCompradoAsync(long clienteId, string imei, CancellationToken cancellationToken = default)
+    {
+        if (clienteId <= 0) return;
+        var cliente = await _clientes.ObterPorBlingIdAsync(clienteId);
+        if (cliente?.AparelhosComprados is null || cliente.AparelhosComprados.Count == 0) return;
+
+        var imeiN = new string((imei ?? "").Where(char.IsDigit).ToArray());
+        var antes = cliente.AparelhosComprados.Count;
+        cliente.AparelhosComprados.RemoveAll(a => ImeiDe(a.Imei) == imeiN);
+        if (cliente.AparelhosComprados.Count == antes) return;
+        await _clientes.SalvarAsync(cliente);
+    }
+
+    private static string ImeiDe(string? valor) =>
+        new string((valor ?? "").Where(char.IsDigit).ToArray());
 
     private static void AplicarParse(BlingVendaCelularData venda, IReadOnlyList<ModeloAparelho> catalogo)
     {

@@ -30,7 +30,30 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
             [routerLinkActiveOptions]="matchOsLista"
             (click)="fecharMenuSeEstreito()"
           >Ordens de Servi&ccedil;o</a>
-          <a *ngIf="appAuth.isAdmin()" routerLink="/comissoes" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Comiss&otilde;es</a>
+          <div
+            *ngIf="appAuth.isAdmin()"
+            class="nav-grupo"
+            [class.aberto]="submenuComissoesAberto"
+            [class.ativo]="rotaComissoesAtiva"
+            (click)="$event.stopPropagation()"
+          >
+            <button
+              type="button"
+              class="nav-grupo-btn"
+              [class.active]="rotaComissoesAtiva"
+              [attr.aria-expanded]="submenuComissoesAberto"
+              (click)="alternarSubmenuComissoes($event)"
+            >
+              Comiss&otilde;es
+              <span class="nav-grupo-seta" aria-hidden="true"></span>
+            </button>
+            <div class="nav-submenu" *ngIf="submenuComissoesAberto">
+              <a routerLink="/comissoes/assistencia" routerLinkActive="active" (click)="aoClicarItemComissoes()">Assist&ecirc;ncia t&eacute;cnica</a>
+              <a routerLink="/comissoes/loja" routerLinkActive="active" (click)="aoClicarItemComissoes()">Loja (Bling)</a>
+              <a routerLink="/comissoes/smartphones" routerLinkActive="active" (click)="aoClicarItemComissoes()">Smartphones</a>
+            </div>
+          </div>
+          <a *ngIf="appAuth.isAdmin()" routerLink="/receitas" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Receitas</a>
           <a routerLink="/painel-tv" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" (click)="fecharMenuSeEstreito()">Painel TV</a>
           <a routerLink="/estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Pe&ccedil;as &amp; Estoque</a>
           <a routerLink="/orcamentos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Or&ccedil;amentos</a>
@@ -59,6 +82,8 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
               <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas PayMobi</a>
               <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi/cobranca" routerLinkActive="active" (click)="aoClicarItemCelulares()">Gerenciamento de cobrança</a>
               <a routerLink="/vendas-celulares/iniciar-paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Iniciar uma Venda Paymobi</a>
+              <a routerLink="/vendas-celulares/loja" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="aoClicarItemCelulares()">Compra, venda e troca</a>
+              <a *ngIf="appAuth.isAdmin()" routerLink="/vendas-celulares/loja/financeiro" routerLinkActive="active" (click)="aoClicarItemCelulares()">Financeiro dos aparelhos</a>
               <a routerLink="/vendas-celulares/consultar-desconto" routerLinkActive="active" (click)="aoClicarItemCelulares()">Consultar Cliente Desconto</a>
             </div>
           </div>
@@ -177,6 +202,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
 export class AppShell implements OnInit {
   menuAberto = true;
   submenuCelularesAberto = false;
+  submenuComissoesAberto = false;
   readonly matchOsLista = {
     paths: 'subset' as const,
     queryParams: 'ignored' as const,
@@ -196,10 +222,27 @@ export class AppShell implements OnInit {
     return u === '/paymobi' || u.startsWith('/paymobi/') || u.startsWith('/vendas-celulares');
   }
 
+  get rotaComissoesAtiva(): boolean {
+    const u = this.router.url.split('?')[0];
+    return u === '/comissoes' || u.startsWith('/comissoes/');
+  }
+
   alternarSubmenuCelulares(ev: Event): void {
     ev.preventDefault();
     ev.stopPropagation();
     this.submenuCelularesAberto = !this.submenuCelularesAberto;
+    if (this.submenuCelularesAberto) this.submenuComissoesAberto = false;
+  }
+
+  alternarSubmenuComissoes(ev: Event): void {
+    ev.preventDefault();
+    ev.stopPropagation();
+    this.submenuComissoesAberto = !this.submenuComissoesAberto;
+    if (this.submenuComissoesAberto) this.submenuCelularesAberto = false;
+  }
+
+  aoClicarItemComissoes(): void {
+    this.fecharMenuSeEstreito();
   }
 
   aoClicarItemCelulares(): void {
@@ -207,12 +250,14 @@ export class AppShell implements OnInit {
   }
 
   @HostListener('document:click')
-  fecharSubmenuCelularesFora(): void {
+  fecharSubmenusFora(): void {
     this.submenuCelularesAberto = false;
+    this.submenuComissoesAberto = false;
   }
 
   ngOnInit(): void {
     this.menuAberto = this.lerPreferenciaInicial();
+    this.submenuComissoesAberto = this.rotaComissoesAtiva;
     this.categoriasPeca.listar().subscribe();
   }
 

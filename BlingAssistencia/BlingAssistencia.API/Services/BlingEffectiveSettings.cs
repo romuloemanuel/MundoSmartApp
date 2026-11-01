@@ -68,6 +68,8 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
             VendasCelularesCategoriaIds = s.VendasCelularesCategoriaIds ?? "",
             VendasCelularesCategoriaDescricoes = s.VendasCelularesCategoriaDescricoes ?? "",
             VendasCelularesDescontoPercentual = s.VendasCelularesDescontoPercentual,
+            VendasCelularesDescontoVendaMaxPercentual = s.VendasCelularesDescontoVendaMaxPercentual,
+            VendasCelularesAcrescimoFinanciadoraMaxPercentual = s.VendasCelularesAcrescimoFinanciadoraMaxPercentual,
             VendasCelularesDiasLookback = s.VendasCelularesDiasLookback,
             VendasCelularesDiasHistoricoInicial = s.VendasCelularesDiasHistoricoInicial,
             VendasCelularesSyncHora = s.VendasCelularesSyncHora,
@@ -128,6 +130,8 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
             VendasCelularesDescontoPercentual = dto.VendasCelularesDescontoPercentual < 0
                 ? 0
                 : Math.Min(100, dto.VendasCelularesDescontoPercentual),
+            VendasCelularesDescontoVendaMaxPercentual = Percentual(dto.VendasCelularesDescontoVendaMaxPercentual),
+            VendasCelularesAcrescimoFinanciadoraMaxPercentual = Percentual(dto.VendasCelularesAcrescimoFinanciadoraMaxPercentual),
             VendasCelularesDiasLookback = dto.VendasCelularesDiasLookback > 0
                 ? Math.Clamp(dto.VendasCelularesDiasLookback, 1, 30)
                 : (existente.VendasCelularesDiasLookback ?? 3),
@@ -211,6 +215,10 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
             s.VendasCelularesCategoriaDescricoes = o.VendasCelularesCategoriaDescricoes;
         if (o.VendasCelularesDescontoPercentual is not null)
             s.VendasCelularesDescontoPercentual = o.VendasCelularesDescontoPercentual.Value;
+        if (o.VendasCelularesDescontoVendaMaxPercentual is not null)
+            s.VendasCelularesDescontoVendaMaxPercentual = o.VendasCelularesDescontoVendaMaxPercentual.Value;
+        if (o.VendasCelularesAcrescimoFinanciadoraMaxPercentual is not null)
+            s.VendasCelularesAcrescimoFinanciadoraMaxPercentual = o.VendasCelularesAcrescimoFinanciadoraMaxPercentual.Value;
         if (o.VendasCelularesDiasLookback is > 0)
             s.VendasCelularesDiasLookback = o.VendasCelularesDiasLookback.Value;
         if (o.VendasCelularesDiasHistoricoInicial is > 0)
@@ -225,6 +233,9 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
         s.VendasCelularesUltimoAviso = o.VendasCelularesUltimoAviso;
         return s;
     }
+
+    private static decimal Percentual(decimal valor) =>
+        valor < 0 ? 0 : Math.Min(100, valor);
 
     private static string SemPlaceholder(string? v)
     {
@@ -250,6 +261,8 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
         VendasCelularesCategoriaIds = s.VendasCelularesCategoriaIds,
         VendasCelularesCategoriaDescricoes = s.VendasCelularesCategoriaDescricoes,
         VendasCelularesDescontoPercentual = s.VendasCelularesDescontoPercentual,
+        VendasCelularesDescontoVendaMaxPercentual = s.VendasCelularesDescontoVendaMaxPercentual,
+        VendasCelularesAcrescimoFinanciadoraMaxPercentual = s.VendasCelularesAcrescimoFinanciadoraMaxPercentual,
         VendasCelularesDiasLookback = s.VendasCelularesDiasLookback,
         VendasCelularesDiasHistoricoInicial = s.VendasCelularesDiasHistoricoInicial,
         VendasCelularesSyncHora = s.VendasCelularesSyncHora,

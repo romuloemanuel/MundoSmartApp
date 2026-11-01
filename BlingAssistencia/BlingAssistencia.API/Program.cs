@@ -12,6 +12,10 @@ using MundoSmart.BlingAssistencia.API.Services;
 using MundoSmart.BlingAssistencia.API.Settings;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 130L * 1024 * 1024;
+});
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
@@ -76,6 +80,10 @@ builder.Services.AddHttpClient("BlingProdutos", client =>
 builder.Services.AddSingleton<IBlingProdutoAcessorioRepository, BlingProdutoAcessorioRepository>();
 builder.Services.AddSingleton<IBlingProdutoConsultaService, BlingProdutoConsultaService>();
 builder.Services.AddSingleton<IBlingVendaCelularRepository, BlingVendaCelularRepository>();
+builder.Services.AddSingleton<IAparelhoLojaRepository, AparelhoLojaRepository>();
+builder.Services.AddSingleton<IAparelhoLojaService, AparelhoLojaService>();
+builder.Services.AddSingleton<IReceitaService, ReceitaService>();
+builder.Services.AddSingleton<IComissaoOrigemService, ComissaoOrigemService>();
 builder.Services.AddSingleton<IClienteAparelhoCompradoService, ClienteAparelhoCompradoService>();
 builder.Services.AddSingleton<IBlingVendaCelularSyncService, BlingVendaCelularSyncService>();
 builder.Services.AddHostedService<BlingProdutoSyncHostedService>();
@@ -143,8 +151,8 @@ var origins = authSettings.AllowedOrigins?
 
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 20 * 1024 * 1024;
-    options.ValueLengthLimit = 20 * 1024 * 1024;
+    options.MultipartBodyLengthLimit = 130L * 1024 * 1024;
+    options.ValueLengthLimit = 130 * 1024 * 1024;
     options.MemoryBufferThreshold = 2 * 1024 * 1024;
 });
 
@@ -214,10 +222,16 @@ app.UseRateLimiter();
 
 var uploadsPath = Path.Combine(app.Environment.ContentRootPath, "uploads");
 Directory.CreateDirectory(uploadsPath);
+var tiposUpload = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+tiposUpload.Mappings[".mov"] = "video/quicktime";
+tiposUpload.Mappings[".m4v"] = "video/mp4";
+tiposUpload.Mappings[".3gp"] = "video/3gpp";
+tiposUpload.Mappings[".heic"] = "image/heic";
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads"
+    RequestPath = "/uploads",
+    ContentTypeProvider = tiposUpload,
 });
 
 if (app.Environment.IsDevelopment())
@@ -302,6 +316,8 @@ try
     Console.WriteLine("[MundoSmart API] Consulta de acessórios: só Bling (sem catálogo local).");
     var vendasCelRepo = app.Services.GetRequiredService<IBlingVendaCelularRepository>();
     await vendasCelRepo.EnsureIndexesAsync();
+    var aparelhosLojaRepo = app.Services.GetRequiredService<IAparelhoLojaRepository>();
+    await aparelhosLojaRepo.EnsureIndexesAsync();
     var vinculoCel = app.Services.GetRequiredService<IClienteAparelhoCompradoService>();
     await vinculoCel.RecalcularPendenciasAsync();
     var estoqueLote = app.Services.GetRequiredService<IEstoqueLoteService>();
@@ -332,3 +348,5 @@ catch (Exception ex)
 }
 
 app.Run();
+
+public partial class Program;

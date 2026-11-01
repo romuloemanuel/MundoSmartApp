@@ -10,6 +10,7 @@ function isPublicAuthUrl(url: string): boolean {
     || url.includes('/api/conta/refresh')
     || url.includes('/api/conta/sessao-qr')
     || url.includes('/api/intake/')
+    || url.includes('/api/aparelho-fotos/')
     || url.includes('/api/config/estoque')
     || url.includes('/api/config/impressao-os')
     || url.includes('/api/config/acrescimo-estoque')
@@ -20,7 +21,7 @@ function estaEmRotaPublica(): boolean {
   const path = typeof window !== 'undefined'
     ? (window.location.pathname || '')
     : '';
-  return path.startsWith('/login') || path.startsWith('/intake');
+  return path.startsWith('/login') || path.startsWith('/intake') || path.startsWith('/aparelho-fotos');
 }
 
 /** Anexa Bearer JWT, renova com refresh token e redireciona para login em 401. */

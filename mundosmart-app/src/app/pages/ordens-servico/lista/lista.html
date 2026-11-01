@@ -155,7 +155,7 @@
     <span *ngIf="filtros.situacao"> · {{ filtros.situacao }}</span>
     <span *ngIf="periodoConclusaoLabel"> · {{ periodoConclusaoLabel }}</span>
     <span class="comissao-total"> · Total página: {{ valorCompacto(totalValorPagina) }}</span>
-    <a *ngIf="ehAdmin" routerLink="/comissoes" class="btn-link" style="margin-left:8px">Relatório de comissão (líquido)</a>
+    <a *ngIf="ehAdmin" routerLink="/comissoes/assistencia" class="btn-link" style="margin-left:8px">Relatório de comissão (líquido)</a>
     <span class="campo-hint" *ngIf="ehAdmin && (!filtros.situacao || filtros.situacao !== 'Concluído')">
       Dica: selecione situação <strong>Concluído</strong> e o período de conclusão, ou abra o relatório de comissões.
     </span>

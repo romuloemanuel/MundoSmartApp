@@ -104,6 +104,32 @@
                     <option *ngFor="let n of parcelasOpcoes" [ngValue]="n">{{ n }}x</option>
                   </select>
                 </div>
+                <div class="parcelas-contrato" *ngIf="formaFinanciada">
+                  <label *ngIf="formaPagamentoOpcao === 'outra'" [for]="'fin_' + v.chave">Nome da financiadora</label>
+                  <input
+                    *ngIf="formaPagamentoOpcao === 'outra'"
+                    [id]="'fin_' + v.chave"
+                    [ngModel]="financiadoraContrato"
+                    (ngModelChange)="onDetalheFinanciadora('nome', $event)"
+                    name="financiadoraContrato"
+                  />
+                  <label [for]="'entrada_' + v.chave">Entrada na loja</label>
+                  <input
+                    [id]="'entrada_' + v.chave"
+                    [ngModel]="entradaContrato"
+                    (ngModelChange)="onDetalheFinanciadora('entrada', $event)"
+                    name="entradaContrato"
+                    placeholder="0,00"
+                  />
+                  <label [for]="'repasse_' + v.chave">Repasse da financiadora</label>
+                  <input
+                    [id]="'repasse_' + v.chave"
+                    [ngModel]="repasseContrato"
+                    (ngModelChange)="onDetalheFinanciadora('repasse', $event)"
+                    name="repasseContrato"
+                    placeholder="0,00"
+                  />
+                </div>
               </ng-container>
               <ng-container *ngIf="ehCampoGarantiaItem(v)">
                 <label class="check-label garantia-toggle">

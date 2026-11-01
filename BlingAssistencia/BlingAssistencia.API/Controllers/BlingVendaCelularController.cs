@@ -15,17 +15,20 @@ public class BlingVendaCelularController : ControllerBase
     private readonly IBlingVendaCelularSyncService _sync;
     private readonly IClienteAparelhoCompradoService _vinculo;
     private readonly IBlingClienteService _clientes;
+    private readonly IAparelhoLojaService _loja;
 
     public BlingVendaCelularController(
         IBlingVendaCelularRepository repo,
         IBlingVendaCelularSyncService sync,
         IClienteAparelhoCompradoService vinculo,
-        IBlingClienteService clientes)
+        IBlingClienteService clientes,
+        IAparelhoLojaService loja)
     {
         _repo = repo;
         _sync = sync;
         _vinculo = vinculo;
         _clientes = clientes;
+        _loja = loja;
     }
 
     [HttpGet("desconto")]
@@ -51,7 +54,11 @@ public class BlingVendaCelularController : ControllerBase
                 .ToList();
         }
 
-        return Ok(_sync.ConsultarDesconto(cpfN, imeiN, vendas));
+        var bling = _sync.ConsultarDesconto(cpfN, imeiN, vendas);
+        var loja = await _loja.ConsultarDescontoAsync(cpfN, imeiN, cancellationToken);
+        if (imeiN.Length == 15 && await _loja.ImeiJaPassouPelaLojaAsync(imeiN, cancellationToken))
+            return Ok(loja);
+        return Ok(CombinarDesconto(loja, bling));
     }
 
     [HttpGet("pendencias")]
@@ -72,9 +79,52 @@ public class BlingVendaCelularController : ControllerBase
     {
         if (clienteId is null or <= 0 && string.IsNullOrWhiteSpace(cpf))
             return Ok(new BlingVendaCelularPassivelResponse());
-        var res = await _vinculo.ConsultarPassivelAsync(
+        var bling = await _vinculo.ConsultarPassivelAsync(
             clienteId, cpf, modeloId, modeloNome, marcaNome, cancellationToken);
-        return Ok(res);
+        var loja = await _loja.ConsultarPassivelAsync(
+            clienteId, cpf, modeloId, modeloNome, marcaNome, cancellationToken);
+        if (!bling.Passivel && !loja.Passivel)
+            return Ok(bling);
+
+        var aparelhos = bling.Aparelhos.Concat(loja.Aparelhos)
+            .GroupBy(a => a.Imei)
+            .Select(g => g.First())
+            .ToList();
+        return Ok(new BlingVendaCelularPassivelResponse
+        {
+            Passivel = aparelhos.Count > 0,
+            Motivo = bling.Passivel ? bling.Motivo : loja.Motivo,
+            Aparelhos = aparelhos,
+        });
+    }
+
+    private static BlingVendaCelularDescontoResponse CombinarDesconto(
+        BlingVendaCelularDescontoResponse loja,
+        BlingVendaCelularDescontoResponse bling)
+    {
+        if (loja.Elegivel) return loja;
+        if (bling.Elegivel) return bling;
+
+        var vendas = loja.Vendas.Concat(bling.Vendas)
+            .GroupBy(v => $"{v.Imei}|{v.ClienteCpf}|{v.Id}")
+            .Select(g => g.First())
+            .ToList();
+
+        var motivo = (loja.Vendas.Count, bling.Vendas.Count) switch
+        {
+            ( > 0, 0) => loja.Motivo,
+            (0, > 0) => bling.Motivo,
+            ( > 0, > 0) => "Há aparelho na loja e venda antiga do Bling, mas CPF e IMEI não fecham o mesmo aparelho.",
+            _ => "Nenhuma venda de aparelho da loja ou do Bling com este CPF e IMEI.",
+        };
+
+        return new BlingVendaCelularDescontoResponse
+        {
+            Elegivel = false,
+            Motivo = motivo,
+            DescontoPercentual = loja.DescontoPercentual > 0 ? loja.DescontoPercentual : bling.DescontoPercentual,
+            Vendas = vendas,
+        };
     }
 
     [HttpPost("{id}/vincular-cliente")]

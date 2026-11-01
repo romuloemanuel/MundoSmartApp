@@ -30,7 +30,8 @@ import {
   validarCnpj,
   validarCpf,
 } from '../../utils/contato-validacao';
-import { enderecoMinimoPreenchido } from '../../utils/endereco-format.util';
+import { enderecoMinimoPreenchido, formatarEnderecoCompleto } from '../../utils/endereco-format.util';
+import { lerRascunhoContrato, limparRascunhoContrato } from '../../utils/rascunho-contrato.util';
 import { mensagemAlertaImei } from '../../utils/imei.util';
 import {
   agoraLocalIso,
@@ -73,6 +74,10 @@ function ehAnexoAutomatico(modelo: DocumentoModelo | null | undefined): boolean 
 const FORMAS_PAGAMENTO_CONTRATO = [
   { id: 'dinheiro', label: 'Dinheiro' },
   { id: 'avista', label: 'À vista' },
+  { id: 'payjoy', label: 'Payjoy' },
+  { id: 'paymobi', label: 'Paymobi' },
+  { id: 'crefaz', label: 'Crefaz' },
+  { id: 'outra', label: 'Outra financiadora' },
   { id: 'parcelado', label: 'Parcelado' },
   { id: 'acombinar', label: 'A combinar' },
 ] as const;
@@ -107,6 +112,10 @@ export class ContratosPage implements OnInit {
   readonly formasPagamentoContrato = FORMAS_PAGAMENTO_CONTRATO;
   readonly parcelasOpcoes = Array.from({ length: 23 }, (_, i) => i + 2);
   formaPagamentoOpcao: FormaPagamentoContratoId = '';
+  financiadoraContrato = '';
+  entradaContrato = '';
+  repasseContrato = '';
+  complementoForma = '';
   parcelasPagamento = 2;
   garantiaItem6Meses = false;
   garantiaItemNome = '';
@@ -160,6 +169,13 @@ export class ContratosPage implements OnInit {
 
   get anexaTermoConscientizacao(): boolean {
     return ehContratoVenda(this.modeloEmitir) && !!this.modeloTermoConscientizacao;
+  }
+
+  get formaFinanciada(): boolean {
+    return this.formaPagamentoOpcao === 'payjoy'
+      || this.formaPagamentoOpcao === 'paymobi'
+      || this.formaPagamentoOpcao === 'crefaz'
+      || this.formaPagamentoOpcao === 'outra';
   }
 
   get ehContratoBoleto(): boolean {
@@ -287,6 +303,13 @@ export class ContratosPage implements OnInit {
     this.sincronizarFormaPagamento();
   }
 
+  onDetalheFinanciadora(campo: 'nome' | 'entrada' | 'repasse', valor: string): void {
+    if (campo === 'nome') this.financiadoraContrato = valor;
+    if (campo === 'entrada') this.entradaContrato = valor;
+    if (campo === 'repasse') this.repasseContrato = valor;
+    this.sincronizarFormaPagamento();
+  }
+
   onParcelasChange(n: number | string): void {
     const qtd = Math.max(2, Math.min(24, Number(n) || 2));
     this.parcelasPagamento = qtd;
@@ -357,7 +380,16 @@ export class ContratosPage implements OnInit {
         this.catalogo = catalogo;
         this.modelos = modelos;
         this.carregando = false;
-        if (this.modeloEmitir?.id) {
+        const rascunho = lerRascunhoContrato();
+        const modeloRascunho = rascunho
+          ? modelos.find(m => m.ativo && normalizarCodigoDoc(m.codigo) === normalizarCodigoDoc(rascunho.codigo))
+          : undefined;
+        if (modeloRascunho && rascunho) {
+          this.selecionarParaEmitir(modeloRascunho);
+          this.aplicarRascunho(rascunho);
+          limparRascunhoContrato();
+          avisarSucessoUsuario('Contrato preenchido com os dados já informados. Complete só o que ficou em branco.');
+        } else if (this.modeloEmitir?.id) {
           const atual = modelos.find(m => m.id === this.modeloEmitir?.id);
           if (atual) this.selecionarParaEmitir(atual);
         } else if (this.modelosAtivos.length === 1) {
@@ -377,6 +409,10 @@ export class ContratosPage implements OnInit {
     this.avisosCampos = {};
     this.enderecos = {};
     this.formaPagamentoOpcao = '';
+    this.financiadoraContrato = '';
+    this.entradaContrato = '';
+    this.repasseContrato = '';
+    this.complementoForma = '';
     this.parcelasPagamento = 2;
     this.garantiaItem6Meses = false;
     this.garantiaItemNome = '';
@@ -753,6 +789,9 @@ export class ContratosPage implements OnInit {
       if (this.formaPagamentoOpcao === 'parcelado' && this.parcelasPagamento < 2) {
         return rascunho ? '' : 'Informe em quantas vezes será parcelado.';
       }
+      if (this.formaPagamentoOpcao === 'outra' && !this.financiadoraContrato.trim()) {
+        return rascunho ? '' : 'Informe o nome da financiadora.';
+      }
       return '';
     }
     if (this.ehCampoGarantiaItem(v)) {
@@ -801,6 +840,26 @@ export class ContratosPage implements OnInit {
     }
   }
 
+  private aplicarRascunho(rascunho: NonNullable<ReturnType<typeof lerRascunhoContrato>>): void {
+    for (const [chave, valor] of Object.entries(rascunho.valores)) {
+      if (!valor?.trim() || chave === 'forma_pagamento') continue;
+      if (chave in this.valores) this.valores[chave] = valor;
+    }
+    if (rascunho.enderecoChave && rascunho.endereco && rascunho.enderecoChave in this.valores) {
+      this.enderecos[rascunho.enderecoChave] = { ...rascunho.endereco };
+      const linha = formatarEnderecoCompleto(rascunho.endereco);
+      if (linha) this.valores[rascunho.enderecoChave] = linha;
+    }
+    if (rascunho.formaPagamento) {
+      this.formaPagamentoOpcao = rascunho.formaPagamento as FormaPagamentoContratoId;
+      this.financiadoraContrato = rascunho.financiadoraNome ?? '';
+      this.entradaContrato = rascunho.entrada ?? '';
+      this.repasseContrato = rascunho.repasse ?? '';
+      this.complementoForma = rascunho.complemento ?? '';
+      this.sincronizarFormaPagamento();
+    }
+  }
+
   private textoFormaPagamento(): string {
     if (this.formaPagamentoOpcao === 'dinheiro') return 'Dinheiro';
     if (this.formaPagamentoOpcao === 'avista') return 'À vista';
@@ -808,6 +867,20 @@ export class ContratosPage implements OnInit {
     if (this.formaPagamentoOpcao === 'parcelado') {
       return `Parcelado em ${this.parcelasPagamento}x`;
     }
+    const nome = this.nomeFinanciadoraContrato();
+    if (!nome) return '';
+    const partes = [nome];
+    if (this.entradaContrato.trim()) partes.push(`entrada na loja de R$ ${this.entradaContrato.trim()}`);
+    if (this.repasseContrato.trim()) partes.push(`repasse da financiadora de R$ ${this.repasseContrato.trim()}`);
+    if (this.complementoForma.trim()) partes.push(this.complementoForma.trim());
+    return `${partes.join('. ')}. O saldo que o cliente deve à financiadora não entra no caixa da loja.`;
+  }
+
+  private nomeFinanciadoraContrato(): string {
+    if (this.formaPagamentoOpcao === 'payjoy') return 'Payjoy';
+    if (this.formaPagamentoOpcao === 'paymobi') return 'Paymobi';
+    if (this.formaPagamentoOpcao === 'crefaz') return 'Crefaz';
+    if (this.formaPagamentoOpcao === 'outra') return this.financiadoraContrato.trim();
     return '';
   }
 }

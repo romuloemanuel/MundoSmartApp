@@ -117,6 +117,16 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
             <input type="number" min="0" max="100" step="0.5" [(ngModel)]="form.vendasCelularesDescontoPercentual" name="descPct" />
           </label>
           <label>
+            Desconto máximo na venda (%)
+            <input type="number" min="0" max="100" step="0.5" [(ngModel)]="form.vendasCelularesDescontoVendaMaxPercentual" name="descVendaMax" />
+            <span class="campo-hint">O preço do aparelho pode baixar até esse percentual.</span>
+          </label>
+          <label>
+            Acréscimo máximo na financiadora (%)
+            <input type="number" min="0" max="100" step="0.5" [(ngModel)]="form.vendasCelularesAcrescimoFinanciadoraMaxPercentual" name="acrFinMax" />
+            <span class="campo-hint">Na Payjoy, Paymobi, Crefaz ou outra, o contrato pode subir até esse percentual.</span>
+          </label>
+          <label>
             Hora do sync diário (Brasília)
             <input type="number" min="0" max="23" [(ngModel)]="form.vendasCelularesSyncHora" name="syncHora" />
           </label>
@@ -202,6 +212,8 @@ export class ConfigBlingPage implements OnInit {
     vendasCelularesCategoriaIds: '',
     vendasCelularesCategoriaDescricoes: 'Celular,Celulares,Smartphone',
     vendasCelularesDescontoPercentual: 10,
+    vendasCelularesDescontoVendaMaxPercentual: 5,
+    vendasCelularesAcrescimoFinanciadoraMaxPercentual: 10,
     vendasCelularesDiasLookback: 3,
     vendasCelularesDiasHistoricoInicial: 60,
     vendasCelularesSyncHora: 6,
@@ -248,6 +260,8 @@ export class ConfigBlingPage implements OnInit {
       vendasCelularesCategoriaIds: this.form.vendasCelularesCategoriaIds.trim(),
       vendasCelularesCategoriaDescricoes: this.form.vendasCelularesCategoriaDescricoes.trim(),
       vendasCelularesDescontoPercentual: Number(this.form.vendasCelularesDescontoPercentual) || 0,
+      vendasCelularesDescontoVendaMaxPercentual: Number(this.form.vendasCelularesDescontoVendaMaxPercentual) || 0,
+      vendasCelularesAcrescimoFinanciadoraMaxPercentual: Number(this.form.vendasCelularesAcrescimoFinanciadoraMaxPercentual) || 0,
       vendasCelularesDiasLookback: Number(this.form.vendasCelularesDiasLookback) || 3,
       vendasCelularesDiasHistoricoInicial: Number(this.form.vendasCelularesDiasHistoricoInicial) || 60,
       vendasCelularesSyncHora: Number(this.form.vendasCelularesSyncHora) || 0,
@@ -318,6 +332,8 @@ export class ConfigBlingPage implements OnInit {
       vendasCelularesCategoriaIds: cfg.vendasCelularesCategoriaIds || '',
       vendasCelularesCategoriaDescricoes: cfg.vendasCelularesCategoriaDescricoes || 'Celular,Celulares,Smartphone',
       vendasCelularesDescontoPercentual: cfg.vendasCelularesDescontoPercentual ?? 10,
+      vendasCelularesDescontoVendaMaxPercentual: cfg.vendasCelularesDescontoVendaMaxPercentual ?? 5,
+      vendasCelularesAcrescimoFinanciadoraMaxPercentual: cfg.vendasCelularesAcrescimoFinanciadoraMaxPercentual ?? 10,
       vendasCelularesDiasLookback: cfg.vendasCelularesDiasLookback || 3,
       vendasCelularesDiasHistoricoInicial: cfg.vendasCelularesDiasHistoricoInicial || 60,
       vendasCelularesSyncHora: cfg.vendasCelularesSyncHora ?? 6,
@@ -348,6 +364,8 @@ export class ConfigBlingPage implements OnInit {
       vendasCelularesCategoriaIds: '',
       vendasCelularesCategoriaDescricoes: 'Celular,Celulares,Smartphone',
       vendasCelularesDescontoPercentual: 10,
+    vendasCelularesDescontoVendaMaxPercentual: 5,
+    vendasCelularesAcrescimoFinanciadoraMaxPercentual: 10,
       vendasCelularesDiasLookback: 3,
       vendasCelularesDiasHistoricoInicial: 60,
       vendasCelularesSyncHora: 6,

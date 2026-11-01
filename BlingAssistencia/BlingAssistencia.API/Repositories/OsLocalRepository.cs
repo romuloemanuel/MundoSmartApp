@@ -12,6 +12,7 @@ public interface IOsLocalRepository
 {
     Task EnsureIndexesAsync(CancellationToken cancellationToken = default);
     Task<OsLocalData?> ObterPorBlingIdAsync(long blingId);
+    Task<OsLocalData?> ObterPorNumeroAsync(string numero, CancellationToken cancellationToken = default);
     Task<List<OsLocalData>> ObterPorBlingIdsAsync(IEnumerable<long> blingIds);
     Task<List<OsLocalData>> ListarAsync();
     /// <summary>Lista enxuta para tela — projeção sem senha, fotos, itens, etc.</summary>
@@ -78,6 +79,24 @@ public class OsLocalRepository : IOsLocalRepository
             new CreateIndexModel<OsLocalData>(
                 Builders<OsLocalData>.IndexKeys.Ascending(x => x.Situacao)),
             cancellationToken: cancellationToken);
+    }
+
+    public async Task<OsLocalData?> ObterPorNumeroAsync(string numero, CancellationToken cancellationToken = default)
+    {
+        var digitos = new string((numero ?? "").Where(char.IsDigit).ToArray());
+        if (digitos.Length == 0) return null;
+        var filtros = new List<FilterDefinition<OsLocalData>>
+        {
+            Builders<OsLocalData>.Filter.Eq(x => x.OsNumero, digitos),
+        };
+        if (long.TryParse(digitos, out var blingId))
+            filtros.Add(Builders<OsLocalData>.Filter.Eq(x => x.BlingId, blingId));
+        var lista = await _collection.Find(Builders<OsLocalData>.Filter.Or(filtros))
+            .SortByDescending(x => x.DataEntrada)
+            .Limit(8)
+            .ToListAsync(cancellationToken);
+        return lista.FirstOrDefault(o => !OsSituacaoHelper.EhFinalizada(o.Situacao))
+            ?? lista.FirstOrDefault();
     }
 
     public async Task<OsLocalData?> ObterPorBlingIdAsync(long blingId)

@@ -45,6 +45,12 @@ public class BlingSettings
     /// <summary>Percentual de desconto na manutenção quando IMEI + CPF coincidem.</summary>
     public decimal VendasCelularesDescontoPercentual { get; set; } = 10;
 
+    /// <summary>Quanto o preço do aparelho pode baixar na venda ou troca.</summary>
+    public decimal VendasCelularesDescontoVendaMaxPercentual { get; set; } = 5;
+
+    /// <summary>Quanto o valor do contrato pode subir quando a venda é por financiadora.</summary>
+    public decimal VendasCelularesAcrescimoFinanciadoraMaxPercentual { get; set; } = 10;
+
     /// <summary>Dias para reler no job diário (cobre falha de um dia).</summary>
     public int VendasCelularesDiasLookback { get; set; } = 3;
 

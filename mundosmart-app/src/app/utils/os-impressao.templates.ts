@@ -179,15 +179,17 @@ function itensTabela(os: BlingOrdemServico): string {
 }
 
 const TESTES_FUNCIONAIS_OS: string[] = [
-  'Vazamento de luz',
-  'Teste pressão',
+  'Teste de vazamento de luz',
+  'Teste de pressão na tela',
   'Teste touch screen / ponto branco',
   'Teste sensor aproximação',
   'Teste autofalante superior / inferior',
   'Teste câmera frontal',
   'Vibracall',
   'Microfones',
-  'Rede / Wi-Fi',
+  'Wi-Fi 2.4 GHz',
+  'Wi-Fi 5 GHz',
+  'Bluetooth',
   'NFC',
   'Ligação',
   'Câmera traseira / flash',

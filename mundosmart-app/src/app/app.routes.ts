@@ -14,6 +14,7 @@ import { TecnicosLista } from './pages/tecnicos/lista/lista';
 import { PecasLista } from './pages/pecas/lista/lista';
 import { PecasForm } from './pages/pecas/form/form';
 import { OsIntakeMobile } from './pages/ordens-servico/intake/intake';
+import { AparelhoFotosCelularPage } from './pages/vendas-celulares/fotos-celular/fotos-celular';
 import { OsHistoricoPage } from './pages/ordens-servico/historico/historico';
 import { HistoricoAlteracoesPage } from './pages/historico-alteracoes/historico-alteracoes';
 import { EstoquePage } from './pages/estoque/estoque';
@@ -40,6 +41,13 @@ export const routes: Routes = [
     component: MobileShell,
     children: [
       { path: ':token', component: OsIntakeMobile },
+    ],
+  },
+  {
+    path: 'aparelho-fotos',
+    component: MobileShell,
+    children: [
+      { path: ':token', component: AparelhoFotosCelularPage },
     ],
   },
   {
@@ -88,7 +96,30 @@ export const routes: Routes = [
         ],
       },
       { path: 'historico-alteracoes', canActivate: [adminGuard], component: HistoricoAlteracoesPage },
-      { path: 'comissoes', canActivate: [adminGuard], component: ComissoesPage },
+      { path: 'comissoes', pathMatch: 'full', redirectTo: 'comissoes/assistencia' },
+      { path: 'comissoes/assistencia', canActivate: [adminGuard], component: ComissoesPage, title: 'Comissão da assistência' },
+      {
+        path: 'comissoes/loja',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./pages/comissoes/origem/origem').then(m => m.ComissaoOrigemPage),
+        data: { origem: 'loja' },
+        title: 'Comissão da loja',
+      },
+      {
+        path: 'comissoes/smartphones',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./pages/comissoes/origem/origem').then(m => m.ComissaoOrigemPage),
+        data: { origem: 'smartphones' },
+        title: 'Comissão de smartphones',
+      },
+      {
+        path: 'receitas',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./pages/receitas/receitas').then(m => m.ReceitasPage),
+        title: 'Receitas',
+      },
       { path: 'orcamentos', component: OrcamentosLista },
       { path: 'orcamentos/novo', component: OrcamentosForm },
       { path: 'orcamentos/:id', component: OrcamentosForm },
@@ -129,6 +160,20 @@ export const routes: Routes = [
           import('./pages/vendas-celulares/iniciar-paymobi/iniciar-paymobi').then(
             m => m.IniciarVendaPaymobiPage,
           ),
+      },
+      {
+        path: 'vendas-celulares/loja/financeiro',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
+        title: 'Financeiro dos aparelhos',
+        data: { financeiro: true },
+      },
+      {
+        path: 'vendas-celulares/loja',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
+        title: 'Compra, venda e troca',
       },
       {
         path: 'vendas-celulares/consultar-desconto',

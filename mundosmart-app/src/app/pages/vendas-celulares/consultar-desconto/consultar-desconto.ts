@@ -26,8 +26,9 @@ import { formatarCpfCnpj, apenasDigitos } from '../../../utils/contato-validacao
         </div>
       </div>
       <p class="hint">
-        Aparelhos novos e iPhones usados vendidos pela Mundo Smart (Bling) têm desconto na assistência.
-        O desconto é garantido pelo <strong>CPF atrelado ao IMEI</strong> do aparelho.
+        Quem compra ou troca um aparelho na loja tem desconto na assistência.
+        O desconto segue o <strong>CPF do cliente e o IMEI</strong> do aparelho que ele levou.
+        Vendas antigas importadas do Bling continuam valendo.
       </p>
 
       <form class="filtros" (submit)="$event.preventDefault(); consultar()">
@@ -78,7 +79,7 @@ import { formatarCpfCnpj, apenasDigitos } from '../../../utils/contato-validacao
         </thead>
         <tbody>
           <tr *ngFor="let v of vendasVisiveis">
-            <td>{{ v.dataVenda | date:'dd/MM/yyyy' }}</td>
+            <td>{{ v.dataVenda | date:'dd/MM/yyyy':'UTC' }}</td>
             <td>{{ v.clienteNome || '-' }}</td>
             <td>{{ formatarDoc(v.clienteCpf) }}</td>
             <td>{{ v.produtoNome || '-' }}</td>
@@ -105,7 +106,7 @@ import { formatarCpfCnpj, apenasDigitos } from '../../../utils/contato-validacao
           </thead>
           <tbody>
             <tr *ngFor="let v of recentes">
-              <td>{{ v.dataVenda | date:'dd/MM/yyyy' }}</td>
+              <td>{{ v.dataVenda | date:'dd/MM/yyyy':'UTC' }}</td>
               <td>{{ v.clienteNome || '-' }}</td>
               <td>{{ formatarDoc(v.clienteCpf) }}</td>
               <td>{{ v.produtoNome || '-' }}</td>
@@ -181,6 +182,7 @@ export class ConsultarClienteDescontoPage implements OnInit {
   rotuloTipo(tipo?: string): string {
     if (tipo === 'iphone_usado') return 'iPhone usado';
     if (tipo === 'novo') return 'Novo';
+    if (tipo === 'usado') return 'Usado';
     return tipo || '—';
   }
 

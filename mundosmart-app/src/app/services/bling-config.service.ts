@@ -14,6 +14,8 @@ export interface BlingConfigAdmin {
   vendasCelularesCategoriaIds: string;
   vendasCelularesCategoriaDescricoes: string;
   vendasCelularesDescontoPercentual: number;
+  vendasCelularesDescontoVendaMaxPercentual: number;
+  vendasCelularesAcrescimoFinanciadoraMaxPercentual: number;
   vendasCelularesDiasLookback: number;
   vendasCelularesDiasHistoricoInicial: number;
   vendasCelularesSyncHora: number;
@@ -40,6 +42,8 @@ export interface BlingConfigAdminSalvar {
   vendasCelularesCategoriaIds: string;
   vendasCelularesCategoriaDescricoes: string;
   vendasCelularesDescontoPercentual: number;
+  vendasCelularesDescontoVendaMaxPercentual: number;
+  vendasCelularesAcrescimoFinanciadoraMaxPercentual: number;
   vendasCelularesDiasLookback: number;
   vendasCelularesDiasHistoricoInicial: number;
   vendasCelularesSyncHora: number;
