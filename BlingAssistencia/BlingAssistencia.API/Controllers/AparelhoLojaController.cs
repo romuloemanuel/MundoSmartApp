@@ -73,11 +73,11 @@ public class AparelhoLojaController : ControllerBase
     }
 
     [HttpPost("fotos-sessao")]
-    public async Task<IActionResult> CriarSessaoFotos([FromQuery] string? appUrl, CancellationToken cancellationToken)
+    public async Task<IActionResult> CriarSessaoFotos([FromQuery] string? appUrl, [FromQuery] string? aparelhoId, CancellationToken cancellationToken)
     {
         try
         {
-            return Ok(await _loja.CriarSessaoFotosAsync(appUrl, cancellationToken));
+            return Ok(await _loja.CriarSessaoFotosAsync(appUrl, aparelhoId, cancellationToken));
         }
         catch (InvalidOperationException ex)
         {

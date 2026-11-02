@@ -452,7 +452,7 @@ interface FichaEntrada {
         </label>
         <p class="hint" *ngIf="entrada.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Não entra na venda nem na troca até a assistência liberar.</p>
         <details class="mais">
-          <summary>Testes, fotos e OS já aberta</summary>
+          <summary>Testes e OS já aberta</summary>
         <div class="form-group">
           <label>OS já aberta</label>
           <input [ngModel]="entrada.osNumero" (ngModelChange)="onOsNumero($event)" name="osCompra" inputmode="numeric" placeholder="Número da OS" />
@@ -475,18 +475,6 @@ interface FichaEntrada {
               <input type="checkbox" [(ngModel)]="t.ok" [name]="'testeCompra' + t.nome" />
               {{ t.nome }}
             </label>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Fotos e vídeos do aparelho</label>
-          <input type="file" accept="image/*,video/mp4,video/quicktime,video/webm,video/*" multiple (change)="onMidia($event)" />
-          <p class="hint">Até 12 fotos e 3 vídeos. Os vídeos entram com o áudio da gravação. Fotos até 8 MB, vídeos até 40 MB.</p>
-          <p class="hint" *ngIf="textoMidiaSelecionada">{{ textoMidiaSelecionada }}. Sobe junto com o cadastro.</p>
-          <button type="button" class="secundario" (click)="abrirQr()">QR code — câmera do celular</button>
-          <div class="qr-box" *ngIf="qrAberto">
-            <p class="hint">Escaneie com o celular. Dá para tirar fotos ou gravar vídeos com áudio.</p>
-            <img *ngIf="qrDataUrl" [src]="qrDataUrl" alt="QR code das fotos e vídeos" class="qr" />
-            <p class="hint" *ngIf="fotosSessao.length">{{ textoMidiaRecebida }}</p>
           </div>
         </div>
         </details>
@@ -918,7 +906,7 @@ interface FichaEntrada {
           </label>
           <p class="hint" *ngIf="f.dados.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Ele fica no estoque, mas não entra na venda nem na troca até a assistência liberar.</p>
           <details class="mais">
-            <summary>Testes, fotos e OS já aberta</summary>
+            <summary>Testes e OS já aberta</summary>
           <div class="form-group">
             <label>OS já aberta</label>
             <input [ngModel]="f.dados.osNumero" (ngModelChange)="onOsFicha($event, f)" [name]="'osTroca' + f.id" inputmode="numeric" placeholder="Número da OS" />
@@ -941,18 +929,6 @@ interface FichaEntrada {
                 <input type="checkbox" [(ngModel)]="t.ok" [name]="'testeTroca' + f.id + t.nome" />
                 {{ t.nome }}
               </label>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Fotos e vídeos deste aparelho</label>
-            <input type="file" accept="image/*,video/mp4,video/quicktime,video/webm,video/*" multiple (change)="onMidiaFicha($event, f)" />
-            <p class="hint">Até 12 fotos e 3 vídeos. Os vídeos entram com o áudio da gravação. Fotos até 8 MB, vídeos até 40 MB.</p>
-            <p class="hint" *ngIf="textoMidiaDe(f) as texto">{{ texto }}. Sobe junto com o cadastro.</p>
-            <button type="button" class="secundario" (click)="abrirQrFicha(f)">QR code — câmera do celular</button>
-            <div class="qr-box" *ngIf="f.qrAberto">
-              <p class="hint">Escaneie com o celular. Dá para tirar fotos ou gravar vídeos com áudio.</p>
-              <img *ngIf="f.qrDataUrl" [src]="f.qrDataUrl" alt="QR code das fotos e vídeos" class="qr" />
-              <p class="hint" *ngIf="f.fotosSessao.length">{{ textoMidiaRecebidaDe(f) }}</p>
             </div>
           </div>
           </details>
@@ -1025,7 +1001,7 @@ interface FichaEntrada {
       <ng-container *ngFor="let g of estoquePorMarca">
         <h3 class="marca-estoque">{{ g.marca }} <span *ngIf="g.disponiveis">{{ textoDisponiveis(g.disponiveis) }}</span></h3>
         <div class="grade-estoque">
-        <article class="card-aparelho" *ngFor="let a of g.itens" [class.aberta]="fichaId === a.id" (click)="alternarFicha(a.id)">
+        <article class="card-aparelho" *ngFor="let a of g.itens" [id]="'aparelho-' + a.id" [class.aberta]="fichaId === a.id" (click)="alternarFicha(a.id)">
           <img *ngIf="capaDe(a) as foto" class="capa" [src]="foto" alt="" />
           <div class="capa vazia" *ngIf="!capaDe(a)">Sem foto</div>
           <div class="corpo">
@@ -1111,6 +1087,12 @@ interface FichaEntrada {
               [disabled]="enviandoWhatsapp || !temFotoMarcada(a)"
               (click)="enviarWhatsapp(a)"
             >{{ enviandoWhatsapp ? 'Enviando…' : 'Enviar fotos selecionadas no WhatsApp' }}</button>
+            <button type="button" class="secundario" (click)="abrirQrAparelho(a)">QR code — câmera do celular</button>
+            <div class="qr-box" *ngIf="qrAparelhoId === a.id && qrAberto">
+              <p class="hint">O cadastro já existe. Escaneie para incluir ou trocar fotos e vídeos deste aparelho.</p>
+              <img *ngIf="qrDataUrl" [src]="qrDataUrl" alt="QR code das fotos e vídeos" class="qr" />
+              <p class="hint" *ngIf="fotosSessao.length">{{ textoMidiaRecebida }}</p>
+            </div>
           </div>
         </article>
         </div>
@@ -1418,9 +1400,12 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   videos: File[] = [];
   testes = this.testesVazios();
   qrAberto = false;
+  qrAparelhoId = '';
   qrDataUrl = '';
   sessaoToken = '';
   fotosSessao: { id: string; url: string; tipo?: string }[] = [];
+  private fotosNaSessao = 0;
+  private imeisQr: string[] = [];
   osConsulta: OsAbertaConsulta | null = null;
   osBuscando = false;
   private buscaOs?: ReturnType<typeof setTimeout>;
@@ -1940,20 +1925,25 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return partes.join(' e ');
   }
 
-  abrirQr(): void {
-    this.qrAberto = true;
-    if (this.sessaoToken) {
+  abrirQrAparelho(a: AparelhoLojaItem): void {
+    if (!a.id) return;
+    if (this.qrAparelhoId === a.id && this.qrAberto && this.sessaoToken) {
       this.iniciarPoll();
       return;
     }
-    this.api.criarSessaoFotos().subscribe({
+    this.fecharQr();
+    this.qrAparelhoId = a.id;
+    this.qrAberto = true;
+    this.api.criarSessaoFotos(a.id).subscribe({
       next: async sessao => {
+        if (this.qrAparelhoId !== a.id) return;
         this.sessaoToken = sessao.token;
+        this.fotosNaSessao = 0;
         this.qrDataUrl = await QRCode.toDataURL(sessao.url, { width: 280, margin: 1, errorCorrectionLevel: 'M' });
         this.iniciarPoll();
       },
       error: (err: { error?: { erro?: string } }) => {
-        this.qrAberto = false;
+        this.fecharQr();
         avisarErroUsuario(err?.error?.erro || 'Não foi possível gerar o QR.');
       },
     });
@@ -2332,6 +2322,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.imeisOsNova = this.entrada.passaPorAssistencia && !this.entrada.osNumero.trim()
       ? [apenasDigitos(this.entrada.imei)]
       : [];
+    this.imeisQr = [apenasDigitos(aparelho.imei)];
     this.enviar(
       this.api.comprar({
         aparelho,
@@ -2339,7 +2330,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
         clienteId: this.cliente?.id,
         fornecedorNome: this.compra.fornecedorNome.trim(),
         observacoes: this.entrada.observacoes,
-        sessaoToken: this.sessaoToken || undefined,
+        sessaoToken: undefined,
       }),
       rascunho
         ? 'Compra registrada. O contrato abriu com os dados já informados.'
@@ -2454,6 +2445,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.imeisOsNova = this.entradasTroca
       .filter(ficha => ficha.dados.passaPorAssistencia && !ficha.dados.osNumero.trim())
       .map(ficha => apenasDigitos(ficha.dados.imei));
+    this.imeisQr = imeis.map(valor => apenasDigitos(valor));
     this.enviarComMidias(
       this.api.trocar({
         aparelhoSaidaId: this.troca.aparelhoSaidaId,
@@ -2464,7 +2456,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
         entradas: prontos.map(p => ({
           aparelho: p.aparelho,
           valorAvaliado: p.avaliado,
-          sessaoToken: p.ficha.sessaoToken || undefined,
+          sessaoToken: undefined,
         })),
         valorAvaliado: Math.round(soma * 100) / 100,
         sentidoDiferenca: this.troca.sentido,
@@ -3132,6 +3124,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       error: (err: { error?: { erro?: string } }) => {
         this.salvando = false;
         this.imeisOsNova = [];
+        this.imeisQr = [];
         limparRascunhoContrato();
         this.erro = err?.error?.erro || 'Não foi possível salvar.';
         avisarErroUsuario(this.erro);
@@ -3259,6 +3252,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       error: (err: { error?: { erro?: string } }) => {
         this.salvando = false;
         this.imeisOsNova = [];
+        this.imeisQr = [];
         limparRascunhoContrato();
         this.erro = err?.error?.erro || 'Não foi possível salvar.';
         avisarErroUsuario(this.erro);
@@ -3282,7 +3276,9 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   private concluir(painel: AparelhoLojaPainel, sucesso: string): void {
     const imeis = this.imeisOsNova;
+    const qr = this.imeisQr;
     this.imeisOsNova = [];
+    this.imeisQr = [];
     this.painel = painel;
     this.salvando = false;
     this.modo = null;
@@ -3291,6 +3287,13 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.fecharQr();
     avisarSucessoUsuario(sucesso);
     this.imprimirOsGeradas(painel, imeis);
+    const alvo = qr
+      .map(imei => painel.estoque.find(a => apenasDigitos(a.imei) === imei && (a.status === 'em_estoque' || a.status === 'em_assistencia')))
+      .find(item => !!item);
+    if (!alvo?.id) return;
+    this.fichaId = alvo.id;
+    this.abrirQrAparelho(alvo);
+    setTimeout(() => document.getElementById(`aparelho-${alvo.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   }
 
   private imprimirOsGeradas(painel: AparelhoLojaPainel, imeis: string[]): void {
@@ -3318,7 +3321,16 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     if (this.sessaoToken) {
       const token = this.sessaoToken;
       this.api.sessaoFotos(token).subscribe({
-        next: sessao => { if (this.sessaoToken === token) this.fotosSessao = sessao.fotos ?? []; },
+        next: sessao => {
+          if (this.sessaoToken !== token) return;
+          const fotos = sessao.fotos ?? [];
+          const mudou = fotos.length !== this.fotosNaSessao;
+          this.fotosSessao = fotos;
+          this.fotosNaSessao = fotos.length;
+          if (mudou && this.qrAparelhoId) {
+            this.api.painel().subscribe({ next: painel => { this.painel = painel; } });
+          }
+        },
         error: () => {},
       });
     }
@@ -3335,9 +3347,11 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   private fecharQr(): void {
     this.pararPoll();
     this.qrAberto = false;
+    this.qrAparelhoId = '';
     this.qrDataUrl = '';
     this.sessaoToken = '';
     this.fotosSessao = [];
+    this.fotosNaSessao = 0;
     for (const ficha of this.entradasTroca) {
       ficha.qrAberto = false;
       ficha.qrDataUrl = '';

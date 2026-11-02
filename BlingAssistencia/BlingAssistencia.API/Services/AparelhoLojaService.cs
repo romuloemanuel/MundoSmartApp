@@ -38,7 +38,7 @@ public interface IAparelhoLojaService
         bool informado,
         string? alerta,
         CancellationToken cancellationToken = default);
-    Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, CancellationToken cancellationToken = default);
+    Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, string? aparelhoId, CancellationToken cancellationToken = default);
     Task<AparelhoFotoSessaoDto?> ObterSessaoFotosAsync(string token, CancellationToken cancellationToken = default);
     Task<AparelhoFotoDto> ReceberFotoSessaoAsync(string token, string nome, Stream conteudo, CancellationToken cancellationToken = default);
     Task<BlingVendaCelularDescontoResponse> ConsultarDescontoAsync(string? cpf, string? imei, CancellationToken cancellationToken = default);
@@ -2038,14 +2038,23 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     private static bool CelularDaLoja(string? situacao, string? contato) =>
         OsSituacaoHelper.EhCelularDaLoja(situacao) || OsSituacaoHelper.ClienteEhLojaMundoSmart(contato);
 
-    public async Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, CancellationToken cancellationToken = default)
+    public async Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, string? aparelhoId, CancellationToken cancellationToken = default)
     {
+        string? id = null;
+        if (!string.IsNullOrWhiteSpace(aparelhoId))
+        {
+            var aparelho = await _repo.ObterAparelhoAsync(aparelhoId.Trim(), cancellationToken)
+                ?? throw new InvalidOperationException("Aparelho não encontrado.");
+            id = aparelho.Id;
+        }
+
         var token = Guid.NewGuid().ToString("N");
         var expira = HorarioBrasil.Agora.AddHours(6);
         await _repo.InserirSessaoFotosAsync(new AparelhoFotoSessaoData
         {
             Token = token,
             ExpiraEm = expira,
+            AparelhoId = id,
         }, cancellationToken);
 
         return new AparelhoFotoSessaoTokenDto

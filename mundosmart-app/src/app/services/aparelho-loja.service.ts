@@ -312,12 +312,15 @@ export class AparelhoLojaService {
     return this.http.get<OsAbertaConsulta>(`${this.apiUrl}/os`, { params: { numero } });
   }
 
-  criarSessaoFotos(): Observable<{ token: string; url: string; expiraEm: string }> {
+  criarSessaoFotos(aparelhoId?: string): Observable<{ token: string; url: string; expiraEm: string }> {
     const urlApp = obterUrlAppIntake();
+    const params: Record<string, string> = {};
+    if (urlApp) params['appUrl'] = urlApp;
+    if (aparelhoId) params['aparelhoId'] = aparelhoId;
     return this.http.post<{ token: string; url: string; expiraEm: string }>(
       `${this.apiUrl}/fotos-sessao`,
       null,
-      { params: urlApp ? { appUrl: urlApp } : {} },
+      { params },
     );
   }
 
