@@ -117,6 +117,10 @@ public class AparelhoLojaData
     [BsonElement("descontoVigente")]
     public bool DescontoVigente { get; set; }
 
+    /// <summary>Produto do Bling que originou esta unidade. A reimportação não duplica.</summary>
+    [BsonElement("blingProdutoId")]
+    public long? BlingProdutoId { get; set; }
+
     [BsonElement("dataEntrada")]
     public DateTime DataEntrada { get; set; }
 

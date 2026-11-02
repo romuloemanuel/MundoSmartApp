@@ -257,3 +257,20 @@ public class AparelhoLojaPainelDto
     public decimal DescontoVendaMaxPercentual { get; set; }
     public decimal AcrescimoFinanciadoraMaxPercentual { get; set; }
 }
+
+public class AparelhoImeiRequest
+{
+    public string? Imei { get; set; }
+}
+
+public class BlingEstoqueCelularImportResult
+{
+    public bool Ok { get; set; }
+    public int ProdutosLidos { get; set; }
+    public int Importados { get; set; }
+    public int JaNoEstoque { get; set; }
+    public int SemImei { get; set; }
+    public int SemSaldo { get; set; }
+    public int SemCusto { get; set; }
+    public string? Aviso { get; set; }
+}

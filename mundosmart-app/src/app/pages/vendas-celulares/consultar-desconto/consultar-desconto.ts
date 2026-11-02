@@ -19,16 +19,11 @@ import { formatarCpfCnpj, apenasDigitos } from '../../../utils/contato-validacao
     <div class="page">
       <div class="page-header">
         <h2>Consultar Cliente Desconto</h2>
-        <div class="acoes" *ngIf="isAdmin">
-          <button type="button" class="secundario" (click)="sincronizar()" [disabled]="sincronizando">
-            {{ sincronizando ? 'Importando…' : 'Importar vendas do Bling' }}
-          </button>
-        </div>
       </div>
       <p class="hint">
         Quem compra ou troca um aparelho na loja tem desconto na assistência.
         O desconto segue o <strong>CPF do cliente e o IMEI</strong> do aparelho que ele levou.
-        Vendas antigas importadas do Bling continuam valendo.
+        Celular não entra mais pelo Bling. A venda fica em Compra, venda e troca.
       </p>
 
       <form class="filtros" (submit)="$event.preventDefault(); consultar()">
@@ -214,7 +209,7 @@ export class ConsultarClienteDescontoPage implements OnInit {
   sincronizar(): void {
     this.sincronizando = true;
     this.erro = '';
-    this.api.sincronizar({ historicoCompleto: this.recentes.length === 0 }).subscribe({
+    this.api.sincronizar().subscribe({
       next: res => {
         this.sincronizando = false;
         if (res.ok) {

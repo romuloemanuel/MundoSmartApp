@@ -141,8 +141,34 @@ export class AparelhoLojaService {
 
   constructor(private http: HttpClient) {}
 
+  informarImei(id: string, imei: string): Observable<AparelhoLojaPainel> {
+    return this.http.post<AparelhoLojaPainel>(`${this.apiUrl}/${id}/imei`, { imei });
+  }
+
   painel(): Observable<AparelhoLojaPainel> {
     return this.http.get<AparelhoLojaPainel>(this.apiUrl);
+  }
+
+  importarEstoqueBling(): Observable<{
+    ok: boolean;
+    produtosLidos: number;
+    importados: number;
+    jaNoEstoque: number;
+    semImei: number;
+    semSaldo: number;
+    semCusto: number;
+    aviso?: string;
+  }> {
+    return this.http.post<{
+      ok: boolean;
+      produtosLidos: number;
+      importados: number;
+      jaNoEstoque: number;
+      semImei: number;
+      semSaldo: number;
+      semCusto: number;
+      aviso?: string;
+    }>(`${this.apiUrl}/importar-bling`, {});
   }
 
   comprar(body: {

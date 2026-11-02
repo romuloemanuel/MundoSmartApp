@@ -40,6 +40,8 @@ import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comiss
           <span *ngIf="smartphones">Vendas: {{ relatorio.vendas }}</span>
           <span *ngIf="smartphones">Trocas: {{ relatorio.trocas }}</span>
           <span class="destaque">Entrou: {{ moeda(relatorio.total) }}</span>
+          <span>Custo: {{ moeda(relatorio.custo) }}</span>
+          <span class="destaque">Líquido: {{ moeda(relatorio.liquido) }}</span>
           <span *ngIf="smartphones && relatorio.dinheiroPago">Saiu na troca: {{ moeda(relatorio.dinheiroPago) }}</span>
         </div>
 
@@ -53,6 +55,8 @@ import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comiss
                 <th *ngIf="smartphones">Vendas</th>
                 <th *ngIf="smartphones">Trocas</th>
                 <th>Entrou</th>
+                <th>Custo</th>
+                <th>Líquido</th>
                 <th *ngIf="smartphones">Saiu</th>
               </tr>
             </thead>
@@ -63,10 +67,12 @@ import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comiss
                 <td *ngIf="smartphones">{{ v.vendas }}</td>
                 <td *ngIf="smartphones">{{ v.trocas }}</td>
                 <td>{{ moeda(v.total) }}</td>
+                <td>{{ moeda(v.custo) }}</td>
+                <td>{{ moeda(v.liquido) }}</td>
                 <td *ngIf="smartphones">{{ moeda(v.dinheiroPago) }}</td>
               </tr>
               <tr *ngIf="relatorio.vendedores.length === 0">
-                <td [attr.colspan]="smartphones ? 6 : 3">Nenhum lançamento neste período.</td>
+                <td [attr.colspan]="smartphones ? 8 : 5">Nenhum lançamento neste período.</td>
               </tr>
             </tbody>
           </table>
@@ -80,9 +86,12 @@ import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comiss
                 <th>Data</th>
                 <th>Tipo</th>
                 <th>Vendedor</th>
-                <th>Descrição</th>
+                <th>{{ smartphones ? 'Descrição' : 'Pedido' }}</th>
+                <th>Produto vendido</th>
                 <th>Cliente</th>
                 <th>Entrou</th>
+                <th>Custo</th>
+                <th>Líquido</th>
                 <th *ngIf="smartphones">Saiu</th>
               </tr>
             </thead>
@@ -92,8 +101,11 @@ import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comiss
                 <td>{{ rotuloTipo(l.tipo) }}</td>
                 <td>{{ l.vendedor }}</td>
                 <td>{{ l.descricao }}</td>
+                <td>{{ l.produto || '—' }}</td>
                 <td>{{ l.cliente }}</td>
                 <td>{{ moeda(l.valor) }}</td>
+                <td>{{ l.custo == null ? '—' : moeda(l.custo) }}</td>
+                <td>{{ moeda(l.liquido) }}</td>
                 <td *ngIf="smartphones">{{ moeda(l.dinheiroPago) }}</td>
               </tr>
             </tbody>
@@ -143,8 +155,8 @@ export class ComissaoOrigemPage implements OnInit, OnDestroy {
 
   get explicacao(): string {
     return this.smartphones
-      ? 'Aparelhos vendidos e trocados neste sistema, por vendedor. Entra só o dinheiro que de fato entrou. Na troca, o aparelho deixado pelo cliente não conta como venda; se a loja devolveu dinheiro, ele aparece em Saiu.'
-      : 'Vendas realizadas no Bling (acessórios e eletrônicos), por vendedor do pedido. Pedidos cancelados ficam de fora.';
+      ? 'Aparelhos vendidos e trocados neste sistema. O produto é o que saiu. O líquido é o dinheiro que entrou menos o custo desse aparelho. Na troca, o que o cliente deixou não conta como venda.'
+      : 'Vendas de acessório e eletrônico que continuam no Bling. Celular não entra aqui: a venda do aparelho fica em Comissão de smartphones. O líquido é o valor do item menos o custo cadastrado no produto.';
   }
 
   ngOnInit(): void {

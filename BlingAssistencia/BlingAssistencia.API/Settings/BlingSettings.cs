@@ -33,8 +33,8 @@ public class BlingSettings
     public string RedirectUri { get; set; } = string.Empty;
     public bool ExigirAutenticacao { get; set; } = false;
 
-    /// <summary>Importa diariamente vendas de celular do Bling (IMEI + CPF → desconto na OS).</summary>
-    public bool VendasCelularesHabilitada { get; set; } = true;
+    /// <summary>Importa vendas de celular do Bling. Desligado: o celular é vendido na loja, não no Bling.</summary>
+    public bool VendasCelularesHabilitada { get; set; } = false;
 
     /// <summary>Ids Bling da(s) categoria(s), separados por vírgula. Opcional se houver descrição.</summary>
     public string VendasCelularesCategoriaIds { get; set; } = string.Empty;

@@ -46,15 +46,20 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
             var dia = op.Data.Date;
             if (dia < de || dia > ate) continue;
 
+            var custo = op.Saida?.Custo ?? 0;
+            var entrou = op.DinheiroRecebido;
             lancamentos.Add(new ComissaoLancamentoDto
             {
                 Data = dia.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 Tipo = op.Tipo,
                 Vendedor = Nome(op.VendedorNome),
                 Descricao = Descrever(op),
+                Produto = TextoAparelho(op.Saida),
                 Cliente = op.ClienteNome ?? "",
-                Valor = op.DinheiroRecebido,
+                Valor = entrou,
                 DinheiroPago = op.DinheiroPago,
+                Custo = custo,
+                Liquido = entrou - custo,
             });
         }
 
@@ -77,7 +82,9 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
         var dataInicial = de.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var dataFinal = ate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var lancamentos = new List<ComissaoLancamentoDto>();
+        var produtos = new Dictionary<long, (string Nome, decimal? Custo)>();
         string? aviso = null;
+        var semCusto = 0;
 
         for (var pagina = 1; pagina <= 30; pagina++)
         {
@@ -91,7 +98,7 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
             }
 
             using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            if (!TryGet(doc.RootElement, "data", out var data) || data.ValueKind != JsonValueKind.Array)
                 break;
 
             var lidos = 0;
@@ -104,20 +111,34 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
                 if (dataPedido is null || dataPedido.Value < de || dataPedido.Value > ate) continue;
                 var numero = LerTexto(item, "numero");
                 var (vendedor, _) = LerVendedor(item);
-                lancamentos.Add(new ComissaoLancamentoDto
+                var pedidoId = LerLong(item, "id");
+                var cliente = LerCliente(item);
+                var dia = dataPedido.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                var descricao = string.IsNullOrWhiteSpace(numero) ? "Pedido de venda" : $"Pedido {numero}";
+                var itens = await ItensDoPedidoAsync(http, token, pedidoId, produtos, cancellationToken);
+                if (itens.Count == 0)
                 {
-                    Data = dataPedido.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                    Tipo = "venda",
-                    Vendedor = vendedor,
-                    Descricao = string.IsNullOrWhiteSpace(numero) ? "Pedido de venda" : $"Pedido {numero}",
-                    Cliente = LerCliente(item),
-                    Valor = total,
-                });
+                    semCusto++;
+                    lancamentos.Add(LinhaLoja(dia, vendedor, descricao, "", cliente, total, null));
+                    continue;
+                }
+
+                foreach (var linha in itens)
+                {
+                    if (linha.Custo is null) semCusto++;
+                    lancamentos.Add(LinhaLoja(dia, vendedor, descricao, linha.Produto, cliente, linha.Valor, linha.Custo));
+                }
             }
 
             if (lidos < 100) break;
             if (pagina == 30)
                 aviso = "O recorte passou de 3.000 pedidos. Os mais antigos desta consulta podem ter ficado de fora.";
+        }
+
+        if (semCusto > 0)
+        {
+            var texto = "Alguns itens não têm preço de custo no Bling. O preço de venda não entrou no lugar do custo.";
+            aviso = string.IsNullOrWhiteSpace(aviso) ? texto : aviso + " " + texto;
         }
 
         return Montar(lancamentos, aviso);
@@ -135,6 +156,8 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
                 Trocas = g.Count(x => x.Tipo == AparelhoOperacaoTipo.Troca),
                 Total = g.Sum(x => x.Valor),
                 DinheiroPago = g.Sum(x => x.DinheiroPago),
+                Custo = g.Sum(x => x.Custo ?? 0),
+                Liquido = g.Sum(x => x.Liquido),
             })
             .OrderByDescending(v => v.Total)
             .ThenBy(v => v.Nome, StringComparer.OrdinalIgnoreCase)
@@ -151,6 +174,8 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
             Aviso = aviso,
             Total = lancamentos.Sum(x => x.Valor),
             DinheiroPago = lancamentos.Sum(x => x.DinheiroPago),
+            Custo = lancamentos.Sum(x => x.Custo ?? 0),
+            Liquido = lancamentos.Sum(x => x.Liquido),
             Quantidade = lancamentos.Count,
             Vendas = lancamentos.Count(x => x.Tipo is AparelhoOperacaoTipo.Venda or "venda"),
             Trocas = lancamentos.Count(x => x.Tipo == AparelhoOperacaoTipo.Troca),
@@ -256,8 +281,213 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
 
     private static string LerTexto(JsonElement item, string nome)
     {
-        if (!item.TryGetProperty(nome, out var valor)) return "";
+        if (!TryGet(item, nome, out var valor)) return "";
         return valor.ValueKind == JsonValueKind.String ? valor.GetString() ?? "" : valor.ToString();
+    }
+
+    private static ComissaoLancamentoDto LinhaLoja(
+        string dia,
+        string vendedor,
+        string descricao,
+        string produto,
+        string cliente,
+        decimal valor,
+        decimal? custo) =>
+        new()
+        {
+            Data = dia,
+            Tipo = "venda",
+            Vendedor = vendedor,
+            Descricao = descricao,
+            Produto = produto,
+            Cliente = cliente,
+            Valor = valor,
+            Custo = custo,
+            Liquido = valor - (custo ?? 0),
+        };
+
+    private async Task<List<(string Produto, decimal Valor, decimal? Custo)>> ItensDoPedidoAsync(
+        HttpClient http,
+        string accessToken,
+        long pedidoId,
+        Dictionary<long, (string Nome, decimal? Custo)> produtos,
+        CancellationToken cancellationToken)
+    {
+        var linhas = new List<(string Produto, decimal Valor, decimal? Custo)>();
+        if (pedidoId <= 0) return linhas;
+        var json = await GetJsonAsync(http, accessToken, $"pedidos/vendas/{pedidoId}", cancellationToken);
+        if (json is null) return linhas;
+        using var doc = JsonDocument.Parse(json);
+        if (!TryGet(doc.RootElement, "data", out var data) || data.ValueKind != JsonValueKind.Object)
+            return linhas;
+        if (!TryGet(data, "itens", out var itens) || itens.ValueKind != JsonValueKind.Array)
+            return linhas;
+
+        foreach (var linha in itens.EnumerateArray())
+        {
+            var qtd = LerDecimal(linha, "quantidade");
+            if (qtd <= 0) qtd = 1;
+            var produtoId = IdDoProduto(linha);
+            var nomeLinha = First(
+                LerTexto(linha, "descricao"),
+                LerTexto(linha, "descricaoDetalhada"),
+                NomeProduto(linha),
+                LerTexto(linha, "codigo"));
+            var temCusto = TentarCusto(linha, out var custoUnit);
+            if (!temCusto && TryGet(linha, "produto", out var produto) && produto.ValueKind == JsonValueKind.Object)
+                temCusto = TentarCusto(produto, out custoUnit);
+            var nomeCadastro = "";
+            if (produtoId > 0)
+            {
+                var cadastro = await ProdutoAsync(http, accessToken, produtoId, produtos, cancellationToken);
+                nomeCadastro = cadastro.Nome;
+                if (!temCusto && cadastro.Custo is not null)
+                {
+                    temCusto = true;
+                    custoUnit = cadastro.Custo.Value;
+                }
+            }
+
+            var nome = First(nomeCadastro, nomeLinha);
+
+            if (nome.Length == 0) nome = produtoId > 0 ? $"Produto {produtoId}" : "Item do pedido";
+            if (qtd > 1)
+                nome += " × " + qtd.ToString("0.##", CultureInfo.GetCultureInfo("pt-BR"));
+            var valor = ValorDaLinha(linha, qtd);
+            decimal? custo = temCusto ? Round(custoUnit * qtd) : null;
+            linhas.Add((nome, valor, custo));
+        }
+
+        return linhas;
+    }
+
+    private async Task<(string Nome, decimal? Custo)> ProdutoAsync(
+        HttpClient http,
+        string accessToken,
+        long produtoId,
+        Dictionary<long, (string Nome, decimal? Custo)> cache,
+        CancellationToken cancellationToken)
+    {
+        if (cache.TryGetValue(produtoId, out var salvo)) return salvo;
+        var json = await GetJsonAsync(http, accessToken, $"produtos/{produtoId}", cancellationToken);
+        var lido = ("", (decimal?)null);
+        if (json is not null)
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (TryGet(doc.RootElement, "data", out var data) && data.ValueKind == JsonValueKind.Object)
+            {
+                var nome = First(LerTexto(data, "nome"), LerTexto(data, "descricao"), LerTexto(data, "codigo"));
+                decimal? custo = TentarCusto(data, out var n) ? n : null;
+                if (custo is null)
+                    custo = CustoDeFornecedor(data);
+                lido = (nome, custo);
+            }
+        }
+
+        cache[produtoId] = lido;
+        return lido;
+    }
+
+    private static decimal? CustoDeFornecedor(JsonElement produto)
+    {
+        if (TryGet(produto, "fornecedor", out var um) && um.ValueKind == JsonValueKind.Object && TentarCusto(um, out var unico))
+            return unico;
+        if (!TryGet(produto, "fornecedores", out var lista) || lista.ValueKind != JsonValueKind.Array)
+            return null;
+        foreach (var fornecedor in lista.EnumerateArray())
+        {
+            if (fornecedor.ValueKind == JsonValueKind.Object && TentarCusto(fornecedor, out var custo))
+                return custo;
+        }
+        return null;
+    }
+
+    private static long IdDoProduto(JsonElement linha)
+    {
+        if (TryGet(linha, "produto", out var produto) && produto.ValueKind == JsonValueKind.Object)
+        {
+            var id = LerLong(produto, "id");
+            if (id > 0) return id;
+        }
+        var direto = LerLong(linha, "idProduto");
+        return direto > 0 ? direto : LerLong(linha, "produtoId");
+    }
+
+    private static string NomeProduto(JsonElement linha)
+    {
+        if (!TryGet(linha, "produto", out var produto) || produto.ValueKind != JsonValueKind.Object)
+            return "";
+        return First(LerTexto(produto, "nome"), LerTexto(produto, "descricao"));
+    }
+
+    private static decimal ValorDaLinha(JsonElement linha, decimal quantidade)
+    {
+        var unitario = LerDecimal(linha, "valor");
+        if (unitario <= 0) unitario = LerDecimal(linha, "valorUnitario");
+        var bruto = unitario * quantidade;
+        var desconto = LerDecimal(linha, "desconto");
+        if (desconto > 0 && desconto < bruto) bruto -= desconto;
+        if (bruto > 0) return Round(bruto);
+        var total = LerDecimal(linha, "valorTotal");
+        return total > 0 ? Round(total) : 0;
+    }
+
+    private static bool TentarCusto(JsonElement item, out decimal custo)
+    {
+        foreach (var nome in new[] { "precoCusto", "custo", "valorCusto", "precoCompra" })
+        {
+            if (!TryGet(item, nome, out var valor)) continue;
+            if (valor.ValueKind == JsonValueKind.Number && valor.TryGetDecimal(out var n) && n >= 0)
+            {
+                custo = n;
+                return true;
+            }
+        }
+        custo = 0;
+        return false;
+    }
+
+    private static decimal Round(decimal valor) =>
+        Math.Round(valor, 2, MidpointRounding.AwayFromZero);
+
+    private static string First(params string[] valores)
+    {
+        foreach (var valor in valores)
+        {
+            if (!string.IsNullOrWhiteSpace(valor)) return valor.Trim();
+        }
+        return "";
+    }
+
+    private static long LerLong(JsonElement item, string nome)
+    {
+        if (!TryGet(item, nome, out var valor)) return 0;
+        if (valor.ValueKind == JsonValueKind.Number && valor.TryGetInt64(out var n)) return n;
+        return long.TryParse(valor.ToString(), out var p) ? p : 0;
+    }
+
+    private static decimal LerDecimal(JsonElement item, string nome)
+    {
+        if (!TryGet(item, nome, out var valor)) return 0;
+        if (valor.ValueKind == JsonValueKind.Number && valor.TryGetDecimal(out var n)) return n;
+        return 0;
+    }
+
+    private static bool TryGet(JsonElement item, string nome, out JsonElement valor)
+    {
+        if (item.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in item.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, nome, StringComparison.OrdinalIgnoreCase))
+                {
+                    valor = prop.Value;
+                    return true;
+                }
+            }
+        }
+        valor = default;
+        return false;
     }
 
     private async Task<string?> TokenAsync()
@@ -285,17 +515,24 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
         }
     }
 
-    private static async Task<string?> GetJsonAsync(HttpClient http, string accessToken, string url, CancellationToken cancellationToken)
+    private static async Task<string?> GetJsonAsync(
+        HttpClient http,
+        string accessToken,
+        string url,
+        CancellationToken cancellationToken,
+        int tentativa = 0)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var resp = await http.SendAsync(req, cancellationToken);
-        if (resp.StatusCode == HttpStatusCode.TooManyRequests)
+        if (resp.StatusCode == HttpStatusCode.TooManyRequests && tentativa < 3)
         {
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-            return null;
+            return await GetJsonAsync(http, accessToken, url, cancellationToken, tentativa + 1);
         }
         if (!resp.IsSuccessStatusCode) return null;
-        return await resp.Content.ReadAsStringAsync(cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+        await Task.Delay(TimeSpan.FromMilliseconds(350), cancellationToken);
+        return body;
     }
 }

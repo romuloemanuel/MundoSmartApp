@@ -5,6 +5,8 @@ public class ComissaoOrigemDto
     public string? Aviso { get; set; }
     public decimal Total { get; set; }
     public decimal DinheiroPago { get; set; }
+    public decimal Custo { get; set; }
+    public decimal Liquido { get; set; }
     public int Quantidade { get; set; }
     public int Vendas { get; set; }
     public int Trocas { get; set; }
@@ -20,6 +22,8 @@ public class ComissaoVendedorDto
     public int Trocas { get; set; }
     public decimal Total { get; set; }
     public decimal DinheiroPago { get; set; }
+    public decimal Custo { get; set; }
+    public decimal Liquido { get; set; }
 }
 
 public class ComissaoLancamentoDto
@@ -28,7 +32,11 @@ public class ComissaoLancamentoDto
     public string Tipo { get; set; } = string.Empty;
     public string Vendedor { get; set; } = string.Empty;
     public string Descricao { get; set; } = string.Empty;
+    public string Produto { get; set; } = string.Empty;
     public string Cliente { get; set; } = string.Empty;
     public decimal Valor { get; set; }
     public decimal DinheiroPago { get; set; }
+    /// <summary>Nulo quando o Bling não trouxe preço de custo. O preço de venda não entra aqui.</summary>
+    public decimal? Custo { get; set; }
+    public decimal Liquido { get; set; }
 }

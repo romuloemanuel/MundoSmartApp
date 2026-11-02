@@ -419,7 +419,7 @@ interface FichaEntrada {
           <label>Aparelho</label>
           <select [ngModel]="venda.aparelhoId" (ngModelChange)="onVendaAparelho($event)" name="aparelhoVenda">
             <option value="">Selecione…</option>
-            <option *ngFor="let a of unidadesVenda" [value]="a.id">{{ a.configuracao || 'Sem capacidade' }} · {{ a.imei }}</option>
+            <option *ngFor="let a of unidadesVenda" [value]="a.id">{{ a.configuracao || 'Sem capacidade' }} · {{ a.imei || 'IMEI pendente' }}</option>
           </select>
         </div>
         <p class="hint" *ngIf="unidadesVenda.length === 1">{{ unidadesVenda[0].configuracao || 'Sem capacidade' }} · IMEI {{ unidadesVenda[0].imei }}</p>
@@ -580,7 +580,7 @@ interface FichaEntrada {
           <label>Aparelho que sai</label>
           <select [ngModel]="troca.aparelhoSaidaId" (ngModelChange)="onTrocaAparelho($event)" name="saida">
             <option value="">Selecione…</option>
-            <option *ngFor="let a of unidadesTroca" [value]="a.id">{{ a.configuracao || 'Sem capacidade' }} · {{ a.imei }}</option>
+            <option *ngFor="let a of unidadesTroca" [value]="a.id">{{ a.configuracao || 'Sem capacidade' }} · {{ a.imei || 'IMEI pendente' }}</option>
           </select>
         </div>
         <p class="hint" *ngIf="unidadesTroca.length === 1">{{ unidadesTroca[0].configuracao || 'Sem capacidade' }} · IMEI {{ unidadesTroca[0].imei }}</p>
@@ -898,7 +898,11 @@ interface FichaEntrada {
           <div class="corpo">
             <strong>{{ a.marca }} {{ a.modelo }}</strong>
             <div class="sub">{{ a.configuracao }}<span *ngIf="a.cor"> · {{ a.cor }}</span></div>
-            <div class="sub">IMEI {{ a.imei }}</div>
+            <div class="sub" *ngIf="a.imei">IMEI {{ a.imei }}</div>
+            <form class="imei-pendente" *ngIf="!a.imei" (click)="$event.stopPropagation()" (submit)="salvarImei(a)">
+              <input [(ngModel)]="imeiInformado[a.id]" [name]="'imei' + a.id" inputmode="numeric" placeholder="IMEI pendente" />
+              <button type="submit">Salvar</button>
+            </form>
             <dl>
               <div>
                 <dt>Valor</dt>
@@ -1098,6 +1102,9 @@ interface FichaEntrada {
     .prejuizo { color: #9a3412; font-size: 13px; margin: 6px 0 0; }
     .secao { margin-top: 28px; }
     .sub { color: #64748b; font-size: 11px; }
+    .imei-pendente { display: flex; gap: 6px; margin-top: 4px; }
+    .imei-pendente input { flex: 1; min-width: 0; font-size: 12px; padding: 4px 6px; }
+    .imei-pendente button { font-size: 12px; padding: 4px 8px; }
     tr.estornada { color: #94a3b8; }
     tr.clicavel { cursor: pointer; }
     tr.ficha td { background: #f8fafc; font-size: 13px; }
@@ -1191,6 +1198,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   opcaoJurosVenda: OpcaoParcela | null = null;
   opcaoJurosTroca: OpcaoParcela | null = null;
   fichaId: string | null = null;
+  imeiInformado: Record<string, string> = {};
   fotosMarcadas = new Set<string>();
   enviandoWhatsapp = false;
   financeiro = false;
@@ -1771,6 +1779,21 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.fotosMarcadas = new Set();
   }
 
+  salvarImei(a: AparelhoLojaItem): void {
+    const imei = (this.imeiInformado[a.id || ''] || '').replace(/\D/g, '');
+    if (imei.length !== 15) {
+      avisarErroUsuario('O IMEI precisa ter 15 dígitos.');
+      return;
+    }
+    this.api.informarImei(a.id || '', imei).subscribe({
+      next: painel => {
+        this.painel = painel;
+        avisarSucessoUsuario('IMEI salvo.');
+      },
+      error: err => avisarErroUsuario(err?.error?.erro || 'Não foi possível salvar o IMEI.'),
+    });
+  }
+
   fotoMarcada(foto: { id?: string; url?: string }): boolean {
     return this.fotosMarcadas.has(this.chaveFoto(foto));
   }
@@ -2006,6 +2029,11 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   salvarVenda(): void {
     if (!this.venda.aparelhoId) {
       avisarErroUsuario('Selecione o aparelho do estoque.');
+      return;
+    }
+    const unidade = this.estoque.find(a => a.id === this.venda.aparelhoId);
+    if (unidade && (unidade.imei || '').replace(/\D/g, '').length !== 15) {
+      avisarErroUsuario('Informe o IMEI deste aparelho antes de vender.');
       return;
     }
     const clienteId = this.cliente?.id;

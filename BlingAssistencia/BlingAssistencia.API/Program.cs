@@ -86,6 +86,7 @@ builder.Services.AddSingleton<IReceitaService, ReceitaService>();
 builder.Services.AddSingleton<IComissaoOrigemService, ComissaoOrigemService>();
 builder.Services.AddSingleton<IClienteAparelhoCompradoService, ClienteAparelhoCompradoService>();
 builder.Services.AddSingleton<IBlingVendaCelularSyncService, BlingVendaCelularSyncService>();
+builder.Services.AddSingleton<IBlingEstoqueCelularImportService, BlingEstoqueCelularImportService>();
 builder.Services.AddHostedService<BlingProdutoSyncHostedService>();
 builder.Services.AddHostedService<BlingVendaCelularSyncHostedService>();
 builder.Services.AddHostedService<PaymobiSyncHostedService>();

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MundoSmart.BlingAssistencia.API.Models;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
@@ -11,12 +12,25 @@ namespace MundoSmart.BlingAssistencia.API.Controllers;
 public class AparelhoLojaController : ControllerBase
 {
     private readonly IAparelhoLojaService _loja;
+    private readonly IBlingEstoqueCelularImportService _estoqueBling;
     private readonly IWebHostEnvironment _env;
 
-    public AparelhoLojaController(IAparelhoLojaService loja, IWebHostEnvironment env)
+    public AparelhoLojaController(
+        IAparelhoLojaService loja,
+        IBlingEstoqueCelularImportService estoqueBling,
+        IWebHostEnvironment env)
     {
         _loja = loja;
+        _estoqueBling = estoqueBling;
         _env = env;
+    }
+
+    [HttpPost("importar-bling")]
+    [Authorize(Roles = AppRoles.AdminOuRoot)]
+    public async Task<IActionResult> ImportarEstoqueBling(CancellationToken cancellationToken)
+    {
+        var result = await _estoqueBling.ImportarAsync(cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("os")]
@@ -70,6 +84,10 @@ public class AparelhoLojaController : ControllerBase
             return BadRequest(new { erro = ex.Message });
         }
     }
+
+    [HttpPost("{id}/imei")]
+    public Task<IActionResult> InformarImei(string id, [FromBody] AparelhoImeiRequest? body, CancellationToken cancellationToken) =>
+        Executar(() => _loja.InformarImeiAsync(id, body?.Imei, cancellationToken));
 
     [HttpPost("{id}/liberar")]
     public Task<IActionResult> Liberar(string id, CancellationToken cancellationToken) =>

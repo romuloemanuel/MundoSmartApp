@@ -18,6 +18,7 @@ public interface IAparelhoLojaService
     Task<AparelhoLojaPainelDto> VenderAsync(AparelhoVendaRequest pedido, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> TrocarAsync(AparelhoTrocaRequest pedido, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> LiberarAsync(string aparelhoId, CancellationToken cancellationToken = default);
+    Task<AparelhoLojaPainelDto> InformarImeiAsync(string aparelhoId, string? imei, CancellationToken cancellationToken = default);
     Task<OsAbertaConsultaDto> ConsultarOsAbertaAsync(string? numero, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> EstornarAsync(string operacaoId, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> SalvarListaAsync(AparelhoListaPrecoRequest pedido, CancellationToken cancellationToken = default);
@@ -157,6 +158,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         var preco = PrecoCobrado(pedido.PrecoTabela, pedido.Desconto, pedido.Acrescimo, pedido.Forma, pedido.Preco);
 
         var aparelho = await ExigirEmEstoqueAsync(pedido.AparelhoId, cancellationToken);
+        ExigirImeiParaSair(aparelho);
         ExigirAcimaDoMinimo(aparelho, pedido.PrecoTabela, pedido.Desconto, pedido.Preco);
         var cliente = await ExigirClienteComCpfAsync(pedido.ClienteId, cancellationToken);
         var agora = HorarioBrasil.Agora;
@@ -211,6 +213,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             : precoSaida;
 
         var saida = await ExigirEmEstoqueAsync(pedido.AparelhoSaidaId, cancellationToken);
+        ExigirImeiParaSair(saida);
         ExigirAcimaDoMinimo(saida, pedido.PrecoTabela, pedido.Desconto, pedido.PrecoSaida);
         var prontas = await ResolverEntradasTrocaAsync(pedido, cancellationToken);
         var imeis = new HashSet<string>(StringComparer.Ordinal);
@@ -725,6 +728,35 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         if (aparelho.Status != AparelhoLojaStatus.EmEstoque)
             throw new InvalidOperationException("Esse aparelho não está mais no estoque.");
         return aparelho;
+    }
+
+    public async Task<AparelhoLojaPainelDto> InformarImeiAsync(
+        string aparelhoId,
+        string? imei,
+        CancellationToken cancellationToken = default)
+    {
+        var aparelho = await _repo.ObterAparelhoAsync(aparelhoId, cancellationToken)
+            ?? throw new InvalidOperationException("Aparelho não encontrado no estoque.");
+        if (aparelho.Status is not (AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia))
+            throw new InvalidOperationException("Esse aparelho não está mais no estoque.");
+
+        var novo = Imei(imei);
+        if (novo.Length != 15 || novo.Distinct().Count() <= 1)
+            throw new InvalidOperationException("O IMEI precisa ter 15 dígitos.");
+
+        var outro = await _repo.ObterEmEstoquePorImeiAsync(novo, cancellationToken);
+        if (outro is not null && outro.Id != aparelho.Id)
+            throw new InvalidOperationException("Já existe um aparelho com este IMEI no estoque.");
+
+        aparelho.Imei = novo;
+        await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+        return await MontarPainelAsync(cancellationToken);
+    }
+
+    private static void ExigirImeiParaSair(AparelhoLojaData aparelho)
+    {
+        if (aparelho.Imei.Length == 15) return;
+        throw new InvalidOperationException("Informe o IMEI deste aparelho antes de vender.");
     }
 
     private async Task<AparelhoEntradaRequest> NormalizarEntradaAsync(

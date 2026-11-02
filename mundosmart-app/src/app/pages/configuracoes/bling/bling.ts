@@ -8,6 +8,7 @@ import {
   BlingConfigService,
 } from '../../../services/bling-config.service';
 import { BlingVendaCelularService } from '../../../services/bling-venda-celular.service';
+import { AparelhoLojaService } from '../../../services/aparelho-loja.service';
 import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
 
 @Component({
@@ -90,13 +91,14 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
 
         <h3 class="secao">Vendas de celular → desconto na manutenção</h3>
         <p class="hint secao-hint">
-          Todo dia a API importa pedidos do Bling na categoria informada (aparelho novo ou iPhone usado),
-          guarda IMEI + CPF e libera desconto na OS quando os dois coincidem.
+          Celular não é mais vendido no Bling. A venda, a troca e o estoque ficam em Vendas Celulares.
+          A importação automática dos pedidos de celular do Bling fica desligada.
+          O desconto na assistência usa o CPF e o IMEI gravados na venda da loja.
         </p>
 
         <label class="check">
           <input type="checkbox" [(ngModel)]="form.vendasCelularesHabilitada" name="vendasOn" />
-          Importar vendas de celular diariamente
+          Importar vendas antigas de celular do Bling a cada 30 minutos
         </label>
 
         <label>
@@ -126,15 +128,11 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
             <input type="number" min="0" max="100" step="0.5" [(ngModel)]="form.vendasCelularesAcrescimoFinanciadoraMaxPercentual" name="acrFinMax" />
             <span class="campo-hint">Na Payjoy, Paymobi, Crefaz ou outra, o contrato pode subir até esse percentual.</span>
           </label>
-          <label>
-            Hora do sync diário (Brasília)
-            <input type="number" min="0" max="23" [(ngModel)]="form.vendasCelularesSyncHora" name="syncHora" />
-          </label>
         </div>
 
         <div class="form-row">
           <label>
-            Dias no job diário
+            Dias reatualizados a cada 30 min
             <input type="number" min="1" max="30" [(ngModel)]="form.vendasCelularesDiasLookback" name="lookback" />
           </label>
           <label>
@@ -157,9 +155,13 @@ import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-
           Última importação: {{ cfg?.vendasCelularesUltimaSyncEm | date:'short' }}
           <span *ngIf="cfg?.vendasCelularesUltimoAviso"> — {{ cfg?.vendasCelularesUltimoAviso }}</span>
         </p>
-        <button type="button" class="secundario" (click)="sincronizarVendas()" [disabled]="sincronizando">
-          {{ sincronizando ? 'Importando…' : 'Importar vendas agora' }}
+        <button type="button" class="secundario" *ngIf="form.vendasCelularesHabilitada" (click)="sincronizarVendas()" [disabled]="sincronizando">
+          {{ sincronizando ? 'Atualizando…' : 'Atualizar vendas agora' }}
         </button>
+        <button type="button" class="secundario" (click)="importarEstoque()" [disabled]="importandoEstoque">
+          {{ importandoEstoque ? 'Importando estoque…' : 'Importar estoque de celulares' }}
+        </button>
+        <span class="campo-hint">Entra só aparelho com IMEI no código, no nome ou na descrição, e saldo maior que zero. O custo é o preço de custo do Bling.</span>
       </form>
     </div>
   `,
@@ -198,6 +200,7 @@ export class ConfigBlingPage implements OnInit {
   carregado = false;
   salvando = false;
   sincronizando = false;
+  importandoEstoque = false;
   erro = '';
   ok = false;
 
@@ -208,7 +211,7 @@ export class ConfigBlingPage implements OnInit {
     consultaProdutosHabilitada: true,
     consultaProdutosSyncMinutos: 15,
     idCampoPermitePersonalizacao: 0,
-    vendasCelularesHabilitada: true,
+    vendasCelularesHabilitada: false,
     vendasCelularesCategoriaIds: '',
     vendasCelularesCategoriaDescricoes: 'Celular,Celulares,Smartphone',
     vendasCelularesDescontoPercentual: 10,
@@ -225,6 +228,7 @@ export class ConfigBlingPage implements OnInit {
     private config: BlingConfigService,
     private blingAuth: BlingAuthService,
     private vendasCel: BlingVendaCelularService,
+    private loja: AparelhoLojaService,
   ) {}
 
   ngOnInit(): void {
@@ -291,10 +295,33 @@ export class ConfigBlingPage implements OnInit {
     });
   }
 
+  importarEstoque(): void {
+    this.erro = '';
+    this.importandoEstoque = true;
+    this.loja.importarEstoqueBling().subscribe({
+      next: res => {
+        this.importandoEstoque = false;
+        if (res.ok || res.importados > 0) {
+          avisarSucessoUsuario(
+            `${res.importados} celulares no estoque.` +
+            (res.semImei ? ` ${res.semImei} sem IMEI.` : '') +
+            (res.semCusto ? ` ${res.semCusto} sem preço de custo.` : ''),
+          );
+        }
+        if (res.aviso) this.erro = res.aviso;
+      },
+      error: err => {
+        this.importandoEstoque = false;
+        this.erro = err?.error?.erro || 'Não foi possível importar o estoque de celulares.';
+        avisarErroUsuario(this.erro);
+      },
+    });
+  }
+
   sincronizarVendas(): void {
     this.erro = '';
     this.sincronizando = true;
-    this.vendasCel.sincronizar({ historicoCompleto: !this.cfg?.vendasCelularesUltimaSyncEm }).subscribe({
+    this.vendasCel.sincronizar().subscribe({
       next: res => {
         this.sincronizando = false;
         if (res.ok) {
@@ -328,7 +355,7 @@ export class ConfigBlingPage implements OnInit {
         : !!(cfg.consultaProdutosHabilitada || dev?.consultaProdutosHabilitada),
       consultaProdutosSyncMinutos: cfg.consultaProdutosSyncMinutos || 15,
       idCampoPermitePersonalizacao: cfg.idCampoPermitePersonalizacao || 0,
-      vendasCelularesHabilitada: cfg.vendasCelularesHabilitada !== false,
+      vendasCelularesHabilitada: cfg.vendasCelularesHabilitada === true,
       vendasCelularesCategoriaIds: cfg.vendasCelularesCategoriaIds || '',
       vendasCelularesCategoriaDescricoes: cfg.vendasCelularesCategoriaDescricoes || 'Celular,Celulares,Smartphone',
       vendasCelularesDescontoPercentual: cfg.vendasCelularesDescontoPercentual ?? 10,
@@ -360,7 +387,7 @@ export class ConfigBlingPage implements OnInit {
       consultaProdutosHabilitada: !!d?.consultaProdutosHabilitada,
       consultaProdutosSyncMinutos: 15,
       idCampoPermitePersonalizacao: 0,
-      vendasCelularesHabilitada: true,
+      vendasCelularesHabilitada: false,
       vendasCelularesCategoriaIds: '',
       vendasCelularesCategoriaDescricoes: 'Celular,Celulares,Smartphone',
       vendasCelularesDescontoPercentual: 10,

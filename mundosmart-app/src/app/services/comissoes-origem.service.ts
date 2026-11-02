@@ -10,6 +10,8 @@ export interface ComissaoVendedor {
   trocas: number;
   total: number;
   dinheiroPago: number;
+  custo: number;
+  liquido: number;
 }
 
 export interface ComissaoLancamento {
@@ -17,15 +19,20 @@ export interface ComissaoLancamento {
   tipo: string;
   vendedor: string;
   descricao: string;
+  produto: string;
   cliente: string;
   valor: number;
   dinheiroPago: number;
+  custo: number | null;
+  liquido: number;
 }
 
 export interface ComissaoOrigem {
   aviso?: string | null;
   total: number;
   dinheiroPago: number;
+  custo: number;
+  liquido: number;
   quantidade: number;
   vendas: number;
   trocas: number;

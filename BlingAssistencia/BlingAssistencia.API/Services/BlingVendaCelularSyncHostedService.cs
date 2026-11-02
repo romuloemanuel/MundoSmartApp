@@ -6,7 +6,7 @@ namespace MundoSmart.BlingAssistencia.API.Services;
 public sealed class BlingVendaCelularSyncHostedService : BackgroundService
 {
     private static readonly TimeSpan EsperaInicial = TimeSpan.FromMinutes(3);
-    private static readonly TimeSpan IntervaloChecagem = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan Intervalo = TimeSpan.FromMinutes(30);
 
     private readonly IServiceProvider _sp;
     private readonly ILogger<BlingVendaCelularSyncHostedService> _log;
@@ -49,10 +49,10 @@ public sealed class BlingVendaCelularSyncHostedService : BackgroundService
                     var result = await svc.SincronizarAsync(new BlingVendaCelularSincronizarRequest(), stoppingToken);
                     if (result.Ok)
                         _log.LogInformation(
-                            "Sync diário vendas celular Bling OK: {N} novas, {A} atualizadas.",
+                            "Sync vendas celular Bling OK: {N} novas, {A} atualizadas. Próximo em 30 min.",
                             result.Importadas, result.Atualizadas);
                     else
-                        _log.LogWarning("Sync diário vendas celular Bling: {Aviso}", result.Aviso);
+                        _log.LogWarning("Sync vendas celular Bling: {Aviso}", result.Aviso);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -65,12 +65,12 @@ public sealed class BlingVendaCelularSyncHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                _log.LogWarning(ex, "Falha no sync diário de vendas de celular do Bling.");
+                _log.LogWarning(ex, "Falha no sync de vendas de celular do Bling.");
             }
 
             try
             {
-                await Task.Delay(IntervaloChecagem, stoppingToken);
+                await Task.Delay(Intervalo, stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -79,19 +79,14 @@ public sealed class BlingVendaCelularSyncHostedService : BackgroundService
         }
     }
 
+    /// <summary>Roda de novo quando a última atualização tem 30 minutos ou mais.</summary>
     private static bool DeveSincronizarAgora(BlingSettings settings)
     {
-        var zona = Config.HorarioBrasil.TimeZone;
-        var agora = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zona);
-        var hora = Math.Clamp(settings.VendasCelularesSyncHora, 0, 23);
-        if (agora.Hour < hora) return false;
-
         if (settings.VendasCelularesUltimaSyncEm is null) return true;
 
-        var lastUtc = settings.VendasCelularesUltimaSyncEm.Value.Kind == DateTimeKind.Utc
-            ? settings.VendasCelularesUltimaSyncEm.Value
-            : DateTime.SpecifyKind(settings.VendasCelularesUltimaSyncEm.Value, DateTimeKind.Utc);
-        var lastLocal = TimeZoneInfo.ConvertTimeFromUtc(lastUtc, zona);
-        return lastLocal.Date < agora.Date;
+        var last = settings.VendasCelularesUltimaSyncEm.Value;
+        if (last.Kind != DateTimeKind.Utc)
+            last = DateTime.SpecifyKind(last, DateTimeKind.Utc);
+        return DateTime.UtcNow - last >= TimeSpan.FromMinutes(30);
     }
 }
