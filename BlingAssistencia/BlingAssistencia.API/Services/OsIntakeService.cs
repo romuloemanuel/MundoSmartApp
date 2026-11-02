@@ -239,27 +239,10 @@ public class OsIntakeService : IOsIntakeService
     }
 
     /// <summary>
-    /// Development: aceita appUrl do front (IP da LAN). Produção: só Intake:AppBaseUrl / Intake__AppBaseUrl.
+    /// Development: aceita appUrl do front (IP da LAN). Produção: o site público, nunca o domínio automático do painel.
     /// </summary>
-    private string NormalizarAppUrl(string? appBaseUrl)
-    {
-        if (_env.IsDevelopment())
-        {
-            if (!string.IsNullOrWhiteSpace(appBaseUrl))
-                return appBaseUrl.Trim().TrimEnd('/');
-            if (!string.IsNullOrWhiteSpace(_intake.AppBaseUrl))
-                return _intake.AppBaseUrl.Trim().TrimEnd('/');
-            return "http://localhost:4200";
-        }
-
-        if (string.IsNullOrWhiteSpace(_intake.AppBaseUrl))
-        {
-            throw new InvalidOperationException(
-                "Configure Intake:AppBaseUrl (variável de ambiente Intake__AppBaseUrl) com a URL pública do front.");
-        }
-
-        return _intake.AppBaseUrl.Trim().TrimEnd('/');
-    }
+    private string NormalizarAppUrl(string? appBaseUrl) =>
+        _intake.UrlDoQr(appBaseUrl, _env.IsDevelopment());
 }
 
 public class OsIntakeTokenResponse

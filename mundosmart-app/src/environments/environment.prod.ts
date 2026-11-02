@@ -3,8 +3,8 @@ export const environment = {
   production: true,
   apiUrl: '/api',
   filesUrl: '',
-  /** DNS fixo do QR de intake / impressão em produção. */
-  intakeAppUrl: 'https://gestaosmart.mundosmartmococa.com.br',
+  /** Site público do QR de fotos. O domínio automático do painel não abre no celular. */
+  intakeAppUrl: 'https://gestaosmart.mundosmartoficial.com.br',
   authEnabled: true,
   estoque: {
     limiteLaranja: 3,

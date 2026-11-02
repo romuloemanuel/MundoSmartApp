@@ -109,32 +109,28 @@ interface FichaEntrada {
         <a *ngIf="financeiro" routerLink="/vendas-celulares/loja">Voltar para compra, venda e troca</a>
         <a *ngIf="isAdmin && !financeiro" routerLink="/vendas-celulares/loja/financeiro">Financeiro</a>
       </div>
-      <p class="hint" *ngIf="!financeiro">
-        Celulares ficam neste estoque, fora do Bling. O Bling continua só com acessórios e eletrônicos.
-        Na troca, o caixa registra só a diferença em dinheiro.
-        Quem leva um aparelho novo ou usado ganha desconto na assistência, pelo CPF e pelo IMEI.
-      </p>
+      <section class="iniciar" *ngIf="!financeiro">
+        <h3>Iniciar</h3>
+        <p class="hint">Toque em um dos três. O formulário abre aqui embaixo.</p>
+        <div class="modos">
+          <button type="button" (click)="abrir('compra')" [class.ativo]="modo === 'compra'">
+            <strong>Compra</strong>
+            <span>A loja recebe um aparelho</span>
+          </button>
+          <button type="button" (click)="abrir('venda')" [class.ativo]="modo === 'venda'">
+            <strong>Venda</strong>
+            <span>O cliente leva um aparelho do estoque</span>
+          </button>
+          <button type="button" (click)="abrir('troca')" [class.ativo]="modo === 'troca'">
+            <strong>Troca</strong>
+            <span>Entra um aparelho e sai outro</span>
+          </button>
+        </div>
+      </section>
       <p class="hint" *ngIf="financeiro">
         Valor de estoque e o dinheiro que entrou e saiu. Esta parte fica só para administrador.
         A transação de uma troca segue até o último aparelho ser vendido.
       </p>
-
-      <div class="cards" *ngIf="painel && !financeiro">
-        <div class="card" *ngFor="let g of disponiveisPorMarca">
-          <span>{{ g.marca }}</span>
-          <strong>{{ g.qtd }}</strong>
-          <small>{{ textoDisponiveis(g.qtd) }}</small>
-        </div>
-        <div class="card" *ngIf="!disponiveisPorMarca.length">
-          <span>Disponíveis</span>
-          <strong>0</strong>
-        </div>
-        <div class="card" *ngIf="painel.resumo.emAssistencia">
-          <span>Na assistência</span>
-          <strong>{{ painel.resumo.emAssistencia }}</strong>
-          <small>Fora de venda até liberar</small>
-        </div>
-      </div>
 
       <div class="cards" *ngIf="painel && financeiro">
         <div class="card">
@@ -169,6 +165,7 @@ interface FichaEntrada {
         Cada linha é um aparelho. O mês junta o dinheiro daquelas compras, trocas e vendas, sem repetir o valor quando vários aparelhos saem da mesma troca.
       </p>
       <p class="hint" *ngIf="financeiro && !meses.length">Nenhuma unidade para o mês.</p>
+      <ng-container *ngIf="financeiro">
       <section class="mes" *ngFor="let m of meses">
         <h3>{{ m.rotulo }}</h3>
         <p class="sub">
@@ -216,6 +213,7 @@ interface FichaEntrada {
           </tbody>
         </table>
       </section>
+      </ng-container>
 
       <h3 class="secao" *ngIf="financeiro">Transações</h3>
       <p class="hint" *ngIf="financeiro">
@@ -224,6 +222,7 @@ interface FichaEntrada {
         O lucro final aparece quando não resta nenhum aparelho, e desconta a compra e o custo das peças.
       </p>
       <p class="hint" *ngIf="financeiro && !cadeias.length">Nenhuma venda ou troca para acompanhar.</p>
+      <ng-container *ngIf="financeiro">
       <article class="cadeia" *ngFor="let c of cadeias" [class.aberta]="c.aberta" [class.fechada]="!c.aberta">
         <button type="button" class="cadeia-topo" (click)="alternarCadeia(c.id)">
           <strong>{{ c.titulo }}</strong>
@@ -247,6 +246,7 @@ interface FichaEntrada {
           </div>
         </div>
       </article>
+      </ng-container>
 
       <ng-template #fichaPasso let-p="passo">
         <div class="ficha-passo">
@@ -287,26 +287,6 @@ interface FichaEntrada {
         </div>
       </ng-template>
 
-      <h3 *ngIf="vendedores.length && !financeiro">Por vendedor</h3>
-      <table class="data-grid" *ngIf="vendedores.length && !financeiro">
-        <thead>
-          <tr>
-            <th>Vendedor</th>
-            <th>Entradas</th>
-            <th>Vendas</th>
-            <th>Trocas</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let v of vendedores">
-            <td>{{ v.nome }}</td>
-            <td>{{ v.entradas }}</td>
-            <td>{{ v.vendas }}</td>
-            <td>{{ v.trocas }}</td>
-          </tr>
-        </tbody>
-      </table>
-
       <h3 *ngIf="vendedores.length && financeiro">Por vendedor</h3>
       <table class="data-grid" *ngIf="vendedores.length && financeiro">
         <thead>
@@ -335,17 +315,12 @@ interface FichaEntrada {
         </tbody>
       </table>
 
-      <div class="acoes" *ngIf="!financeiro">
-        <button type="button" (click)="abrir('compra')" [class.ativo]="modo === 'compra'">Compra</button>
-        <button type="button" (click)="abrir('venda')" [class.ativo]="modo === 'venda'">Venda</button>
-        <button type="button" (click)="abrir('troca')" [class.ativo]="modo === 'troca'">Troca</button>
-      </div>
-
       <p *ngIf="erro" class="erro">{{ erro }}</p>
 
       <form class="painel" *ngIf="modo === 'compra'" (ngSubmit)="salvarCompra()" (keydown.enter)="bloquearEnterDaBusca($event)">
-        <h3>Compra — aparelho entra no estoque</h3>
-        <p class="hint">A loja paga. Quem vendeu o aparelho para a loja não ganha desconto na assistência.</p>
+        <h3>Compra</h3>
+        <p class="hint">A loja paga e o aparelho entra no estoque. Quem vendeu para a loja não ganha desconto na assistência.</p>
+        <p class="etapa">1. Aparelho</p>
         <div class="form-row">
           <div class="form-group">
             <label>Marca</label>
@@ -408,6 +383,7 @@ interface FichaEntrada {
             <p class="hint" *ngIf="osAberta">O deságio já está neste valor.</p>
           </div>
         </div>
+        <p class="etapa">2. Preços</p>
         <div class="form-row valores-venda">
           <div class="form-group">
             <label>Valor de venda</label>
@@ -418,6 +394,7 @@ interface FichaEntrada {
             <input type="number" min="0" step="0.01" [(ngModel)]="entrada.valorMinimoVenda" name="valorMinimoCompra" />
           </div>
         </div>
+        <p class="etapa">3. Quem vendeu para a loja</p>
         <div class="form-group">
           <label>Cliente (opcional se for fornecedor)</label>
           <app-cliente-autocomplete
@@ -474,6 +451,8 @@ interface FichaEntrada {
           Passa pela assistência antes de vender
         </label>
         <p class="hint" *ngIf="entrada.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Não entra na venda nem na troca até a assistência liberar.</p>
+        <details class="mais">
+          <summary>Testes, fotos e OS já aberta</summary>
         <div class="form-group">
           <label>OS já aberta</label>
           <input [ngModel]="entrada.osNumero" (ngModelChange)="onOsNumero($event)" name="osCompra" inputmode="numeric" placeholder="Número da OS" />
@@ -510,6 +489,7 @@ interface FichaEntrada {
             <p class="hint" *ngIf="fotosSessao.length">{{ textoMidiaRecebida }}</p>
           </div>
         </div>
+        </details>
         <div class="acoes">
           <button type="submit" [disabled]="salvando">{{ salvando ? 'Salvando…' : 'Registrar compra' }}</button>
           <button type="button" class="secundario" (click)="cancelar()">Cancelar</button>
@@ -517,11 +497,8 @@ interface FichaEntrada {
       </form>
 
       <form class="painel" *ngIf="modo === 'venda'" (ngSubmit)="salvarVenda()" (keydown.enter)="bloquearEnterDaBusca($event)">
-        <h3>Venda — cliente leva um aparelho do estoque</h3>
-        <p class="hint" *ngIf="venda.forma === 'avista'">O dinheiro que entra é o preço. Esse CPF e esse IMEI passam a ter desconto na assistência. O contrato abre preenchido.</p>
-        <p class="hint" *ngIf="venda.forma === 'cartao'">O valor que entra é o preço, no cartão. A parcela calculada é o que passa para o cliente. A loja recebe o preço.</p>
-        <p class="hint" *ngIf="venda.forma === 'avista_cartao'">Parte à vista e parte no cartão. As duas somam o preço e as duas entram no caixa.</p>
-        <p class="hint" *ngIf="ehFinanciada(venda.forma)">O preço é o valor do contrato. No caixa entra a entrada e o repasse da financiadora. O saldo que o cliente deve a ela não é dinheiro da loja.</p>
+        <h3>Venda</h3>
+        <p class="etapa">1. Aparelho do estoque</p>
         <div class="form-row">
           <div class="form-group">
             <label>Marca</label>
@@ -562,6 +539,7 @@ interface FichaEntrada {
         </div>
         <p class="hint" *ngIf="unidadesVenda.length === 1">{{ unidadesVenda[0].configuracao || 'Sem capacidade' }} · IMEI {{ unidadesVenda[0].imei }}</p>
         <p class="hint" *ngIf="!disponiveis.length">Nenhum aparelho liberado para venda. Os que estão na assistência aparecem no estoque.</p>
+        <p class="etapa">2. Preço e pagamento</p>
         <div class="form-row">
           <div class="form-group">
             <label>Preço do aparelho</label>
@@ -610,6 +588,10 @@ interface FichaEntrada {
             <option value="crefaz">Crefaz</option>
             <option value="outra">Outra financiadora</option>
           </select>
+          <p class="hint campo-hint" *ngIf="venda.forma === 'avista'">O dinheiro que entra é o preço. Esse CPF e esse IMEI passam a ter desconto na assistência. O contrato abre preenchido.</p>
+          <p class="hint campo-hint" *ngIf="venda.forma === 'cartao'">O valor que entra é o preço, no cartão. A parcela calculada é o que passa para o cliente. A loja recebe o preço.</p>
+          <p class="hint campo-hint" *ngIf="venda.forma === 'avista_cartao'">Parte à vista e parte no cartão. As duas somam o preço e as duas entram no caixa.</p>
+          <p class="hint campo-hint" *ngIf="ehFinanciada(venda.forma)">O preço é o valor do contrato. No caixa entra a entrada e o repasse da financiadora. O saldo que o cliente deve a ela não é dinheiro da loja.</p>
         </div>
         <div class="form-group" *ngIf="venda.forma === 'outra'">
           <label>Nome da financiadora</label>
@@ -647,6 +629,7 @@ interface FichaEntrada {
           <p class="hint">Sobe o valor do contrato até {{ dinheiro(teto(venda.preco, acrescimoMaxPct)) }} ({{ acrescimoMaxPct }}%) para a financiadora calcular uma entrada menor. O caixa continua sendo a entrada e o repasse.</p>
           <p class="campo-aviso" *ngIf="acrescimoEstoura(venda.preco, venda.acrescimo)">O acréscimo passa do limite.</p>
         </div>
+        <p class="etapa">3. Cliente</p>
         <div class="form-group">
           <label>Cliente</label>
           <app-cliente-autocomplete
@@ -675,11 +658,9 @@ interface FichaEntrada {
       </form>
 
       <form class="painel" *ngIf="modo === 'troca'" (ngSubmit)="salvarTroca()" (keydown.enter)="bloquearEnterDaBusca($event)">
-        <h3>Troca — entra um ou mais aparelhos e sai outro</h3>
-        <p class="hint">
-          O caixa registra só a diferença que você informar. Cada aparelho que entra fica no estoque pelo próprio valor avaliado.
-          O desconto fica no aparelho que o cliente leva.
-        </p>
+        <h3>Troca</h3>
+        <p class="hint">O caixa registra só a diferença. O aparelho que entra fica no estoque pelo valor avaliado.</p>
+        <p class="etapa">1. Aparelho que sai</p>
         <div class="form-row">
           <div class="form-group">
             <label>Marca que sai</label>
@@ -744,6 +725,7 @@ interface FichaEntrada {
           <ng-container *ngIf="diferencaTroca === 0">zero.</ng-container>
           O caixa usa a diferença que você informar.
         </p>
+        <p class="etapa">2. Diferença</p>
         <div class="form-group">
           <label>Volta da diferença</label>
           <select [ngModel]="troca.sentido" (ngModelChange)="onSentidoTroca($event)" name="sentidoTroca">
@@ -798,6 +780,7 @@ interface FichaEntrada {
             </p>
           </ng-container>
         </div>
+        <p class="etapa">3. Cliente</p>
         <div class="form-group">
           <label>Cliente</label>
           <app-cliente-autocomplete
@@ -817,7 +800,7 @@ interface FichaEntrada {
         </div>
         <div class="entrada-troca" *ngFor="let f of entradasTroca; let i = index">
           <div class="entrada-troca-topo">
-            <h4>Aparelho que entra<span *ngIf="entradasTroca.length > 1"> {{ i + 1 }}</span></h4>
+            <h4>4. Aparelho que entra<span *ngIf="entradasTroca.length > 1"> {{ i + 1 }}</span></h4>
             <button type="button" class="secundario" *ngIf="entradasTroca.length > 1" (click)="removerEntradaTroca(f)">Remover</button>
           </div>
           <div class="form-row">
@@ -934,6 +917,8 @@ interface FichaEntrada {
             Este aparelho passa pela assistência antes de vender
           </label>
           <p class="hint" *ngIf="f.dados.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Ele fica no estoque, mas não entra na venda nem na troca até a assistência liberar.</p>
+          <details class="mais">
+            <summary>Testes, fotos e OS já aberta</summary>
           <div class="form-group">
             <label>OS já aberta</label>
             <input [ngModel]="f.dados.osNumero" (ngModelChange)="onOsFicha($event, f)" [name]="'osTroca' + f.id" inputmode="numeric" placeholder="Número da OS" />
@@ -970,6 +955,7 @@ interface FichaEntrada {
               <p class="hint" *ngIf="f.fotosSessao.length">{{ textoMidiaRecebidaDe(f) }}</p>
             </div>
           </div>
+          </details>
         </div>
         <div class="acoes">
           <button type="button" class="secundario" (click)="adicionarEntradaTroca()">Adicionar outro aparelho</button>
@@ -980,7 +966,24 @@ interface FichaEntrada {
         </div>
       </form>
 
-      <h3>Estoque</h3>
+      <div class="cards" *ngIf="painel && !financeiro">
+        <div class="card" *ngFor="let g of disponiveisPorMarca">
+          <span>{{ g.marca }}</span>
+          <strong>{{ g.qtd }}</strong>
+          <small>{{ textoDisponiveis(g.qtd) }}</small>
+        </div>
+        <div class="card" *ngIf="!disponiveisPorMarca.length">
+          <span>Disponíveis</span>
+          <strong>0</strong>
+        </div>
+        <div class="card" *ngIf="painel.resumo.emAssistencia">
+          <span>Na assistência</span>
+          <strong>{{ painel.resumo.emAssistencia }}</strong>
+          <small>Fora de venda até liberar</small>
+        </div>
+      </div>
+
+      <h3 class="secao">Estoque da loja</h3>
       <p class="hint" *ngIf="!carregando && estoque.length === 0">Nenhum celular no estoque da loja.</p>
       <div class="busca-estoque" *ngIf="estoque.length">
         <div class="form-group">
@@ -1209,6 +1212,26 @@ interface FichaEntrada {
           </tr>
         </tbody>
       </table>
+
+      <h3 class="secao" *ngIf="vendedores.length && !financeiro">Por vendedor</h3>
+      <table class="data-grid" *ngIf="vendedores.length && !financeiro">
+        <thead>
+          <tr>
+            <th>Vendedor</th>
+            <th>Entradas</th>
+            <th>Vendas</th>
+            <th>Trocas</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let v of vendedores">
+            <td>{{ v.nome }}</td>
+            <td>{{ v.entradas }}</td>
+            <td>{{ v.vendas }}</td>
+            <td>{{ v.trocas }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <app-novo-cliente-modal
@@ -1235,8 +1258,23 @@ interface FichaEntrada {
     }
     .card span, .card small { color: #64748b; font-size: 12px; }
     .card strong { font-size: 18px; color: #0d0d0d; }
-    .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-    .acoes button.ativo { outline: 2px solid #0d0d0d; }
+    .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 4px; }
+    .iniciar { margin: 0 0 8px; }
+    .iniciar h3 { margin: 0 0 4px; font-size: 18px; }
+    .modos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
+    .modos button {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+      padding: 16px 18px; background: #2563eb; color: #fff; border: none; border-radius: 12px; text-align: left;
+      min-height: 76px;
+    }
+    .modos button:hover { background: #1d4ed8; }
+    .modos button strong { font-size: 18px; color: #fff; }
+    .modos button span { color: #dbeafe; font-size: 13px; font-weight: 500; line-height: 1.35; }
+    .modos button.ativo { background: #1e3a8a; outline: 3px solid #93c5fd; }
+    .etapa { margin: 16px 0 8px; font-size: 13px; font-weight: 700; color: #0f172a; }
+    .mais { margin: 8px 0 12px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; background: #f8fafc; }
+    .mais summary { cursor: pointer; font-size: 13px; font-weight: 600; color: #334155; }
+    @media (max-width: 720px) { .modos { grid-template-columns: 1fr; } }
     .secundario { background: #fff; color: #0d0d0d; border: 1px solid #cbd5e1; }
     .secundario:hover { background: #f8fafc; color: #0d0d0d; }
     .painel {

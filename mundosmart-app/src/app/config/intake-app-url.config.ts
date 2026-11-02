@@ -14,7 +14,7 @@ export function intakeUrlEditavel(): boolean {
 /**
  * URL do app acessível pelo celular (QR de intake).
  * Dev: localStorage → environment.intakeAppUrl (se localhost) → origin.
- * Prod: environment.intakeAppUrl (DNS fixo) e, na API, Intake:AppBaseUrl.
+ * Prod: environment.intakeAppUrl e, na API, Intake:AppBaseUrl. O domínio *.easypanel.host é ignorado.
  */
 export function obterUrlAppIntake(): string {
   if (typeof window === 'undefined') return '';

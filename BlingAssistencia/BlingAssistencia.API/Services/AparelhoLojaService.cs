@@ -2170,21 +2170,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return sessao;
     }
 
-    private string UrlApp(string? appBaseUrl)
-    {
-        if (_env.IsDevelopment())
-        {
-            if (!string.IsNullOrWhiteSpace(appBaseUrl))
-                return appBaseUrl.Trim().TrimEnd('/');
-            if (!string.IsNullOrWhiteSpace(_intake.AppBaseUrl))
-                return _intake.AppBaseUrl.Trim().TrimEnd('/');
-            return "http://localhost:4200";
-        }
-
-        if (string.IsNullOrWhiteSpace(_intake.AppBaseUrl))
-            throw new InvalidOperationException("Configure a URL pública do sistema para o QR das fotos.");
-        return _intake.AppBaseUrl.Trim().TrimEnd('/');
-    }
+    private string UrlApp(string? appBaseUrl) =>
+        _intake.UrlDoQr(appBaseUrl, _env.IsDevelopment());
 
     private static string NovoId() => ObjectId.GenerateNewId().ToString();
 
