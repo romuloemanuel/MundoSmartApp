@@ -71,12 +71,13 @@ builder.Services.AddSingleton<IAppAuthService, AppAuthService>();
 builder.Services.AddSingleton<IEstoqueLoteService, EstoqueLoteService>();
 builder.Services.AddSingleton<IEstoqueNivelService, EstoqueNivelService>();
 builder.Services.AddSingleton<IOsEstoqueBaixaService, OsEstoqueBaixaService>();
+builder.Services.AddTransient<BlingRitmoHandler>();
 builder.Services.AddHttpClient("BlingProdutos", client =>
 {
     // Host oficial da API v3 (www.bling.com.br retorna 403 em /produtos).
     client.BaseAddress = new Uri("https://api.bling.com.br/Api/v3/");
-    client.Timeout = TimeSpan.FromSeconds(20);
-});
+    client.Timeout = TimeSpan.FromSeconds(90);
+}).AddHttpMessageHandler<BlingRitmoHandler>();
 builder.Services.AddSingleton<IBlingProdutoAcessorioRepository, BlingProdutoAcessorioRepository>();
 builder.Services.AddSingleton<IBlingProdutoConsultaService, BlingProdutoConsultaService>();
 builder.Services.AddSingleton<IBlingVendaCelularRepository, BlingVendaCelularRepository>();
