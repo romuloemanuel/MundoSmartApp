@@ -70,6 +70,32 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
               <p class="modal-hint">
                 Confira se o serviço, as peças e o pagamento estão corretos antes de continuar.
               </p>
+              <div class="form-group" *ngIf="celularDaLoja">
+                <label>
+                  Este celular da loja ficou com problema permanente?
+                  <span class="campo-obrigatorio" aria-hidden="true">*</span>
+                </label>
+                <label class="escolha">
+                  <input type="radio" name="problemaPermanente" value="nao" [(ngModel)]="teveProblema" />
+                  Não
+                </label>
+                <label class="escolha">
+                  <input type="radio" name="problemaPermanente" value="sim" [(ngModel)]="teveProblema" />
+                  Sim
+                </label>
+                <textarea
+                  *ngIf="teveProblema === 'sim'"
+                  name="alertaPermanente"
+                  rows="3"
+                  maxlength="400"
+                  [(ngModel)]="alertaTexto"
+                  placeholder="Ex.: Face ID sem conserto"
+                ></textarea>
+                <p class="campo-hint-inline" *ngIf="teveProblema === 'sim'">
+                  Esse texto fica em destaque no estoque do aparelho.
+                </p>
+                <p class="campo-erro" *ngIf="erro">{{ erro }}</p>
+              </div>
             </ng-container>
 
             <ng-container *ngSwitchCase="'prazo'">
@@ -182,6 +208,13 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
       color: #334155;
       margin-bottom: 6px;
     }
+    .escolha {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
     .campo-obrigatorio { color: #dc2626; }
     textarea, input[type="number"] {
       width: 100%;
@@ -248,6 +281,9 @@ export class OsSituacaoModal implements OnInit, OnDestroy {
   osLabel = '';
   situacao = '';
   motivo = '';
+  celularDaLoja = false;
+  teveProblema: '' | 'sim' | 'nao' = '';
+  alertaTexto = '';
   prazoDias = PRAZO_AGUARDANDO_PECA_DIAS_PADRAO;
   prazoDiasPadrao = PRAZO_AGUARDANDO_PECA_DIAS_PADRAO;
   erro = '';
@@ -290,6 +326,9 @@ export class OsSituacaoModal implements OnInit, OnDestroy {
     this.osLabel = req.osLabel?.trim() || '';
     this.situacao = req.situacao?.trim() || '';
     this.motivo = req.motivoAtual?.trim() || '';
+    this.celularDaLoja = !!req.celularDaLoja;
+    this.teveProblema = '';
+    this.alertaTexto = '';
     this.prazoDiasPadrao = req.prazoDiasPadrao ?? PRAZO_AGUARDANDO_PECA_DIAS_PADRAO;
     this.prazoDias = this.prazoDiasPadrao;
     this.erro = '';
@@ -321,6 +360,23 @@ export class OsSituacaoModal implements OnInit, OnDestroy {
         kind: 'prazo',
         dataPrazoPeca: prazoPecaPadraoDatetimeLocal(Math.floor(dias)),
       });
+      return;
+    }
+
+    if (this.celularDaLoja) {
+      if (this.teveProblema !== 'sim' && this.teveProblema !== 'nao') {
+        this.erro = 'Informe se o celular ficou com algum problema permanente.';
+        avisarErroUsuario(this.erro);
+        return;
+      }
+      const texto = this.alertaTexto.trim();
+      if (this.teveProblema === 'sim' && !texto) {
+        this.erro = 'Descreva o problema permanente. Ele aparece no estoque.';
+        avisarErroUsuario(this.erro);
+        return;
+      }
+      this.aberto = false;
+      this.dialog.complete({ kind: 'concluir', alertaPermanente: this.teveProblema === 'sim' ? texto : '' });
       return;
     }
 

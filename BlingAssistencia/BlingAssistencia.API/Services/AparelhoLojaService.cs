@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MundoSmart.BlingAssistencia.API.Config;
@@ -29,6 +30,14 @@ public interface IAparelhoLojaService
         string uploadsRoot,
         CancellationToken cancellationToken = default);
     Task RegistrarCustoOsAsync(BlingOrdemServico os, CancellationToken cancellationToken = default);
+    Task RegistrarAlertaAoConcluirAsync(
+        long osId,
+        string? imei,
+        string? contatoNome,
+        string? situacaoAnterior,
+        bool informado,
+        string? alerta,
+        CancellationToken cancellationToken = default);
     Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, CancellationToken cancellationToken = default);
     Task<AparelhoFotoSessaoDto?> ObterSessaoFotosAsync(string token, CancellationToken cancellationToken = default);
     Task<AparelhoFotoDto> ReceberFotoSessaoAsync(string token, string nome, Stream conteudo, CancellationToken cancellationToken = default);
@@ -51,6 +60,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     private readonly IClienteLocalRepository _clientes;
     private readonly IClienteAparelhoCompradoService _vinculo;
     private readonly IBlingEffectiveSettings _blingEff;
+    private readonly IAparelhoRepository _catalogo;
+    private readonly IServiceScopeFactory _escopos;
     private readonly IHostEnvironment _env;
     private readonly IntakeSettings _intake;
 
@@ -60,6 +71,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         IClienteLocalRepository clientes,
         IClienteAparelhoCompradoService vinculo,
         IBlingEffectiveSettings blingEff,
+        IAparelhoRepository catalogo,
+        IServiceScopeFactory escopos,
         IHostEnvironment env,
         IOptions<IntakeSettings> intake)
     {
@@ -68,6 +81,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         _clientes = clientes;
         _vinculo = vinculo;
         _blingEff = blingEff;
+        _catalogo = catalogo;
+        _escopos = escopos;
         _env = env;
         _intake = intake.Value;
     }
@@ -184,7 +199,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             ClienteId = cliente.BlingId,
             ClienteNome = cliente.Nome,
             ClienteCpf = aparelho.ClienteVendaCpf,
-            Saida = Movimento(aparelho, preco),
+            Saida = Movimento(aparelho, preco, comAssistencia: true),
             PrecoSaida = preco,
             DinheiroRecebido = caixa.Recebido,
             FormaNegociacao = caixa.Forma,
@@ -236,7 +251,11 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         decimal entradaCaixa = 0;
         decimal repasse = 0;
         var nomeFinanciadora = "";
-        if (forma is "avista" or "cartao")
+        if (TemSentidoInformado(pedido.SentidoDiferenca))
+        {
+            (forma, nomeFinanciadora, recebido, pago) = CaixaDaDiferencaInformada(pedido);
+        }
+        else if (forma is "avista" or "cartao")
         {
             recebido = diferenca > 0 ? diferenca : 0;
             pago = diferenca < 0 ? -diferenca : 0;
@@ -322,7 +341,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             ClienteCpf = cpf,
             Entrada = movimentos[0],
             Entradas = movimentos,
-            Saida = Movimento(saida, precoSaida),
+            Saida = Movimento(saida, precoSaida, comAssistencia: true),
             ValorAvaliado = avaliado,
             PrecoSaida = precoSaida,
             DinheiroRecebido = recebido,
@@ -783,6 +802,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         var condicao = string.Equals(bruto.Condicao?.Trim(), AparelhoCondicao.Novo, StringComparison.OrdinalIgnoreCase)
             ? AparelhoCondicao.Novo
             : AparelhoCondicao.Usado;
+        var pecas = PecasDoIphone(marca, modelo, bruto);
 
         return new AparelhoEntradaRequest
         {
@@ -797,10 +817,12 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             ValorVenda = ExigirValorDeVenda(bruto.ValorVenda, bruto.ValorMinimoVenda),
             ValorMinimoVenda = Dinheiro(bruto.ValorMinimoVenda),
             Observacoes = Texto(bruto.Observacoes),
+            AlertaPermanente = Limitar(Texto(bruto.AlertaPermanente), 400),
             SaudeBateria = bruto.SaudeBateria,
             BateriaPerfeita = BateriaDoIphone(marca, modelo, bruto),
-            PecaTrocada = PecaDoIphone(marca, modelo, bruto),
-            MensagemPecaTrocada = MensagemDaPeca(marca, modelo, bruto),
+            PecasTrocadas = pecas,
+            PecaTrocada = ResumoPecas(pecas),
+            MensagemPecaTrocada = pecas.Any(p => p.ApareceMensagem),
             Testes = bruto.Testes,
             PassaPorAssistencia = bruto.PassaPorAssistencia,
             OsNumero = Texto(bruto.OsNumero),
@@ -858,6 +880,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             .Where(a => a.Id is not null)
             .ToDictionary(a => a.Id!);
         var lista = await _repo.ListarListaAsync(cancellationToken);
+        var cadeias = await MontarCadeiasAsync(cancellationToken);
 
         return new AparelhoLojaPainelDto
         {
@@ -865,7 +888,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             {
                 EmEstoque = estoque.Count(a => a.Status == AparelhoLojaStatus.EmEstoque),
                 EmAssistencia = estoque.Count(a => a.Status == AparelhoLojaStatus.EmAssistencia),
-                CustoEstoque = estoque.Sum(a => a.Custo),
+                CustoEstoque = estoque.Sum(a => a.Custo + a.CustoPecas),
                 DinheiroRecebido = ativas.Sum(op => op.DinheiroRecebido),
                 DinheiroPago = ativas.Sum(op => op.DinheiroPago),
                 SaldoCaixa = ativas.Sum(op => op.DinheiroRecebido - op.DinheiroPago),
@@ -879,6 +902,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             Estoque = estoque.Select(a => ComForma(ParaDto(a), a, ativas)).ToList(),
             CustosAssistencia = comCusto.Select(ParaDto).ToList(),
             Operacoes = operacoes.Select(op => ParaOperacaoDto(op, porId)).ToList(),
+            Cadeias = cadeias,
+            Meses = AgruparMeses(cadeias),
             DescontoVendaMaxPercentual = PercentualLimite(_blingEff.Current.VendasCelularesDescontoVendaMaxPercentual),
             AcrescimoFinanciadoraMaxPercentual = PercentualLimite(_blingEff.Current.VendasCelularesAcrescimoFinanciadoraMaxPercentual),
             Lista = lista.Select(p => new AparelhoListaPrecoDto
@@ -893,6 +918,231 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 AtualizadoEm = p.AtualizadoEm,
             }).ToList(),
         };
+    }
+
+    private async Task<List<AparelhoCadeiaDto>> MontarCadeiasAsync(CancellationToken cancellationToken)
+    {
+        var aparelhos = await _repo.ListarNaoEstornadosAsync(cancellationToken);
+        var operacoes = await _repo.ListarOperacoesAtivasAsync(cancellationToken);
+        var porId = aparelhos
+            .Where(a => !string.IsNullOrWhiteSpace(a.Id))
+            .ToDictionary(a => a.Id!);
+        var opsPorId = operacoes
+            .Where(op => !string.IsNullOrWhiteSpace(op.Id))
+            .ToDictionary(op => op.Id!);
+        var clientes = await ClientesDasOperacoesAsync(operacoes, cancellationToken);
+
+        string Raiz(string id, HashSet<string> visto)
+        {
+            if (!visto.Add(id) || !porId.TryGetValue(id, out var aparelho)) return id;
+            if (aparelho.OperacaoEntradaId is { } opId
+                && opsPorId.TryGetValue(opId, out var op)
+                && op.Tipo == AparelhoOperacaoTipo.Troca
+                && op.Saida?.AparelhoId is { } pai
+                && pai != id
+                && porId.ContainsKey(pai))
+                return Raiz(pai, visto);
+            return id;
+        }
+
+        var grupos = new Dictionary<string, List<AparelhoLojaData>>();
+        foreach (var aparelho in aparelhos)
+        {
+            if (string.IsNullOrWhiteSpace(aparelho.Id)) continue;
+            var raiz = Raiz(aparelho.Id, []);
+            if (!grupos.TryGetValue(raiz, out var membros))
+                grupos[raiz] = membros = [];
+            membros.Add(aparelho);
+        }
+
+        var cadeias = new List<AparelhoCadeiaDto>();
+        foreach (var (raiz, membros) in grupos)
+        {
+            var ids = membros.Select(m => m.Id).Where(id => id is not null).ToHashSet();
+            var ops = operacoes
+                .Where(op =>
+                    (op.Saida?.AparelhoId is { } saida && ids.Contains(saida))
+                    || IdsDeEntrada(op).Any(ids.Contains))
+                .OrderBy(op => op.Data)
+                .ThenBy(op => op.Id)
+                .ToList();
+            if (!ops.Any(op => op.Tipo is AparelhoOperacaoTipo.Venda or AparelhoOperacaoTipo.Troca))
+                continue;
+
+            var passos = ops.Select(op => PassoDaCadeia(op, ClienteDaOperacao(op, clientes))).ToList();
+            var aberta = membros.Any(m => m.Status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia);
+            var dinheiroEntrou = Dinheiro(ops.Sum(op => op.DinheiroRecebido));
+            var dinheiroSaiu = Dinheiro(ops.Sum(op => op.DinheiroPago));
+            var investido = Dinheiro(ops.Where(op => op.Tipo == AparelhoOperacaoTipo.Compra).Sum(op => op.DinheiroPago));
+            var pecas = Dinheiro(membros.Sum(m => m.CustoPecas));
+            var origem = porId.GetValueOrDefault(raiz);
+            cadeias.Add(new AparelhoCadeiaDto
+            {
+                Id = raiz,
+                Titulo = origem is null ? "Transação" : NomeAparelho(origem.Marca, origem.Modelo, origem.Configuracao),
+                Aberta = aberta,
+                Inicio = ops.Min(op => op.Data),
+                Fim = aberta ? null : ops.Max(op => op.Data),
+                ValorEntrada = Dinheiro(passos.SelectMany(p => p.Entrou).Sum(i => i.Valor)),
+                ValorSaida = Dinheiro(passos.SelectMany(p => p.Saiu).Sum(i => i.Valor)),
+                DinheiroEntrou = dinheiroEntrou,
+                DinheiroSaiu = dinheiroSaiu,
+                CustoPecas = pecas,
+                Investido = investido,
+                ResultadoAteAgora = Dinheiro(dinheiroEntrou - dinheiroSaiu + investido - pecas),
+                LucroFinal = aberta ? null : Dinheiro(dinheiroEntrou - dinheiroSaiu - pecas),
+                Pendentes = membros
+                    .Where(m => m.Status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia)
+                    .Select(m => NomeAparelho(m.Marca, m.Modelo, m.Configuracao))
+                    .ToList(),
+                Passos = passos,
+            });
+        }
+
+        return cadeias
+            .OrderByDescending(c => c.Aberta)
+            .ThenByDescending(c => c.Inicio)
+            .ToList();
+    }
+
+    private static AparelhoCadeiaPassoDto PassoDaCadeia(AparelhoOperacaoData op, ClienteLocalData? cliente)
+    {
+        var entrou = MovimentosDaEntrada(op).Select(ItemDaCadeia).ToList();
+        var saiu = op.Saida is null ? [] : new List<AparelhoCadeiaItemDto> { ItemDaCadeia(op.Saida) };
+        var telefone = Texto(cliente?.Celular);
+        if (telefone.Length == 0) telefone = Texto(cliente?.Telefone);
+        return new AparelhoCadeiaPassoDto
+        {
+            OperacaoId = op.Id,
+            Tipo = op.Tipo,
+            Data = op.Data,
+            Pessoa = Texto(string.IsNullOrWhiteSpace(op.ClienteNome) ? op.FornecedorNome : op.ClienteNome),
+            ClienteNome = Texto(op.ClienteNome),
+            ClienteCpf = Texto(op.ClienteCpf),
+            ClienteTelefone = telefone,
+            ClienteEmail = Texto(cliente?.Email),
+            ClienteEndereco = EnderecoDe(cliente?.Endereco),
+            Forma = Texto(op.FormaNegociacao),
+            Financiadora = Texto(op.FinanciadoraNome),
+            Entrou = entrou,
+            Saiu = saiu,
+            DinheiroEntrou = op.DinheiroRecebido,
+            DinheiroSaiu = op.DinheiroPago,
+            Resultado = Dinheiro(op.DinheiroRecebido - op.DinheiroPago),
+        };
+    }
+
+    private static AparelhoCadeiaItemDto ItemDaCadeia(AparelhoMovimentoData m) => new()
+    {
+        Nome = NomeAparelho(m.Marca, m.Modelo, m.Configuracao),
+        Imei = m.Imei,
+        Cor = m.Cor,
+        Configuracao = m.Configuracao,
+        Condicao = m.Condicao,
+        Custo = m.Custo,
+        Valor = m.Preco,
+    };
+
+    private async Task<Dictionary<long, ClienteLocalData>> ClientesDasOperacoesAsync(
+        IEnumerable<AparelhoOperacaoData> operacoes,
+        CancellationToken cancellationToken)
+    {
+        var mapa = new Dictionary<long, ClienteLocalData>();
+        foreach (var id in operacoes.Select(op => op.ClienteId).Where(id => id is > 0).Select(id => id!.Value).Distinct())
+        {
+            var cliente = await _clientes.ObterPorBlingIdAsync(id);
+            if (cliente is not null) mapa[id] = cliente;
+        }
+
+        return mapa;
+    }
+
+    private static ClienteLocalData? ClienteDaOperacao(
+        AparelhoOperacaoData op,
+        IReadOnlyDictionary<long, ClienteLocalData> clientes) =>
+        op.ClienteId is > 0 && clientes.TryGetValue(op.ClienteId.Value, out var cliente) ? cliente : null;
+
+    private static string EnderecoDe(BlingContatoEndereco? endereco)
+    {
+        if (endereco is null) return "";
+        var rua = string.Join(", ", new[] { endereco.Logradouro, endereco.Numero, endereco.Complemento, endereco.Bairro }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
+        var cidade = string.Join("/", new[] { endereco.Municipio, endereco.Uf }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        return string.Join(" — ", new[] { rua, cidade, endereco.Cep }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    }
+
+    private static IEnumerable<AparelhoMovimentoData> MovimentosDaEntrada(AparelhoOperacaoData op)
+    {
+        if (op.Entradas is { Count: > 0 }) return op.Entradas;
+        return op.Entrada is null ? [] : [op.Entrada];
+    }
+
+    private static List<AparelhoCadeiaMesDto> AgruparMeses(IReadOnlyList<AparelhoCadeiaDto> cadeias)
+    {
+        var cultura = CultureInfo.GetCultureInfo("pt-BR");
+        var linhas = new List<(int Ano, int Mes, string OpId, decimal Entrou, decimal Saiu, AparelhoCadeiaUnidadeDto Unidade)>();
+        foreach (var cadeia in cadeias)
+        {
+            var resultado = cadeia.Aberta ? cadeia.ResultadoAteAgora : cadeia.LucroFinal ?? 0;
+            foreach (var passo in cadeia.Passos)
+            {
+                var ano = passo.Data.Year;
+                var mes = passo.Data.Month;
+                var opId = string.IsNullOrWhiteSpace(passo.OperacaoId)
+                    ? $"{cadeia.Id}:{passo.Data.Ticks}:{passo.Tipo}"
+                    : passo.OperacaoId;
+                void Add(AparelhoCadeiaItemDto item, string movimento)
+                {
+                    linhas.Add((ano, mes, opId, passo.DinheiroEntrou, passo.DinheiroSaiu, new AparelhoCadeiaUnidadeDto
+                    {
+                        Data = passo.Data,
+                        Nome = item.Nome,
+                        Imei = item.Imei,
+                        Movimento = movimento,
+                        OperacaoId = passo.OperacaoId,
+                        Valor = item.Valor,
+                        CadeiaId = cadeia.Id,
+                        CadeiaTitulo = cadeia.Titulo,
+                        CadeiaAberta = cadeia.Aberta,
+                        ResultadoCadeia = resultado,
+                        Pessoa = passo.Pessoa,
+                    }));
+                }
+
+                foreach (var item in passo.Entrou)
+                    Add(item, passo.Tipo == AparelhoOperacaoTipo.Compra ? "compra" : "entrou");
+                foreach (var item in passo.Saiu)
+                    Add(item, passo.Tipo == AparelhoOperacaoTipo.Venda ? "venda" : "saiu");
+            }
+        }
+
+        return linhas
+            .GroupBy(l => (l.Ano, l.Mes))
+            .OrderByDescending(g => g.Key.Ano)
+            .ThenByDescending(g => g.Key.Mes)
+            .Select(g =>
+            {
+                var ops = g.GroupBy(l => l.OpId).Select(op => op.First()).ToList();
+                var nomeMes = cultura.DateTimeFormat.GetMonthName(g.Key.Mes);
+                var rotulo = string.IsNullOrEmpty(nomeMes)
+                    ? $"{g.Key.Mes:00}/{g.Key.Ano}"
+                    : $"{char.ToUpper(nomeMes[0], cultura)}{nomeMes[1..]} de {g.Key.Ano}";
+                return new AparelhoCadeiaMesDto
+                {
+                    Ano = g.Key.Ano,
+                    Mes = g.Key.Mes,
+                    Rotulo = rotulo,
+                    DinheiroEntrou = Dinheiro(ops.Sum(op => op.Entrou)),
+                    DinheiroSaiu = Dinheiro(ops.Sum(op => op.Saiu)),
+                    Resultado = Dinheiro(ops.Sum(op => op.Entrou - op.Saiu)),
+                    Unidades = g
+                        .OrderByDescending(l => l.Unidade.Data)
+                        .ThenBy(l => l.Unidade.Nome)
+                        .Select(l => l.Unidade)
+                        .ToList(),
+                };
+            })
+            .ToList();
     }
 
     private async Task<decimal> ValorDeEstoqueAsync(
@@ -1023,9 +1273,14 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         BateriaPerfeita = a.BateriaPerfeita,
         PecaTrocada = a.PecaTrocada,
         MensagemPecaTrocada = a.MensagemPecaTrocada,
+        PecasTrocadas = (a.PecasTrocadas ?? [])
+            .Where(p => !string.IsNullOrWhiteSpace(p.Nome))
+            .Select(p => new PecaTrocadaDto { Nome = p.Nome, ApareceMensagem = p.ApareceMensagem })
+            .ToList(),
         VendedorEntradaNome = a.VendedorEntradaNome,
         VendedorSaidaNome = a.VendedorSaidaNome,
         Observacoes = a.Observacoes,
+        AlertaPermanente = a.AlertaPermanente,
         OsEntradaId = a.OsEntradaId,
         OsEntradaNumero = a.OsEntradaNumero,
         Desagio = a.Desagio,
@@ -1044,6 +1299,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             Pecas = c.Pecas,
             MaoDeObra = c.MaoDeObra,
         }).ToList(),
+        CustoTotal = Dinheiro(a.Custo + a.CustoPecas),
         CustoPecas = a.CustoPecas,
         CustoMaoDeObra = a.CustoMaoDeObra,
     };
@@ -1111,7 +1367,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return ProdutoCelularNomeParser.MesmoModelo(marca, modelo, modeloId, venda);
     }
 
-    private static AparelhoMovimentoData Movimento(AparelhoLojaData a, decimal preco) => new()
+    private static AparelhoMovimentoData Movimento(AparelhoLojaData a, decimal preco, bool comAssistencia = false) => new()
     {
         AparelhoId = a.Id,
         Imei = a.Imei,
@@ -1120,7 +1376,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         Cor = a.Cor,
         Configuracao = a.Configuracao,
         Condicao = a.Condicao,
-        Custo = a.Custo,
+        Custo = comAssistencia ? Dinheiro(a.Custo + a.CustoPecas) : a.Custo,
         Preco = preco,
     };
 
@@ -1240,6 +1496,48 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             Dinheiro(entradaLoja + repasseFinanciadora));
     }
 
+    private static bool TemSentidoInformado(string? sentido)
+    {
+        var texto = (sentido ?? "").Trim().ToLowerInvariant();
+        return texto is "loja" or "cliente" or "nenhuma";
+    }
+
+    private static (string Forma, string Nome, decimal Recebido, decimal Pago) CaixaDaDiferencaInformada(AparelhoTrocaRequest pedido)
+    {
+        var sentido = (pedido.SentidoDiferenca ?? "").Trim().ToLowerInvariant();
+        var valor = Dinheiro(pedido.DiferencaInformada);
+        if (valor < 0)
+            throw new InvalidOperationException("A diferença não pode ser negativa.");
+        if (sentido == "nenhuma")
+        {
+            if (valor > 0)
+                throw new InvalidOperationException("Se há diferença, informe se ela volta para a loja ou para o cliente.");
+            return ("avista", "", 0, 0);
+        }
+
+        if (valor <= 0)
+            throw new InvalidOperationException("Informe a diferença.");
+
+        var forma = (pedido.Forma ?? "").Trim().ToLowerInvariant();
+        if (sentido == "loja")
+        {
+            if (forma is not ("dinheiro" or "cartao" or "financiadora"))
+                throw new InvalidOperationException("Informe se a diferença entra em dinheiro, cartão ou financiadora.");
+            var nome = "";
+            if (forma == "financiadora")
+            {
+                nome = Texto(pedido.FinanciadoraNome);
+                if (nome.Length == 0)
+                    throw new InvalidOperationException("Informe qual é a financiadora.");
+            }
+            return (forma, nome, valor, 0);
+        }
+
+        if (forma is not ("pix" or "dinheiro"))
+            throw new InvalidOperationException("Informe se a loja devolve em PIX ou em dinheiro.");
+        return (forma, "", 0, valor);
+    }
+
     private static string NormalizarForma(string? forma)
     {
         var texto = (forma ?? "").Trim().ToLowerInvariant();
@@ -1257,14 +1555,33 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return bruto.BateriaPerfeita.Value;
     }
 
-    private static string PecaDoIphone(string marca, string modelo, AparelhoEntradaRequest bruto) =>
-        EhIphone(marca, modelo) ? Texto(bruto.PecaTrocada) : "";
-
-    private static bool MensagemDaPeca(string marca, string modelo, AparelhoEntradaRequest bruto)
+    private static List<PecaTrocadaDto> PecasDoIphone(string marca, string modelo, AparelhoEntradaRequest bruto)
     {
-        var peca = PecaDoIphone(marca, modelo, bruto);
-        return peca.Length > 0 && bruto.MensagemPecaTrocada;
+        if (!EhIphone(marca, modelo)) return [];
+        var lista = (bruto.PecasTrocadas ?? [])
+            .Select(p => new PecaTrocadaDto
+            {
+                Nome = Texto(p.Nome),
+                ApareceMensagem = p.ApareceMensagem,
+            })
+            .Where(p => p.Nome.Length > 0)
+            .Take(8)
+            .ToList();
+        if (lista.Count == 0 && Texto(bruto.PecaTrocada).Length > 0)
+        {
+            lista.Add(new PecaTrocadaDto
+            {
+                Nome = Texto(bruto.PecaTrocada),
+                ApareceMensagem = bruto.MensagemPecaTrocada,
+            });
+        }
+        foreach (var peca in lista)
+            peca.ApareceMensagem = peca.ApareceMensagem && peca.Nome.Length > 0;
+        return lista;
     }
+
+    private static string ResumoPecas(IReadOnlyList<PecaTrocadaDto> pecas) =>
+        string.Join(", ", pecas.Select(p => p.Nome));
 
     private static bool EhFinanciada(string? forma)
     {
@@ -1340,6 +1657,9 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
     private static string Texto(string? valor) => (valor ?? "").Trim();
 
+    private static string Limitar(string valor, int maximo) =>
+        valor.Length <= maximo ? valor : valor[..maximo];
+
     private static string Doc(string? valor) =>
         new string((valor ?? "").Where(char.IsDigit).ToArray());
 
@@ -1396,7 +1716,11 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         if (entrada.PassaPorAssistencia)
             aparelho.Status = AparelhoLojaStatus.EmAssistencia;
         if (numero.Length == 0)
+        {
+            if (entrada.PassaPorAssistencia)
+                await AbrirOsDaLojaAsync(aparelho, cancellationToken);
             return;
+        }
 
         var os = await _os.ObterPorNumeroAsync(numero, cancellationToken)
             ?? throw new InvalidOperationException("Não encontrei essa ordem de serviço.");
@@ -1414,6 +1738,97 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         aparelho.Observacoes = string.IsNullOrWhiteSpace(aparelho.Observacoes) ? nota : $"{aparelho.Observacoes} {nota}";
     }
 
+    private async Task AbrirOsDaLojaAsync(AparelhoLojaData aparelho, CancellationToken cancellationToken)
+    {
+        var cliente = await ClienteDaLojaAsync();
+        var modelo = await ResolverModeloDaOsAsync(aparelho);
+        var pecas = (aparelho.PecasTrocadas ?? [])
+            .Where(p => !string.IsNullOrWhiteSpace(p.Nome))
+            .Select(p => p.ApareceMensagem ? $"{p.Nome} (aparece mensagem)" : p.Nome)
+            .ToList();
+        if (pecas.Count == 0 && !string.IsNullOrWhiteSpace(aparelho.PecaTrocada))
+            pecas.Add(aparelho.MensagemPecaTrocada ? $"{aparelho.PecaTrocada} (aparece mensagem)" : aparelho.PecaTrocada);
+
+        var defeito = "Aparelho da loja. Conferir antes de vender.";
+        if (aparelho.SaudeBateria is >= 0 and <= 100)
+            defeito += $" Bateria {aparelho.SaudeBateria}%.";
+        if (aparelho.BateriaPerfeita == false)
+            defeito += " Bateria fora das perfeitas condições.";
+        if (pecas.Count > 0)
+            defeito += " Peças trocadas: " + string.Join(", ", pecas) + ".";
+        var alerta = Texto(aparelho.AlertaPermanente);
+        if (alerta.Length > 0)
+            defeito += $" Alerta permanente: {alerta}.";
+
+        var condicoes = Texto(aparelho.Observacoes);
+        if (alerta.Length > 0)
+            condicoes = condicoes.Length > 0 ? $"Alerta permanente: {alerta}. {condicoes}" : $"Alerta permanente: {alerta}.";
+        var os = new BlingOrdemServico
+        {
+            Contato = new BlingContatoRef
+            {
+                Id = cliente.BlingId,
+                Nome = cliente.Nome,
+                Telefone = cliente.Telefone,
+                Celular = cliente.Celular,
+            },
+            Situacao = OsSituacaoHelper.CelularDaLoja,
+            LojaOrigem = "MCC",
+            TipoServico = "orcamento",
+            MarcaId = modelo.MarcaId,
+            MarcaNome = modelo.Marca,
+            ModeloId = modelo.Id,
+            ModeloNome = modelo.Nome,
+            Imei = aparelho.Imei,
+            Equipamento = $"{modelo.Marca} {modelo.Nome}".Trim(),
+            EstadoTela = "A avaliar",
+            CondicoesAparelho = condicoes.Length > 0 ? condicoes : "A conferir na assistência.",
+            Defeito = defeito,
+            SenhaDispositivoTipo = "sem_senha",
+            FormaPagamento = "avista",
+            ValorAVista = 0,
+            ValorTotal = 0,
+            ValorTotalAcordado = 0,
+            Itens = [],
+            DataEntrada = HorarioBrasil.Agora,
+            Data = HorarioBrasil.Agora,
+        };
+        OsOrdemValidacao.Validar(os);
+
+        using var escopo = _escopos.CreateScope();
+        var servico = escopo.ServiceProvider.GetRequiredService<IBlingOrdemServicoService>();
+        var criada = await servico.CriarAsync(os);
+        aparelho.OsEntradaId = criada.Id;
+        aparelho.OsEntradaNumero = string.IsNullOrWhiteSpace(criada.Numero)
+            ? criada.Id?.ToString() ?? ""
+            : criada.Numero;
+    }
+
+    private async Task<ClienteLocalData> ClienteDaLojaAsync()
+    {
+        var lista = await _clientes.ListarAsync("Mundo Smart");
+        var cliente = lista.FirstOrDefault(c =>
+            c.BlingId > 0 && OsSituacaoHelper.ClienteEhLojaMundoSmart(c.Nome));
+        if (cliente is null)
+            throw new InvalidOperationException("Não encontrei o cliente Mundo Smart para abrir a ordem de serviço.");
+        return cliente;
+    }
+
+    private async Task<(string Id, string Nome, string? MarcaId, string Marca)> ResolverModeloDaOsAsync(AparelhoLojaData aparelho)
+    {
+        if (!string.IsNullOrWhiteSpace(aparelho.ModeloId))
+            return (aparelho.ModeloId, aparelho.Modelo, aparelho.MarcaId, aparelho.Marca);
+
+        var lista = await _catalogo.ListarModelosAsync(aparelho.Modelo, null, aparelho.Marca, "Celular", 20);
+        var achado = lista.FirstOrDefault(m =>
+            !string.IsNullOrWhiteSpace(m.Id)
+            && string.Equals(m.Nome, aparelho.Modelo, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(m.MarcaNome, aparelho.Marca, StringComparison.OrdinalIgnoreCase));
+        if (achado?.Id is null)
+            throw new InvalidOperationException("Não encontrei o modelo no catálogo para abrir a ordem de serviço.");
+        return (achado.Id, achado.Nome, achado.MarcaId, achado.MarcaNome ?? aparelho.Marca);
+    }
+
     private static bool EstaNaLoja(string status) =>
         status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia;
 
@@ -1425,10 +1840,18 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     {
         var info = Texto(entrada.Observacoes);
         aparelho.Observacoes = info.Length > 0 ? info : Texto(observacaoOperacao);
+        aparelho.AlertaPermanente = Limitar(Texto(entrada.AlertaPermanente), 400);
         aparelho.SaudeBateria = entrada.SaudeBateria is >= 0 and <= 100 ? entrada.SaudeBateria : null;
         aparelho.BateriaPerfeita = entrada.BateriaPerfeita;
-        aparelho.PecaTrocada = Texto(entrada.PecaTrocada);
-        aparelho.MensagemPecaTrocada = aparelho.PecaTrocada.Length > 0 && entrada.MensagemPecaTrocada;
+        aparelho.PecasTrocadas = (entrada.PecasTrocadas ?? [])
+            .Where(p => !string.IsNullOrWhiteSpace(p.Nome))
+            .Select(p => new PecaTrocadaData { Nome = Texto(p.Nome), ApareceMensagem = p.ApareceMensagem })
+            .ToList();
+        aparelho.PecaTrocada = aparelho.PecasTrocadas.Count > 0
+            ? string.Join(", ", aparelho.PecasTrocadas.Select(p => p.Nome))
+            : Texto(entrada.PecaTrocada);
+        aparelho.MensagemPecaTrocada = aparelho.PecasTrocadas.Any(p => p.ApareceMensagem)
+            || (aparelho.PecaTrocada.Length > 0 && entrada.MensagemPecaTrocada);
         aparelho.Testes = (entrada.Testes ?? [])
             .Where(t => !string.IsNullOrWhiteSpace(t.Nome))
             .Take(20)
@@ -1582,6 +2005,38 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         aparelho.CustoMaoDeObra = aparelho.CustosOs.Sum(c => c.MaoDeObra);
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
     }
+
+    public async Task RegistrarAlertaAoConcluirAsync(
+        long osId,
+        string? imei,
+        string? contatoNome,
+        string? situacaoAnterior,
+        bool informado,
+        string? alerta,
+        CancellationToken cancellationToken = default)
+    {
+        var digitos = Imei(imei);
+        if (digitos.Length != 15 || osId <= 0) return;
+
+        var lista = await _repo.ListarPorImeiAsync(digitos, cancellationToken);
+        var aparelho = lista.FirstOrDefault(a => a.OsEntradaId == osId && NaLoja(a.Status))
+            ?? (CelularDaLoja(situacaoAnterior, contatoNome)
+                ? lista.FirstOrDefault(a => NaLoja(a.Status))
+                : null);
+        if (aparelho is null) return;
+        if (!informado)
+            throw new InvalidOperationException(
+                "Ao finalizar o celular da loja, informe se ficou algum problema permanente.");
+
+        aparelho.AlertaPermanente = Limitar(Texto(alerta), 400);
+        await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+    }
+
+    private static bool NaLoja(string? status) =>
+        status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia;
+
+    private static bool CelularDaLoja(string? situacao, string? contato) =>
+        OsSituacaoHelper.EhCelularDaLoja(situacao) || OsSituacaoHelper.ClienteEhLojaMundoSmart(contato);
 
     public async Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, CancellationToken cancellationToken = default)
     {

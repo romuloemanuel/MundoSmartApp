@@ -91,6 +91,13 @@ public class BlingOrdemServico
     public string? DescontoManutencaoProduto { get; set; }
     public DateTime? DescontoManutencaoDataVenda { get; set; }
     public List<OsFotoAparelhoInfo>? FotosAparelho { get; set; }
+
+    /// <summary>
+    /// Só na conclusão de um celular da loja. Não é gravado na OS:
+    /// o texto vai para o alerta permanente do aparelho no estoque.
+    /// </summary>
+    public bool AlertaPermanenteInformado { get; set; }
+    public string? AlertaPermanente { get; set; }
 }
 
 public class OsFotoAparelhoInfo

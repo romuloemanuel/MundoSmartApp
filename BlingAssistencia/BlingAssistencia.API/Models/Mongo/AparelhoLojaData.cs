@@ -130,6 +130,10 @@ public class AparelhoLojaData
     [BsonElement("observacoes")]
     public string Observacoes { get; set; } = string.Empty;
 
+    /// <summary>Problema permanente, que pode não ter conserto.</summary>
+    [BsonElement("alertaPermanente")]
+    public string AlertaPermanente { get; set; } = string.Empty;
+
     /// <summary>OS já aberta quando o aparelho entrou. Os testes dessa OS valem.</summary>
     [BsonElement("osEntradaId")]
     public long? OsEntradaId { get; set; }
@@ -157,6 +161,9 @@ public class AparelhoLojaData
 
     [BsonElement("mensagemPecaTrocada")]
     public bool MensagemPecaTrocada { get; set; }
+
+    [BsonElement("pecasTrocadas")]
+    public List<PecaTrocadaData> PecasTrocadas { get; set; } = [];
 
     [BsonElement("vendedorEntradaId")]
     public string? VendedorEntradaId { get; set; }
@@ -302,6 +309,15 @@ public class AparelhoOperacaoData
 
     [BsonElement("criadoEm")]
     public DateTime CriadoEm { get; set; }
+}
+
+public class PecaTrocadaData
+{
+    [BsonElement("nome")]
+    public string Nome { get; set; } = string.Empty;
+
+    [BsonElement("apareceMensagem")]
+    public bool ApareceMensagem { get; set; }
 }
 
 public class AparelhoTesteData

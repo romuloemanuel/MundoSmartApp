@@ -12,11 +12,13 @@ export interface OsSituacaoDialogRequest {
   motivoAtual?: string | null;
   /** Dias padrão sugeridos no prazo de peça. */
   prazoDiasPadrao?: number;
+  /** Celular da loja: a conclusão pergunta o problema permanente. */
+  celularDaLoja?: boolean;
 }
 
 export type OsSituacaoDialogResult =
   | { kind: 'cancelar'; motivo: string }
-  | { kind: 'concluir' }
+  | { kind: 'concluir'; alertaPermanente?: string }
   | { kind: 'prazo'; dataPrazoPeca: string }
   | null;
 
@@ -39,12 +41,13 @@ export class OsSituacaoDialogService {
     }).then(r => (r?.kind === 'cancelar' ? r.motivo : null));
   }
 
-  openConcluir(opts: { osLabel?: string | null } = {}): Promise<boolean> {
+  openConcluir(opts: { osLabel?: string | null; celularDaLoja?: boolean } = {}): Promise<{ alertaPermanente: string } | null> {
     return this.open({
       kind: 'concluir',
       osLabel: opts.osLabel,
       situacao: 'Concluído',
-    }).then(r => r?.kind === 'concluir');
+      celularDaLoja: opts.celularDaLoja,
+    }).then(r => (r?.kind === 'concluir' ? { alertaPermanente: r.alertaPermanente ?? '' } : null));
   }
 
   openPrazo(opts: {

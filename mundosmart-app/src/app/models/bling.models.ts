@@ -104,6 +104,9 @@ export interface BlingOrdemServico {
   /** Descrição do risco acordado (obrigatório se temRisco). */
   riscoAcordado?: string;
   observacoes?: string;
+  /** Conclusão de celular da loja: grava o alerta permanente no estoque. */
+  alertaPermanenteInformado?: boolean;
+  alertaPermanente?: string;
   valorTotal?: number;
   /** Valor à vista (exibido na grid). */
   valorTotalAcordado?: number;

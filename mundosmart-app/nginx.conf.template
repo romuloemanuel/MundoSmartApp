@@ -5,8 +5,9 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # Uploads maiores (fotos de OS) — igual ao limite da API (20MB)
-    client_max_body_size 20m;
+    # Foto da OS fica em 12 MB. Vídeo do celular, com áudio, chega a 40 MB.
+    client_max_body_size 50m;
+    client_body_timeout 300s;
 
     # DNS interno do Docker: resolve o host da API em tempo de execução,
     # evitando crash na subida se o container da API ainda não existir.
@@ -24,6 +25,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_request_buffering off;
     }
 
     # Arquivos servidos pela API (fotos)

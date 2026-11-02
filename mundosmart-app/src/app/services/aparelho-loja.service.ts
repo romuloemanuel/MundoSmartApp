@@ -28,10 +28,12 @@ export interface AparelhoEntradaPayload {
   valorVenda?: number;
   valorMinimoVenda?: number;
   observacoes?: string;
+  alertaPermanente?: string;
   saudeBateria?: number | null;
   bateriaPerfeita?: boolean | null;
   pecaTrocada?: string;
   mensagemPecaTrocada?: boolean;
+  pecasTrocadas?: { nome: string; apareceMensagem: boolean }[];
   testes?: { nome: string; ok: boolean; observacao?: string }[];
   passaPorAssistencia?: boolean;
   osNumero?: string;
@@ -53,6 +55,8 @@ export interface AparelhoLojaItem {
   formaNegociacao?: string;
   financiadoraNome?: string;
   custo: number;
+  /** Compra ou avaliação mais o custo das peças da assistência. */
+  custoTotal?: number;
   status: string;
   origem: string;
   clienteOrigemNome: string;
@@ -64,9 +68,12 @@ export interface AparelhoLojaItem {
   bateriaPerfeita?: boolean | null;
   pecaTrocada?: string;
   mensagemPecaTrocada?: boolean;
+  pecasTrocadas?: { nome: string; apareceMensagem: boolean }[];
   vendedorEntradaNome?: string;
   vendedorSaidaNome?: string;
   observacoes?: string;
+  alertaPermanente?: string;
+  osEntradaId?: number;
   osEntradaNumero?: string;
   desagio?: number;
   testesNaOs?: boolean;
@@ -126,11 +133,84 @@ export interface AparelhoVendedorResumo {
   custoMaoDeObra: number;
 }
 
+export interface AparelhoCadeiaItem {
+  nome: string;
+  imei: string;
+  cor?: string;
+  configuracao?: string;
+  condicao?: string;
+  custo?: number;
+  valor: number;
+}
+
+export interface AparelhoCadeiaPasso {
+  operacaoId?: string;
+  tipo: string;
+  data: string;
+  pessoa: string;
+  clienteNome?: string;
+  clienteCpf?: string;
+  clienteTelefone?: string;
+  clienteEmail?: string;
+  clienteEndereco?: string;
+  forma?: string;
+  financiadora?: string;
+  entrou: AparelhoCadeiaItem[];
+  saiu: AparelhoCadeiaItem[];
+  dinheiroEntrou: number;
+  dinheiroSaiu: number;
+  resultado: number;
+}
+
+export interface AparelhoCadeia {
+  id: string;
+  titulo: string;
+  aberta: boolean;
+  inicio: string;
+  fim?: string | null;
+  valorEntrada: number;
+  valorSaida: number;
+  dinheiroEntrou: number;
+  dinheiroSaiu: number;
+  custoPecas: number;
+  investido: number;
+  resultadoAteAgora: number;
+  lucroFinal?: number | null;
+  pendentes: string[];
+  passos: AparelhoCadeiaPasso[];
+}
+
+export interface AparelhoCadeiaUnidade {
+  data: string;
+  nome: string;
+  imei: string;
+  movimento: string;
+  operacaoId?: string;
+  valor: number;
+  cadeiaId: string;
+  cadeiaTitulo: string;
+  cadeiaAberta: boolean;
+  resultadoCadeia: number;
+  pessoa: string;
+}
+
+export interface AparelhoCadeiaMes {
+  ano: number;
+  mes: number;
+  rotulo: string;
+  dinheiroEntrou: number;
+  dinheiroSaiu: number;
+  resultado: number;
+  unidades: AparelhoCadeiaUnidade[];
+}
+
 export interface AparelhoLojaPainel {
   resumo: AparelhoLojaResumo;
   estoque: AparelhoLojaItem[];
   custosAssistencia?: AparelhoLojaItem[];
   operacoes: AparelhoOperacao[];
+  cadeias?: AparelhoCadeia[];
+  meses?: AparelhoCadeiaMes[];
   descontoVendaMaxPercentual?: number;
   acrescimoFinanciadoraMaxPercentual?: number;
 }
@@ -207,6 +287,8 @@ export class AparelhoLojaService {
     entrada?: AparelhoEntradaPayload;
     entradas?: { aparelho: AparelhoEntradaPayload; valorAvaliado: number; sessaoToken?: string }[];
     valorAvaliado: number;
+    sentidoDiferenca?: string;
+    diferencaInformada?: number;
     forma?: string;
     financiadoraNome?: string;
     entradaLoja?: number;

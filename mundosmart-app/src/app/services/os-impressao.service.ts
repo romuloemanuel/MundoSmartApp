@@ -21,59 +21,84 @@ export class OsImpressaoService {
     private impressoraTermica: ImpressoraTermicaService,
   ) {}
 
+  private filaImpressao: { tipo: OsImpressaoTipo; os: BlingOrdemServico }[] = [];
+  private impressaoOcupada = false;
+
   imprimir(tipo: OsImpressaoTipo, osResumo: BlingOrdemServico): void {
     if (osResumo.id == null) return;
+    this.filaImpressao.push({ tipo, os: osResumo });
+    this.processarFilaImpressao();
+  }
 
-    if (isImpressaoTermica(tipo)) {
-      this.imprimirTermico(tipo, osResumo);
+  private processarFilaImpressao(): void {
+    if (this.impressaoOcupada || this.filaImpressao.length === 0) return;
+    const atual = this.filaImpressao.shift();
+    if (!atual) return;
+    this.impressaoOcupada = true;
+    const liberar = () => {
+      this.impressaoOcupada = false;
+      this.processarFilaImpressao();
+    };
+
+    if (isImpressaoTermica(atual.tipo)) {
+      this.imprimirTermico(atual.tipo, atual.os, liberar);
       return;
     }
 
-    this.carregarDadosImpressao(osResumo).subscribe({
+    this.carregarDadosImpressao(atual.os).subscribe({
       next: ({ os, enderecoCliente }) => {
         try {
-          const html = montarHtmlImpressaoOs(tipo as OsImpressaoTipoHtml, os, {
+          const html = montarHtmlImpressaoOs(atual.tipo as OsImpressaoTipoHtml, os, {
             enderecoCliente,
             textos: this.impressaoConfigService.textosAtuais(),
           });
           const titulo = `Impressão OS #${os.numero ?? os.id}`;
-          this.abrirJanelaImpressao(html, titulo);
+          this.abrirJanelaImpressao(html, titulo, liberar);
         } catch (err) {
           console.error('[impressão OS] falha ao montar HTML', err);
           avisarErroSistema('Não foi possível montar a impressão da OS.');
+          liberar();
         }
       },
       error: (err) => {
         console.error('[impressão OS] falha ao carregar dados', err);
         avisarErroSistema('Não foi possível carregar os dados da OS para impressão.');
+        liberar();
       },
     });
   }
 
-  private imprimirTermico(tipo: OsImpressaoTipoTermico, osResumo: BlingOrdemServico): void {
+  private imprimirTermico(tipo: OsImpressaoTipoTermico, osResumo: BlingOrdemServico, aoTerminar?: () => void): void {
     this.carregarDadosImpressao(osResumo).subscribe({
       next: async ({ os }) => {
-        const cfg = this.impressoraTermica.configAtual();
-        const ctx = {
-          empresa: this.impressaoConfigService.empresaAtual(),
-          larguraLinha: cfg.larguraLinha,
-        };
+        try {
+          const cfg = this.impressoraTermica.configAtual();
+          const ctx = {
+            empresa: this.impressaoConfigService.empresaAtual(),
+            larguraLinha: cfg.larguraLinha,
+          };
 
-        if (this.impressoraTermica.conectada()) {
-          const dados = await montarEscPosImpressaoOs(tipo, os, ctx);
-          this.impressoraTermica.imprimir(dados).catch(() => {
-            avisarErroUsuario('Falha ao enviar para a impressora USB. Tente reconectar ou use impressão pelo navegador.');
-          });
-          return;
+          if (this.impressoraTermica.conectada()) {
+            const dados = await montarEscPosImpressaoOs(tipo, os, ctx);
+            this.impressoraTermica.imprimir(dados).catch(() => {
+              avisarErroUsuario('Falha ao enviar para a impressora USB. Tente reconectar ou use impressão pelo navegador.');
+            }).finally(() => aoTerminar?.());
+            return;
+          }
+
+          const html = montarHtmlCupomTermico(tipo, os, ctx);
+          const titulo = tipo === 'comprovante-loja-termico' ? 'Deixado na loja' : 'Garantia';
+          this.abrirJanelaImpressao(html, `${titulo} OS #${os.numero ?? os.id}`, aoTerminar);
+        } catch (err) {
+          console.error('[impressão térmica] falha ao montar', err);
+          avisarErroSistema('Não foi possível montar a impressão da OS.');
+          aoTerminar?.();
         }
-
-        const html = montarHtmlCupomTermico(tipo, os, ctx);
-        const titulo = tipo === 'comprovante-loja-termico' ? 'Deixado na loja' : 'Garantia';
-        this.abrirJanelaImpressao(html, `${titulo} OS #${os.numero ?? os.id}`);
       },
       error: (err) => {
         console.error('[impressão térmica] falha ao carregar dados', err);
         avisarErroSistema('Não foi possível carregar os dados da OS para impressão térmica.');
+        aoTerminar?.();
       },
     });
   }
@@ -131,7 +156,7 @@ export class OsImpressaoService {
    * Imprime via iframe oculto para não substituir a aba do Angular
    * (window.open('about:blank') em alguns browsers navega a própria página).
    */
-  abrirJanelaImpressao(html: string, titulo: string): void {
+  abrirJanelaImpressao(html: string, titulo: string, aoFechar?: () => void): void {
     const iframe = document.createElement('iframe');
     iframe.setAttribute('title', titulo);
     iframe.setAttribute('aria-hidden', 'true');
@@ -144,6 +169,7 @@ export class OsImpressaoService {
     if (!win || !doc) {
       iframe.remove();
       avisarErroSistema('Não foi possível preparar a impressão. Tente novamente.');
+      aoFechar?.();
       return;
     }
 
@@ -152,19 +178,24 @@ export class OsImpressaoService {
     doc.close();
     doc.title = titulo;
 
-    const limpar = () => {
+    let encerrou = false;
+    const encerrar = () => {
+      if (encerrou) return;
+      encerrou = true;
       try { iframe.remove(); } catch { /* ignore */ }
+      aoFechar?.();
     };
 
     const disparar = () => {
       try {
         win.focus();
         win.print();
-      } finally {
-        // Remove após o diálogo de impressão (ou se cancelar).
-        setTimeout(limpar, 1500);
+      } catch {
+        encerrar();
       }
     };
+    win.addEventListener('afterprint', () => setTimeout(encerrar, 300));
+    setTimeout(encerrar, 120000);
 
     const aguardarImagens = (): Promise<void> => {
       const imgs = Array.from(doc.images ?? []);

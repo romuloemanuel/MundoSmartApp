@@ -13,6 +13,7 @@ public interface IAparelhoLojaRepository
     Task<AparelhoLojaData?> ObterAparelhoAsync(string id, CancellationToken cancellationToken = default);
     Task<AparelhoLojaData?> ObterEmEstoquePorImeiAsync(string imei, CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarEstoqueAsync(CancellationToken cancellationToken = default);
+    Task<List<AparelhoLojaData>> ListarNaoEstornadosAsync(CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarComCustoOsAsync(CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarPorImeiAsync(string imei, CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarPorIdsAsync(IEnumerable<string> ids, CancellationToken cancellationToken = default);
@@ -98,6 +99,9 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
         _aparelhos.Find(x => x.Status == AparelhoLojaStatus.EmEstoque || x.Status == AparelhoLojaStatus.EmAssistencia)
             .SortByDescending(x => x.DataEntrada)
             .ToListAsync(cancellationToken);
+
+    public Task<List<AparelhoLojaData>> ListarNaoEstornadosAsync(CancellationToken cancellationToken = default) =>
+        _aparelhos.Find(x => x.Status != AparelhoLojaStatus.Estornado).ToListAsync(cancellationToken);
 
     public Task<List<AparelhoLojaData>> ListarComCustoOsAsync(CancellationToken cancellationToken = default)
     {

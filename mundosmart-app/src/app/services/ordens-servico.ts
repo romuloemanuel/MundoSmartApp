@@ -226,12 +226,15 @@ export class OrdensServicoService {
     motivoCancelamento?: string,
     dataPrazoPeca?: string,
     tecnicoNome?: string,
+    alertaPermanente?: { informado: boolean; texto: string },
   ): Observable<void> {
     return this.http.patch<void>(`${this.apiUrl}/${id}/situacao`, {
       situacao,
       motivoCancelamento,
       dataPrazoPeca: dataPrazoPeca || undefined,
       tecnicoNome: tecnicoNome || undefined,
+      alertaPermanenteInformado: alertaPermanente?.informado || undefined,
+      alertaPermanente: alertaPermanente?.informado ? alertaPermanente.texto : undefined,
     }).pipe(
       tap(() => {
         this.invalidarListaCache();

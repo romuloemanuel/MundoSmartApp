@@ -13,14 +13,23 @@ public class AparelhoEntradaRequest
     public decimal ValorVenda { get; set; }
     public decimal ValorMinimoVenda { get; set; }
     public string? Observacoes { get; set; }
+    /// <summary>Defeito que pode não ter conserto, como Face ID de iPhone.</summary>
+    public string? AlertaPermanente { get; set; }
     public int? SaudeBateria { get; set; }
     public bool? BateriaPerfeita { get; set; }
     public string? PecaTrocada { get; set; }
     public bool MensagemPecaTrocada { get; set; }
+    public List<PecaTrocadaDto>? PecasTrocadas { get; set; }
     public List<AparelhoTesteDto>? Testes { get; set; }
     public bool PassaPorAssistencia { get; set; }
     public string? OsNumero { get; set; }
     public decimal Desagio { get; set; }
+}
+
+public class PecaTrocadaDto
+{
+    public string Nome { get; set; } = string.Empty;
+    public bool ApareceMensagem { get; set; }
 }
 
 public class AparelhoTesteDto
@@ -107,6 +116,9 @@ public class AparelhoTrocaRequest
     public AparelhoEntradaRequest? Entrada { get; set; }
     public List<AparelhoTrocaEntradaRequest>? Entradas { get; set; }
     public decimal ValorAvaliado { get; set; }
+    /// <summary>loja, cliente ou nenhuma. Vazio mantém a conta antiga pela diferença dos aparelhos.</summary>
+    public string? SentidoDiferenca { get; set; }
+    public decimal DiferencaInformada { get; set; }
     public string? Forma { get; set; }
     public string? FinanciadoraNome { get; set; }
     public decimal EntradaLoja { get; set; }
@@ -146,6 +158,8 @@ public class AparelhoLojaDto
     public string FormaNegociacao { get; set; } = string.Empty;
     public string FinanciadoraNome { get; set; } = string.Empty;
     public decimal Custo { get; set; }
+    /// <summary>Compra ou avaliação mais o custo das peças da assistência.</summary>
+    public decimal CustoTotal { get; set; }
     /// <summary>True quando o valor do estoque veio da lista do fornecedor.</summary>
     public bool ValorDaLista { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -159,9 +173,11 @@ public class AparelhoLojaDto
     public bool? BateriaPerfeita { get; set; }
     public string PecaTrocada { get; set; } = string.Empty;
     public bool MensagemPecaTrocada { get; set; }
+    public List<PecaTrocadaDto> PecasTrocadas { get; set; } = [];
     public string VendedorEntradaNome { get; set; } = string.Empty;
     public string VendedorSaidaNome { get; set; } = string.Empty;
     public string Observacoes { get; set; } = string.Empty;
+    public string AlertaPermanente { get; set; } = string.Empty;
     public long? OsEntradaId { get; set; }
     public string OsEntradaNumero { get; set; } = string.Empty;
     public decimal Desagio { get; set; }
@@ -247,12 +263,93 @@ public class AparelhoListaPrecoDto
     public DateTime AtualizadoEm { get; set; }
 }
 
+public class AparelhoCadeiaItemDto
+{
+    public string Nome { get; set; } = string.Empty;
+    public string Imei { get; set; } = string.Empty;
+    public string Cor { get; set; } = string.Empty;
+    public string Configuracao { get; set; } = string.Empty;
+    public string Condicao { get; set; } = string.Empty;
+    public decimal Custo { get; set; }
+    public decimal Valor { get; set; }
+}
+
+public class AparelhoCadeiaPassoDto
+{
+    public string? OperacaoId { get; set; }
+    public string Tipo { get; set; } = string.Empty;
+    public DateTime Data { get; set; }
+    public string Pessoa { get; set; } = string.Empty;
+    public string ClienteNome { get; set; } = string.Empty;
+    public string ClienteCpf { get; set; } = string.Empty;
+    public string ClienteTelefone { get; set; } = string.Empty;
+    public string ClienteEmail { get; set; } = string.Empty;
+    public string ClienteEndereco { get; set; } = string.Empty;
+    public string Forma { get; set; } = string.Empty;
+    public string Financiadora { get; set; } = string.Empty;
+    public List<AparelhoCadeiaItemDto> Entrou { get; set; } = [];
+    public List<AparelhoCadeiaItemDto> Saiu { get; set; } = [];
+    public decimal DinheiroEntrou { get; set; }
+    public decimal DinheiroSaiu { get; set; }
+    public decimal Resultado { get; set; }
+}
+
+public class AparelhoCadeiaDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Titulo { get; set; } = string.Empty;
+    public bool Aberta { get; set; }
+    public DateTime Inicio { get; set; }
+    public DateTime? Fim { get; set; }
+    public decimal ValorEntrada { get; set; }
+    public decimal ValorSaida { get; set; }
+    public decimal DinheiroEntrou { get; set; }
+    public decimal DinheiroSaiu { get; set; }
+    public decimal CustoPecas { get; set; }
+    public decimal Investido { get; set; }
+    /// <summary>Dinheiro de vendas e trocas, sem a compra, menos as peças. Vale enquanto ainda há aparelho.</summary>
+    public decimal ResultadoAteAgora { get; set; }
+    /// <summary>Dinheiro que entrou menos o que saiu e as peças. Só quando a cadeia fecha.</summary>
+    public decimal? LucroFinal { get; set; }
+    public List<string> Pendentes { get; set; } = [];
+    public List<AparelhoCadeiaPassoDto> Passos { get; set; } = [];
+}
+
+public class AparelhoCadeiaUnidadeDto
+{
+    public DateTime Data { get; set; }
+    public string Nome { get; set; } = string.Empty;
+    public string Imei { get; set; } = string.Empty;
+    /// <summary>compra | entrou | saiu | venda</summary>
+    public string Movimento { get; set; } = string.Empty;
+    public string? OperacaoId { get; set; }
+    public decimal Valor { get; set; }
+    public string CadeiaId { get; set; } = string.Empty;
+    public string CadeiaTitulo { get; set; } = string.Empty;
+    public bool CadeiaAberta { get; set; }
+    public decimal ResultadoCadeia { get; set; }
+    public string Pessoa { get; set; } = string.Empty;
+}
+
+public class AparelhoCadeiaMesDto
+{
+    public int Ano { get; set; }
+    public int Mes { get; set; }
+    public string Rotulo { get; set; } = string.Empty;
+    public decimal DinheiroEntrou { get; set; }
+    public decimal DinheiroSaiu { get; set; }
+    public decimal Resultado { get; set; }
+    public List<AparelhoCadeiaUnidadeDto> Unidades { get; set; } = [];
+}
+
 public class AparelhoLojaPainelDto
 {
     public AparelhoLojaResumoDto Resumo { get; set; } = new();
     public List<AparelhoLojaDto> Estoque { get; set; } = [];
     public List<AparelhoLojaDto> CustosAssistencia { get; set; } = [];
     public List<AparelhoOperacaoDto> Operacoes { get; set; } = [];
+    public List<AparelhoCadeiaDto> Cadeias { get; set; } = [];
+    public List<AparelhoCadeiaMesDto> Meses { get; set; } = [];
     public List<AparelhoListaPrecoDto> Lista { get; set; } = [];
     public decimal DescontoVendaMaxPercentual { get; set; }
     public decimal AcrescimoFinanciadoraMaxPercentual { get; set; }

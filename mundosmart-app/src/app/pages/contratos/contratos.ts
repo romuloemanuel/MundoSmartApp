@@ -1,8 +1,9 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { forkJoin, Subscription } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AppAuthService } from '../../services/app-auth';
 import { DocumentoA4Preview } from '../../components/documento-a4-preview/documento-a4-preview';
@@ -74,6 +75,9 @@ function ehAnexoAutomatico(modelo: DocumentoModelo | null | undefined): boolean 
 const FORMAS_PAGAMENTO_CONTRATO = [
   { id: 'dinheiro', label: 'Dinheiro' },
   { id: 'avista', label: 'À vista' },
+  { id: 'cartao', label: 'Cartão' },
+  { id: 'avista_cartao', label: 'À vista + cartão' },
+  { id: 'pix', label: 'PIX' },
   { id: 'payjoy', label: 'Payjoy' },
   { id: 'paymobi', label: 'Paymobi' },
   { id: 'crefaz', label: 'Crefaz' },
@@ -91,7 +95,7 @@ type FormaPagamentoContratoId = (typeof FORMAS_PAGAMENTO_CONTRATO)[number]['id']
   templateUrl: './contratos.html',
   styleUrl: './contratos.scss',
 })
-export class ContratosPage implements OnInit {
+export class ContratosPage implements OnInit, OnDestroy {
   @ViewChild(DocumentoCorpoEditor) corpoEditor?: DocumentoCorpoEditor;
 
   readonly tiposDoc = DOCUMENTO_TIPOS;
@@ -141,12 +145,22 @@ export class ContratosPage implements OnInit {
     private router: Router,
   ) {}
 
+  private navegacao?: Subscription;
+
   ngOnInit(): void {
     this.route.queryParamMap.subscribe(params => {
       const aba = (params.get('aba') ?? 'emitir') as ContratosAba;
       this.definirAba(aba, false);
     });
+    this.navegacao = this.router.events.pipe(
+      filter((evento): evento is NavigationEnd => evento instanceof NavigationEnd),
+      filter(evento => evento.urlAfterRedirects.split('?')[0] === '/contratos'),
+    ).subscribe(() => this.aplicarRascunhoPendente());
     this.carregar();
+  }
+
+  ngOnDestroy(): void {
+    this.navegacao?.unsubscribe();
   }
 
   get modelosAtivos(): DocumentoModelo[] {
@@ -385,10 +399,7 @@ export class ContratosPage implements OnInit {
           ? modelos.find(m => m.ativo && normalizarCodigoDoc(m.codigo) === normalizarCodigoDoc(rascunho.codigo))
           : undefined;
         if (modeloRascunho && rascunho) {
-          this.selecionarParaEmitir(modeloRascunho);
-          this.aplicarRascunho(rascunho);
-          limparRascunhoContrato();
-          avisarSucessoUsuario('Contrato preenchido com os dados já informados. Complete só o que ficou em branco.');
+          this.aplicarRascunhoNoModelo(modeloRascunho, rascunho);
         } else if (this.modeloEmitir?.id) {
           const atual = modelos.find(m => m.id === this.modeloEmitir?.id);
           if (atual) this.selecionarParaEmitir(atual);
@@ -860,20 +871,56 @@ export class ContratosPage implements OnInit {
     }
   }
 
+  private aplicarRascunhoPendente(): void {
+    if (this.carregando || this.modelos.length === 0) return;
+    const rascunho = lerRascunhoContrato();
+    if (!rascunho) return;
+    const modelo = this.modelos.find(m => m.ativo && normalizarCodigoDoc(m.codigo) === normalizarCodigoDoc(rascunho.codigo));
+    if (!modelo) return;
+    this.definirAba('emitir', true);
+    this.aplicarRascunhoNoModelo(modelo, rascunho);
+  }
+
+  private aplicarRascunhoNoModelo(
+    modelo: DocumentoModelo,
+    rascunho: NonNullable<ReturnType<typeof lerRascunhoContrato>>,
+  ): void {
+    this.selecionarParaEmitir(modelo);
+    this.aplicarRascunho(rascunho);
+    limparRascunhoContrato();
+    avisarSucessoUsuario('Contrato preenchido com os dados já informados. Complete só o que ficou em branco.');
+  }
+
   private textoFormaPagamento(): string {
+    const base = this.rotuloBaseForma();
+    const extras: string[] = [];
+    if (this.formaPagamentoOpcao === 'avista_cartao') {
+      if (this.entradaContrato.trim()) extras.push(`à vista R$ ${this.entradaContrato.trim()}`);
+      if (this.repasseContrato.trim()) extras.push(`no cartão R$ ${this.repasseContrato.trim()}`);
+    }
+    if (this.formaFinanciada) {
+      if (this.entradaContrato.trim()) extras.push(`entrada na loja de R$ ${this.entradaContrato.trim()}`);
+      if (this.repasseContrato.trim()) extras.push(`repasse da financiadora de R$ ${this.repasseContrato.trim()}`);
+    }
+    if (this.complementoForma.trim()) extras.push(this.complementoForma.trim());
+    const nome = this.formaFinanciada ? this.nomeFinanciadoraContrato() : '';
+    const inicio = nome || base;
+    if (!inicio && extras.length === 0) return '';
+    const texto = [inicio, ...extras].filter(parte => !!parte).join('. ');
+    return this.formaFinanciada
+      ? `${texto}. O saldo que o cliente deve à financiadora não entra no caixa da loja.`
+      : texto;
+  }
+
+  private rotuloBaseForma(): string {
     if (this.formaPagamentoOpcao === 'dinheiro') return 'Dinheiro';
     if (this.formaPagamentoOpcao === 'avista') return 'À vista';
+    if (this.formaPagamentoOpcao === 'cartao') return 'Cartão';
+    if (this.formaPagamentoOpcao === 'avista_cartao') return 'À vista + cartão';
+    if (this.formaPagamentoOpcao === 'pix') return 'PIX';
     if (this.formaPagamentoOpcao === 'acombinar') return 'A combinar';
-    if (this.formaPagamentoOpcao === 'parcelado') {
-      return `Parcelado em ${this.parcelasPagamento}x`;
-    }
-    const nome = this.nomeFinanciadoraContrato();
-    if (!nome) return '';
-    const partes = [nome];
-    if (this.entradaContrato.trim()) partes.push(`entrada na loja de R$ ${this.entradaContrato.trim()}`);
-    if (this.repasseContrato.trim()) partes.push(`repasse da financiadora de R$ ${this.repasseContrato.trim()}`);
-    if (this.complementoForma.trim()) partes.push(this.complementoForma.trim());
-    return `${partes.join('. ')}. O saldo que o cliente deve à financiadora não entra no caixa da loja.`;
+    if (this.formaPagamentoOpcao === 'parcelado') return `Parcelado em ${this.parcelasPagamento}x`;
+    return '';
   }
 
   private nomeFinanciadoraContrato(): string {

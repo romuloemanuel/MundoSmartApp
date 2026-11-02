@@ -11,6 +11,9 @@ import { AutocompleteCriavel, AutocompleteItem } from '../../../components/autoc
 import { AparelhosService } from '../../../services/aparelhos';
 import { AppAuthService } from '../../../services/app-auth';
 import {
+  AparelhoCadeiaItem,
+  AparelhoCadeiaPasso,
+  AparelhoCadeiaUnidade,
   AparelhoLojaItem,
   AparelhoLojaPainel,
   AparelhoLojaService,
@@ -19,7 +22,9 @@ import {
   OsAbertaConsulta,
 } from '../../../services/aparelho-loja.service';
 import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
-import { BlingContato, BlingContatoRef, MarcaAparelho, ModeloAparelho } from '../../../models/bling.models';
+import { OsImpressaoService } from '../../../services/os-impressao.service';
+import { OS_IMPRESSAO_PADRAO_POS_CADASTRO } from '../../../config/os-impressao.config';
+import { BlingContato, BlingContatoRef, BlingOrdemServico, MarcaAparelho, ModeloAparelho } from '../../../models/bling.models';
 import { MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
 import { apenasDigitos, formatarCpfCnpj, formatarTelefone } from '../../../utils/contato-validacao';
 import { mensagemAlertaImei } from '../../../utils/imei.util';
@@ -63,10 +68,10 @@ interface FichaEntrada {
     configuracao: string;
     condicao: string;
     observacoes: string;
+    alertaPermanente: string;
     saudeBateria: number | null;
     bateriaPerfeita: '' | 'sim' | 'nao';
-    pecaTrocada: string;
-    mensagemPecaTrocada: boolean;
+    pecas: { nome: string; apareceMensagem: boolean }[];
     passaPorAssistencia: boolean;
     osNumero: string;
     valorVenda: number | null;
@@ -111,6 +116,7 @@ interface FichaEntrada {
       </p>
       <p class="hint" *ngIf="financeiro">
         Valor de estoque e o dinheiro que entrou e saiu. Esta parte fica só para administrador.
+        A transação de uma troca segue até o último aparelho ser vendido.
       </p>
 
       <div class="cards" *ngIf="painel && !financeiro">
@@ -152,11 +158,134 @@ interface FichaEntrada {
           <small>{{ painel.resumo.compras }} compras · {{ painel.resumo.vendas }} vendas · {{ painel.resumo.trocas }} trocas</small>
         </div>
         <div class="card">
-          <span>Assistência no estoque</span>
-          <strong>{{ dinheiro(custoOperacao(painel.resumo)) }}</strong>
-          <small>Peças {{ dinheiro(painel.resumo.custoPecas) }} · mão de obra {{ dinheiro(painel.resumo.custoMaoDeObra) }}</small>
+          <span>Peças no custo dos aparelhos</span>
+          <strong>{{ dinheiro(painel.resumo.custoPecas) }}</strong>
+          <small>Soma da assistência técnica ao custo de cada celular</small>
         </div>
       </div>
+
+      <h3 class="secao" *ngIf="financeiro">Por mês</h3>
+      <p class="hint" *ngIf="financeiro">
+        Cada linha é um aparelho. O mês junta o dinheiro daquelas compras, trocas e vendas, sem repetir o valor quando vários aparelhos saem da mesma troca.
+      </p>
+      <p class="hint" *ngIf="financeiro && !meses.length">Nenhuma unidade para o mês.</p>
+      <section class="mes" *ngFor="let m of meses">
+        <h3>{{ m.rotulo }}</h3>
+        <p class="sub">
+          Entrou {{ dinheiro(m.dinheiroEntrou) }}
+          · saiu {{ dinheiro(m.dinheiroSaiu) }}
+          · resultado {{ dinheiro(m.resultado) }}
+          · {{ m.unidades.length }} {{ m.unidades.length === 1 ? 'unidade' : 'unidades' }}
+        </p>
+        <table class="data-grid">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Aparelho</th>
+              <th>IMEI</th>
+              <th>Movimento</th>
+              <th>Valor</th>
+              <th>Transação</th>
+              <th>Resultado da transação</th>
+            </tr>
+          </thead>
+          <tbody>
+            <ng-container *ngFor="let u of m.unidades">
+              <tr>
+                <td>{{ dataCurta(u.data) }}</td>
+                <td>{{ u.nome }}</td>
+                <td>{{ u.imei }}</td>
+                <td>{{ rotuloMovimento(u.movimento) }}</td>
+                <td>{{ dinheiro(u.valor) }}</td>
+                <td>
+                  <button type="button" class="link" (click)="alternarUnidade(u)">{{ u.cadeiaTitulo }}</button>
+                </td>
+                <td>
+                  {{ dinheiro(u.resultadoCadeia) }}
+                  <span class="sub">{{ u.cadeiaAberta ? 'até agora' : 'lucro final' }}</span>
+                </td>
+              </tr>
+              <tr *ngIf="unidadeAberta === chaveUnidade(u)">
+                <td colspan="7">
+                  <ng-container *ngIf="passoDaUnidade(u) as p">
+                    <ng-container *ngTemplateOutlet="fichaPasso; context: { passo: p }"></ng-container>
+                  </ng-container>
+                </td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
+      </section>
+
+      <h3 class="secao" *ngIf="financeiro">Transações</h3>
+      <p class="hint" *ngIf="financeiro">
+        Cada linha junta a compra, as trocas e as vendas dos aparelhos que saíram uns dos outros.
+        Enquanto ainda houver aparelho na loja, o valor é o resultado até agora: o dinheiro das trocas e das vendas, sem contar a compra.
+        O lucro final aparece quando não resta nenhum aparelho, e desconta a compra e o custo das peças.
+      </p>
+      <p class="hint" *ngIf="financeiro && !cadeias.length">Nenhuma venda ou troca para acompanhar.</p>
+      <article class="cadeia" *ngFor="let c of cadeias" [class.aberta]="c.aberta" [class.fechada]="!c.aberta">
+        <button type="button" class="cadeia-topo" (click)="alternarCadeia(c.id)">
+          <strong>{{ c.titulo }}</strong>
+          <span>{{ c.aberta ? 'Em andamento' : 'Concluída' }}</span>
+          <span *ngIf="c.aberta">Até agora {{ dinheiro(c.resultadoAteAgora) }}</span>
+          <span *ngIf="!c.aberta">Lucro {{ dinheiro(c.lucroFinal) }}</span>
+        </button>
+        <p class="sub" *ngIf="c.aberta && c.pendentes.length">Falta vender: {{ c.pendentes.join(', ') }}</p>
+        <p class="sub">
+          Comercializado na entrada {{ dinheiro(c.valorEntrada) }}
+          · na saída {{ dinheiro(c.valorSaida) }}
+        </p>
+        <p class="sub">
+          Dinheiro que entrou {{ dinheiro(c.dinheiroEntrou) }}
+          · dinheiro que saiu {{ dinheiro(c.dinheiroSaiu) }}
+          <span *ngIf="c.custoPecas"> · peças {{ dinheiro(c.custoPecas) }}</span>
+        </p>
+        <div class="passos" *ngIf="cadeiaAberta === c.id">
+          <div class="passo" *ngFor="let p of c.passos">
+            <ng-container *ngTemplateOutlet="fichaPasso; context: { passo: p }"></ng-container>
+          </div>
+        </div>
+      </article>
+
+      <ng-template #fichaPasso let-p="passo">
+        <div class="ficha-passo">
+          <p>
+            <strong>{{ p.data | date:'dd/MM/yyyy HH:mm':'UTC' }}</strong>
+            · {{ rotuloTipo(p.tipo) }}
+          </p>
+          <div class="lado">
+            <h4>Cliente</h4>
+            <p>{{ p.clienteNome || p.pessoa || '—' }}</p>
+            <p class="sub" *ngIf="p.clienteCpf">{{ formatarDoc(p.clienteCpf) }}</p>
+            <p class="sub" *ngIf="p.clienteTelefone">{{ formatarFone(p.clienteTelefone) }}</p>
+            <p class="sub" *ngIf="p.clienteEmail">{{ p.clienteEmail }}</p>
+            <p class="sub" *ngIf="p.clienteEndereco">{{ p.clienteEndereco }}</p>
+            <p class="sub" *ngIf="p.forma && p.forma !== 'avista'">
+              {{ rotuloForma(p.forma) }}<span *ngIf="p.financiadora"> · {{ p.financiadora }}</span>
+            </p>
+          </div>
+          <div class="lado" *ngIf="p.saiu.length">
+            <h4>Foi embora</h4>
+            <div *ngFor="let a of p.saiu">
+              <strong>{{ a.nome }}</strong>
+              <p class="sub" *ngIf="fichaAparelho(a)">{{ fichaAparelho(a) }}</p>
+              <p class="sub" *ngIf="a.imei">IMEI {{ a.imei }}</p>
+              <p class="sub">Valor {{ dinheiro(a.valor) }}<span *ngIf="a.custo"> · custo {{ dinheiro(a.custo) }}</span></p>
+            </div>
+          </div>
+          <div class="lado" *ngIf="p.entrou.length">
+            <h4>Entrou</h4>
+            <div *ngFor="let a of p.entrou">
+              <strong>{{ a.nome }}</strong>
+              <p class="sub" *ngIf="fichaAparelho(a)">{{ fichaAparelho(a) }}</p>
+              <p class="sub" *ngIf="a.imei">IMEI {{ a.imei }}</p>
+              <p class="sub">Valor {{ dinheiro(a.valor) }}<span *ngIf="a.custo"> · custo {{ dinheiro(a.custo) }}</span></p>
+            </div>
+          </div>
+          <p>{{ rotuloEtapa(p) }} {{ dinheiro(valorEtapa(p)) }}</p>
+        </div>
+      </ng-template>
 
       <h3 *ngIf="vendedores.length && !financeiro">Por vendedor</h3>
       <table class="data-grid" *ngIf="vendedores.length && !financeiro">
@@ -307,6 +436,11 @@ interface FichaEntrada {
           <label>Informações</label>
           <input [(ngModel)]="entrada.observacoes" name="obsCompra" placeholder="Estado, acessórios, o que o cliente relatou" />
         </div>
+        <div class="form-group">
+          <label>Alerta permanente</label>
+          <input [(ngModel)]="entrada.alertaPermanente" name="alertaCompra" placeholder="Ex.: Face ID sem conserto" />
+          <p class="hint">Defeito que pode não ter mais conserto. Fica em destaque no estoque, na venda e no contrato.</p>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label>Saúde da bateria (%)</label>
@@ -322,20 +456,24 @@ interface FichaEntrada {
               <option value="nao">Não</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Peça trocada</label>
-            <input [(ngModel)]="entrada.pecaTrocada" name="pecaTrocadaCompra" placeholder="Ex.: bateria, tela" />
+          <div class="peca-linha" *ngFor="let peca of entrada.pecas; let i = index">
+            <div class="form-group grow">
+              <label>Peça trocada</label>
+              <input [(ngModel)]="peca.nome" [name]="'pecaTrocadaCompra' + i" placeholder="Ex.: bateria, tela" />
+            </div>
+            <label class="check-label" *ngIf="peca.nome.trim()">
+              <input type="checkbox" [(ngModel)]="peca.apareceMensagem" [name]="'mensagemPecaCompra' + i" />
+              Aparece mensagem
+            </label>
+            <button type="button" class="secundario" *ngIf="entrada.pecas.length > 1" (click)="removerPeca(entrada.pecas, i)">Remover</button>
           </div>
-          <label class="check-label" *ngIf="entrada.pecaTrocada.trim()">
-            <input type="checkbox" [(ngModel)]="entrada.mensagemPecaTrocada" name="mensagemPecaCompra" />
-            Aparece mensagem
-          </label>
+          <button type="button" class="secundario" (click)="adicionarPeca(entrada.pecas)">Adicionar outra peça</button>
         </div>
         <label class="check-label">
           <input type="checkbox" [(ngModel)]="entrada.passaPorAssistencia" name="assistenciaCompra" />
           Passa pela assistência antes de vender
         </label>
-        <p class="hint" *ngIf="entrada.passaPorAssistencia">Não entra na venda nem na troca até a assistência liberar.</p>
+        <p class="hint" *ngIf="entrada.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Não entra na venda nem na troca até a assistência liberar.</p>
         <div class="form-group">
           <label>OS já aberta</label>
           <input [ngModel]="entrada.osNumero" (ngModelChange)="onOsNumero($event)" name="osCompra" inputmode="numeric" placeholder="Número da OS" />
@@ -430,6 +568,7 @@ interface FichaEntrada {
             <input type="number" min="0" step="0.01" [(ngModel)]="venda.preco" name="precoVenda" />
             <p class="hint">Este é o valor de venda cadastrado no estoque.</p>
             <p class="hint" *ngIf="aparelhoVendaSelecionado?.valorMinimoVenda">Mínimo para venda: {{ dinheiro(aparelhoVendaSelecionado?.valorMinimoVenda) }}.</p>
+            <p class="alerta-permanente" *ngIf="aparelhoVendaSelecionado?.alertaPermanente">Alerta permanente: {{ aparelhoVendaSelecionado?.alertaPermanente }}</p>
             <p class="campo-aviso" *ngIf="abaixoDoMinimo(venda.preco, venda.desconto, aparelhoVendaSelecionado?.valorMinimoVenda)">O valor fica abaixo do mínimo para venda.</p>
           </div>
           <div class="form-group">
@@ -537,13 +676,9 @@ interface FichaEntrada {
 
       <form class="painel" *ngIf="modo === 'troca'" (ngSubmit)="salvarTroca()" (keydown.enter)="bloquearEnterDaBusca($event)">
         <h3>Troca — entra um ou mais aparelhos e sai outro</h3>
-        <p class="hint" *ngIf="troca.forma === 'avista' || troca.forma === 'cartao' || troca.forma === 'avista_cartao'">
-          O caixa registra só a diferença. Cada aparelho que entra fica no estoque pelo próprio valor avaliado.
+        <p class="hint">
+          O caixa registra só a diferença que você informar. Cada aparelho que entra fica no estoque pelo próprio valor avaliado.
           O desconto fica no aparelho que o cliente leva.
-        </p>
-        <p class="hint" *ngIf="ehFinanciada(troca.forma)">
-          O preço do aparelho que sai é o valor do contrato. No caixa entra a entrada e o repasse.
-          Se os aparelhos que entram valem mais, a loja devolve a diferença.
         </p>
         <div class="form-row">
           <div class="form-group">
@@ -590,6 +725,7 @@ interface FichaEntrada {
             <input type="number" min="0" step="0.01" [(ngModel)]="troca.precoSaida" name="precoSaida" />
             <p class="hint">Este é o valor de venda cadastrado no estoque.</p>
             <p class="hint" *ngIf="aparelhoTrocaSelecionado?.valorMinimoVenda">Mínimo para venda: {{ dinheiro(aparelhoTrocaSelecionado?.valorMinimoVenda) }}.</p>
+            <p class="alerta-permanente" *ngIf="aparelhoTrocaSelecionado?.alertaPermanente">Alerta permanente: {{ aparelhoTrocaSelecionado?.alertaPermanente }}</p>
             <p class="campo-aviso" *ngIf="abaixoDoMinimo(troca.precoSaida, troca.desconto, aparelhoTrocaSelecionado?.valorMinimoVenda)">O valor fica abaixo do mínimo para venda.</p>
           </div>
           <div class="form-group">
@@ -601,14 +737,55 @@ interface FichaEntrada {
         </div>
         <p class="hint" *ngIf="somaAvaliados !== null">Os aparelhos que entram somam {{ dinheiro(somaAvaliados) }}. Cada um fica no estoque pelo próprio valor avaliado.</p>
         <p class="diferenca" *ngIf="precoCobradoTroca !== null">Valor do contrato: {{ dinheiro(precoCobradoTroca) }}.</p>
-        <div class="juros" *ngIf="baseParcelasTroca > 0">
+        <p class="hint" *ngIf="diferencaTroca !== null">
+          Pelos valores dos aparelhos, a conta dá
+          <ng-container *ngIf="diferencaTroca > 0">{{ dinheiro(diferencaTroca) }} a favor da loja.</ng-container>
+          <ng-container *ngIf="diferencaTroca < 0">{{ dinheiro(-diferencaTroca) }} a favor do cliente.</ng-container>
+          <ng-container *ngIf="diferencaTroca === 0">zero.</ng-container>
+          O caixa usa a diferença que você informar.
+        </p>
+        <div class="form-group">
+          <label>Volta da diferença</label>
+          <select [ngModel]="troca.sentido" (ngModelChange)="onSentidoTroca($event)" name="sentidoTroca">
+            <option value="">Selecione…</option>
+            <option value="loja">Volta para a loja</option>
+            <option value="cliente">Volta para o cliente</option>
+            <option value="nenhuma">Sem diferença</option>
+          </select>
+        </div>
+        <div class="form-group" *ngIf="troca.sentido === 'loja' || troca.sentido === 'cliente'">
+          <label>Diferença</label>
+          <input type="number" min="0.01" step="0.01" [(ngModel)]="troca.diferenca" name="diferencaTroca" />
+        </div>
+        <div class="form-group" *ngIf="troca.sentido === 'loja'">
+          <label>Pagamento da diferença</label>
+          <select [(ngModel)]="troca.pagamento" name="pagamentoTrocaLoja">
+            <option value="">Selecione…</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao">Cartão</option>
+            <option value="financiadora">Financiadora</option>
+          </select>
+        </div>
+        <div class="form-group" *ngIf="troca.sentido === 'loja' && troca.pagamento === 'financiadora'">
+          <label>Qual financiadora</label>
+          <input [(ngModel)]="troca.financiadoraNome" name="nomeFinTroca" />
+        </div>
+        <div class="form-group" *ngIf="troca.sentido === 'cliente'">
+          <label>Como a loja devolve</label>
+          <select [(ngModel)]="troca.pagamento" name="pagamentoTrocaCliente">
+            <option value="">Selecione…</option>
+            <option value="pix">PIX</option>
+            <option value="dinheiro">Dinheiro</option>
+          </select>
+        </div>
+        <div class="juros" *ngIf="troca.pagamento === 'cartao' && diferencaDigitada > 0">
           <button type="button" class="secundario" (click)="jurosTrocaAberto = !jurosTrocaAberto">
             {{ jurosTrocaAberto ? 'Ocultar parcelas' : 'Calcular parcelas no cartão' }}
           </button>
           <ng-container *ngIf="jurosTrocaAberto">
-            <p class="hint">Para a loja receber {{ dinheiro(baseParcelasTroca) }} no cartão, passar para o cliente:</p>
+            <p class="hint">Para a loja receber {{ dinheiro(diferencaDigitada) }} no cartão, passar para o cliente:</p>
             <div class="grade-juros">
-              <button type="button" *ngFor="let op of opcoesJuros(baseParcelasTroca)" (click)="opcaoJurosTroca = op" [class.ativo]="opcaoJurosTroca?.parcelas === op.parcelas">
+              <button type="button" *ngFor="let op of opcoesJuros(diferencaDigitada)" (click)="opcaoJurosTroca = op" [class.ativo]="opcaoJurosTroca?.parcelas === op.parcelas">
                 <strong>{{ op.parcelas }}x</strong>
                 <span>{{ dinheiro(op.parcelas === 1 ? op.total : op.valorParcela) }}</span>
                 <small *ngIf="op.parcelas > 1">total {{ dinheiro(op.total) }}</small>
@@ -617,65 +794,9 @@ interface FichaEntrada {
             <p class="hint" *ngIf="opcaoJurosTroca as op">
               {{ op.parcelas === 1 ? dinheiro(op.total) : op.parcelas + 'x de ' + dinheiro(op.valorParcela) }}.
               Acréscimo {{ dinheiro(op.juros) }}. Taxa {{ taxa(op.taxaExibidaPct) }}.
-              A loja recebe {{ dinheiro(baseParcelasTroca) }}.
+              A loja recebe {{ dinheiro(diferencaDigitada) }}. O cálculo não altera a diferença informada.
             </p>
           </ng-container>
-        </div>
-        <div class="form-group">
-          <label>Negociação do aparelho que sai</label>
-          <select [(ngModel)]="troca.forma" name="formaTroca">
-            <option value="avista">À vista na loja</option>
-            <option value="cartao">Cartão de crédito</option>
-            <option value="avista_cartao">À vista + cartão</option>
-            <option value="payjoy">Payjoy</option>
-            <option value="paymobi">Paymobi</option>
-            <option value="crefaz">Crefaz</option>
-            <option value="outra">Outra financiadora</option>
-          </select>
-        </div>
-        <div class="form-group" *ngIf="ehFinanciada(troca.forma)">
-          <label>Acréscimo para a financiadora</label>
-          <input type="number" min="0" step="0.01" [(ngModel)]="troca.acrescimo" name="acrescimoTroca" />
-          <p class="hint">Sobe o valor do contrato até {{ dinheiro(teto(troca.precoSaida, acrescimoMaxPct)) }} ({{ acrescimoMaxPct }}%) para a financiadora calcular uma entrada menor.</p>
-          <p class="campo-aviso" *ngIf="acrescimoEstoura(troca.precoSaida, troca.acrescimo)">O acréscimo passa do limite.</p>
-        </div>
-        <div class="form-group" *ngIf="troca.forma === 'outra'">
-          <label>Nome da financiadora</label>
-          <input [(ngModel)]="troca.financiadoraNome" name="nomeFinTroca" />
-        </div>
-        <div class="form-row" *ngIf="troca.forma === 'avista_cartao'">
-          <div class="form-group">
-            <label>À vista</label>
-            <input type="number" min="0" step="0.01" [(ngModel)]="troca.entrada" name="avistaTroca" />
-          </div>
-          <div class="form-group">
-            <label>No cartão</label>
-            <input type="number" min="0" step="0.01" [(ngModel)]="troca.repasse" name="cartaoTroca" />
-          </div>
-        </div>
-        <div class="form-row" *ngIf="ehFinanciada(troca.forma)">
-          <div class="form-group">
-            <label>Entrada na loja</label>
-            <input type="number" min="0" step="0.01" [(ngModel)]="troca.entrada" name="entradaTroca" />
-          </div>
-          <div class="form-group" *ngIf="troca.forma !== 'paymobi'">
-            <label>Repasse da financiadora</label>
-            <input type="number" min="0" step="0.01" [(ngModel)]="troca.repasse" name="repasseTroca" />
-          </div>
-        </div>
-        <div class="diferenca" *ngIf="(troca.forma === 'avista' || troca.forma === 'cartao') && diferencaTroca !== null">
-          <ng-container *ngIf="diferencaTroca > 0">Cliente paga {{ dinheiro(diferencaTroca) }}. Esse valor é o faturamento da troca.<ng-container *ngIf="troca.forma === 'cartao'"> Entra no cartão.</ng-container></ng-container>
-          <ng-container *ngIf="diferencaTroca < 0">A loja devolve {{ dinheiro(-diferencaTroca) }}. Não entra faturamento.</ng-container>
-          <ng-container *ngIf="diferencaTroca === 0">Troca sem dinheiro. Nada entra no faturamento.</ng-container>
-        </div>
-        <div class="diferenca" *ngIf="troca.forma === 'avista_cartao' && diferencaTroca !== null">
-          <ng-container *ngIf="diferencaTroca > 0">O cliente paga {{ dinheiro(diferencaTroca) }}. À vista e cartão precisam somar esse valor. Entra {{ dinheiro(caixaTroca) }}.</ng-container>
-          <ng-container *ngIf="diferencaTroca <= 0">Nesta troca a loja não recebe. Use à vista.</ng-container>
-        </div>
-        <div class="diferenca" *ngIf="ehFinanciada(troca.forma)">
-          Entra no caixa agora: {{ dinheiro(caixaTroca) }}.
-          <ng-container *ngIf="diferencaTroca !== null && diferencaTroca < 0"> A loja ainda devolve {{ dinheiro(-diferencaTroca) }}.</ng-container>
-          O saldo do cliente com a financiadora não entra no caixa.
         </div>
         <div class="form-group">
           <label>Cliente</label>
@@ -775,6 +896,11 @@ interface FichaEntrada {
             <label>Informações</label>
             <input [(ngModel)]="f.dados.observacoes" [name]="'obsTroca' + f.id" placeholder="Estado, acessórios, o que o cliente relatou" />
           </div>
+          <div class="form-group">
+            <label>Alerta permanente</label>
+            <input [(ngModel)]="f.dados.alertaPermanente" [name]="'alertaTroca' + f.id" placeholder="Ex.: Face ID sem conserto" />
+            <p class="hint">Defeito que pode não ter mais conserto. Fica em destaque no estoque, na venda e no contrato.</p>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label>Saúde da bateria (%)</label>
@@ -790,20 +916,24 @@ interface FichaEntrada {
                 <option value="nao">Não</option>
               </select>
             </div>
-            <div class="form-group">
-              <label>Peça trocada</label>
-              <input [(ngModel)]="f.dados.pecaTrocada" [name]="'pecaTrocadaTroca' + f.id" placeholder="Ex.: bateria, tela" />
+            <div class="peca-linha" *ngFor="let peca of f.dados.pecas; let i = index">
+              <div class="form-group grow">
+                <label>Peça trocada</label>
+                <input [(ngModel)]="peca.nome" [name]="'pecaTrocadaTroca' + f.id + i" placeholder="Ex.: bateria, tela" />
+              </div>
+              <label class="check-label" *ngIf="peca.nome.trim()">
+                <input type="checkbox" [(ngModel)]="peca.apareceMensagem" [name]="'mensagemPecaTroca' + f.id + i" />
+                Aparece mensagem
+              </label>
+              <button type="button" class="secundario" *ngIf="f.dados.pecas.length > 1" (click)="removerPeca(f.dados.pecas, i)">Remover</button>
             </div>
-            <label class="check-label" *ngIf="f.dados.pecaTrocada.trim()">
-              <input type="checkbox" [(ngModel)]="f.dados.mensagemPecaTrocada" [name]="'mensagemPecaTroca' + f.id" />
-              Aparece mensagem
-            </label>
+            <button type="button" class="secundario" (click)="adicionarPeca(f.dados.pecas)">Adicionar outra peça</button>
           </div>
           <label class="check-label">
             <input type="checkbox" [(ngModel)]="f.dados.passaPorAssistencia" [name]="'assistenciaTroca' + f.id" />
             Este aparelho passa pela assistência antes de vender
           </label>
-          <p class="hint" *ngIf="f.dados.passaPorAssistencia">Ele fica no estoque, mas não entra na venda nem na troca até a assistência liberar.</p>
+          <p class="hint" *ngIf="f.dados.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Ele fica no estoque, mas não entra na venda nem na troca até a assistência liberar.</p>
           <div class="form-group">
             <label>OS já aberta</label>
             <input [ngModel]="f.dados.osNumero" (ngModelChange)="onOsFicha($event, f)" [name]="'osTroca' + f.id" inputmode="numeric" placeholder="Número da OS" />
@@ -899,6 +1029,7 @@ interface FichaEntrada {
             <strong>{{ a.marca }} {{ a.modelo }}</strong>
             <div class="sub">{{ a.configuracao }}<span *ngIf="a.cor"> · {{ a.cor }}</span></div>
             <div class="sub" *ngIf="a.imei">IMEI {{ a.imei }}</div>
+            <p class="alerta-permanente" *ngIf="a.alertaPermanente">{{ a.alertaPermanente }}</p>
             <form class="imei-pendente" *ngIf="!a.imei" (click)="$event.stopPropagation()" (submit)="salvarImei(a)">
               <input [(ngModel)]="imeiInformado[a.id || '']" [name]="'imei' + a.id" inputmode="numeric" placeholder="IMEI pendente" />
               <button type="submit">Salvar</button>
@@ -923,29 +1054,45 @@ interface FichaEntrada {
             </dl>
             <div class="sub">
               {{ rotuloSituacao(a.status) }}
-              <span *ngIf="a.osEntradaNumero"> · OS {{ a.osEntradaNumero }}</span>
+              <a *ngIf="a.osEntradaId" class="os-link" [routerLink]="['/ordens-servico', a.osEntradaId]" (click)="$event.stopPropagation()">OS {{ a.osEntradaNumero || a.osEntradaId }}</a>
+              <span *ngIf="!a.osEntradaId && a.osEntradaNumero"> · OS {{ a.osEntradaNumero }}</span>
             </div>
+            <p class="sub" *ngIf="financeiro">
+              Custo {{ dinheiro(custoTotalDe(a)) }}
+              <span *ngIf="(a.custoPecas || 0) > 0">
+                · compra {{ dinheiro(a.custo) }} + assistência {{ dinheiro(a.custoPecas) }}
+              </span>
+            </p>
+            <p class="sub" *ngIf="financeiro && linksOs(a).length">
+              <a
+                *ngFor="let os of linksOs(a)"
+                class="os-link"
+                [routerLink]="['/ordens-servico', os.id]"
+                (click)="$event.stopPropagation()"
+              >OS {{ os.numero }}<span *ngIf="os.pecas"> ({{ dinheiro(os.pecas) }})</span></a>
+            </p>
             <button
               *ngIf="a.status === 'em_assistencia'"
               type="button"
               class="secundario"
               (click)="$event.stopPropagation(); liberar(a)"
             >Liberar para venda</button>
-            <p class="sub" *ngIf="financeiro">Peças {{ dinheiro(a.custoPecas) }} · mão de obra {{ dinheiro(a.custoMaoDeObra) }}</p>
           </div>
           <div class="ficha-card" *ngIf="fichaId === a.id" (click)="$event.stopPropagation()">
             <p *ngIf="a.observacoes">{{ a.observacoes }}</p>
             <p class="sub" *ngIf="a.saudeBateria != null">Bateria {{ a.saudeBateria }}%</p>
             <p class="sub" *ngIf="a.bateriaPerfeita === true">Bateria em perfeitas condições.</p>
             <p class="sub" *ngIf="a.bateriaPerfeita === false">Bateria fora das perfeitas condições.</p>
-            <p class="sub" *ngIf="a.pecaTrocada">Peça trocada: {{ a.pecaTrocada }}<span *ngIf="a.mensagemPecaTrocada"> · aparece mensagem</span></p>
+            <p class="sub" *ngIf="textoPecas(a) as pecas">Peças trocadas: {{ pecas }}</p>
             <p class="sub" *ngIf="a.testesNaOs">Testes feitos na OS {{ a.osEntradaNumero || 'vinculada' }}.</p>
             <p class="sub" *ngIf="a.testes?.length">{{ testesResumo(a) }}</p>
-            <p class="sub" *ngIf="financeiro && a.custosOs?.length">
-              Ordens de serviço:
-              <span *ngFor="let c of a.custosOs">
-                {{ c.numero || ('OS ' + c.osId) }} — peças {{ dinheiro(c.pecas) }}, mão de obra {{ dinheiro(c.maoDeObra) }}
-              </span>
+            <p class="sub" *ngIf="financeiro && linksOs(a).length">
+              Assistência:
+              <a
+                *ngFor="let os of linksOs(a)"
+                class="os-link"
+                [routerLink]="['/ordens-servico', os.id]"
+              >OS {{ os.numero }}<span *ngIf="os.pecas"> — peças {{ dinheiro(os.pecas) }}</span></a>
             </p>
             <div class="fotos" *ngIf="a.fotos?.length">
               <div class="foto-escolha" *ngFor="let f of a.fotos" [class.marcada]="fotoMarcada(f)">
@@ -968,8 +1115,8 @@ interface FichaEntrada {
 
       <h3 class="secao" *ngIf="financeiro && custosAssistencia.length">Custo de assistência por aparelho</h3>
       <p class="hint" *ngIf="financeiro && custosAssistencia.length">
-        Quando o IMEI entra numa ordem de serviço, entra só o custo da peça.
-        O valor cobrado do cliente não vira custo do aparelho.
+        O custo do aparelho é a compra mais o custo da peça. Uma compra de 1400 com bateria de 400 fica 1800.
+        A mão de obra cobrada do cliente não entra nesse custo.
       </p>
       <table class="data-grid" *ngIf="financeiro && custosAssistencia.length">
         <thead>
@@ -977,9 +1124,9 @@ interface FichaEntrada {
             <th>Aparelho</th>
             <th>IMEI</th>
             <th>Vendedor</th>
+            <th>Compra</th>
             <th>Peças</th>
-            <th>Mão de obra</th>
-            <th>Total</th>
+            <th>Custo</th>
             <th>Ordens</th>
           </tr>
         </thead>
@@ -988,10 +1135,17 @@ interface FichaEntrada {
             <td>{{ nomeAparelho(a) }}</td>
             <td>{{ a.imei }}</td>
             <td>{{ a.vendedorEntradaNome || '—' }}</td>
+            <td>{{ dinheiro(a.custo) }}</td>
             <td>{{ dinheiro(a.custoPecas) }}</td>
-            <td>{{ dinheiro(a.custoMaoDeObra) }}</td>
-            <td>{{ dinheiro(custoOperacao(a)) }}</td>
-            <td>{{ ordensDe(a) }}</td>
+            <td>{{ dinheiro(custoTotalDe(a)) }}</td>
+            <td>
+              <a
+                *ngFor="let os of linksOs(a)"
+                class="os-link"
+                [routerLink]="['/ordens-servico', os.id]"
+              >OS {{ os.numero }}</a>
+              <span *ngIf="!linksOs(a).length">—</span>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -1024,7 +1178,7 @@ interface FichaEntrada {
             <td>
               {{ rotuloTipo(op.tipo) }}
               <div class="sub" *ngIf="op.financiadoraNome">{{ op.financiadoraNome }}</div>
-              <div class="sub" *ngIf="!op.financiadoraNome && op.formaNegociacao && op.formaNegociacao !== 'avista'">{{ rotuloForma(op.formaNegociacao) }}</div>
+              <div class="sub" *ngIf="op.formaNegociacao && op.formaNegociacao !== 'avista' && (op.formaNegociacao !== 'financiadora' || !op.financiadoraNome)">{{ rotuloForma(op.formaNegociacao) }}</div>
             </td>
             <td>
               {{ op.clienteNome || op.fornecedorNome || '—' }}
@@ -1034,7 +1188,7 @@ interface FichaEntrada {
             <td>{{ op.saidaResumo || '—' }}</td>
             <td *ngIf="financeiro">
               {{ dinheiro(op.dinheiroRecebido) }}
-              <div class="sub" *ngIf="op.financiadoraNome">
+              <div class="sub" *ngIf="op.financiadoraNome && (op.entradaLoja || op.repasseFinanciadora)">
                 Entrada {{ dinheiro(op.entradaLoja) }} · Repasse {{ dinheiro(op.repasseFinanciadora) }}
               </div>
               <div class="sub" *ngIf="op.formaNegociacao === 'avista_cartao'">
@@ -1092,7 +1246,9 @@ interface FichaEntrada {
     .painel .form-row { flex-wrap: wrap; }
     .painel .form-row .form-group { flex: 1 1 160px; min-width: 160px; }
     .valores-venda .form-group { flex: 1 1 220px; max-width: 320px; }
-    .iphone-ficha { max-width: 420px; }
+    .iphone-ficha { max-width: 640px; }
+    .peca-linha { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin-bottom: 8px; }
+    .peca-linha .grow { flex: 1; min-width: 180px; }
     .painel h3, .painel h4 { margin: 0 0 8px; font-size: 15px; }
     .grow { flex: 1; min-width: 220px; }
     .diferenca {
@@ -1102,6 +1258,18 @@ interface FichaEntrada {
     .prejuizo { color: #9a3412; font-size: 13px; margin: 6px 0 0; }
     .secao { margin-top: 28px; }
     .sub { color: #64748b; font-size: 11px; }
+    .cadeia { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin: 8px 0; background: #fff; }
+    .cadeia.aberta { border-color: #fdba74; }
+    .cadeia.fechada { border-color: #86efac; }
+    .cadeia-topo { display: flex; gap: 12px; align-items: baseline; width: 100%; background: transparent; border: 0; padding: 0; text-align: left; cursor: pointer; }
+    .passos { margin-top: 8px; }
+    .passo { padding: 8px 0; border-top: 1px solid #f1f5f9; }
+    .mes { margin: 16px 0 24px; }
+    .link { background: none; border: 0; padding: 0; color: #1d4ed8; cursor: pointer; text-align: left; }
+    .ficha-passo { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 8px 0; }
+    .ficha-passo h4 { margin: 0 0 4px; font-size: 12px; }
+    .lado p { margin: 0 0 2px; }
+    .os-link { margin-left: 6px; }
     .imei-pendente { display: flex; gap: 6px; margin-top: 4px; }
     .imei-pendente input { flex: 1; min-width: 0; font-size: 12px; padding: 4px 6px; }
     .imei-pendente button { font-size: 12px; padding: 4px 8px; }
@@ -1146,6 +1314,10 @@ interface FichaEntrada {
     .grade-juros button.ativo { outline: 2px solid #0d0d0d; }
     .grade-juros small { color: #64748b; }
     .os-alerta { color: #9a3412; }
+    .alerta-permanente {
+      margin: 8px 0 0; padding: 8px 10px; border-radius: 8px;
+      background: #fff7ed; color: #9a3412; font-size: 13px; font-weight: 700; line-height: 1.4;
+    }
     .entrada-troca { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px 4px; margin: 0 0 12px; }
     .entrada-troca-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
     .entrada-troca-topo h4 { margin: 0 0 10px; }
@@ -1191,7 +1363,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   private seqFicha = 0;
   compra = { valorPago: null as number | null, fornecedorNome: '' };
   venda = { aparelhoId: '', marca: '', modelo: '', cor: '', preco: null as number | null, desconto: null as number | null, acrescimo: null as number | null, observacoes: '', ...negociacaoVazia() };
-  troca = { aparelhoSaidaId: '', marca: '', modelo: '', cor: '', precoSaida: null as number | null, desconto: null as number | null, acrescimo: null as number | null, ...negociacaoVazia() };
+  troca = { aparelhoSaidaId: '', marca: '', modelo: '', cor: '', precoSaida: null as number | null, desconto: null as number | null, acrescimo: null as number | null, ...negociacaoVazia(), ...this.diferencaTrocaVazia() };
   jurosCfg = carregarCalculoJurosConfig();
   jurosVendaAberto = false;
   jurosTrocaAberto = false;
@@ -1213,6 +1385,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   osBuscando = false;
   private buscaOs?: ReturnType<typeof setTimeout>;
   private pollFotos?: ReturnType<typeof setInterval>;
+  private imeisOsNova: string[] = [];
 
   constructor(
     private api: AparelhoLojaService,
@@ -1220,6 +1393,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private router: Router,
     private appAuth: AppAuthService,
+    private impressao: OsImpressaoService,
   ) {}
 
   get isAdmin(): boolean {
@@ -1423,6 +1597,10 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return Math.round((this.baseCartaoTroca - this.somaAvaliados) * 100) / 100;
   }
 
+  get diferencaDigitada(): number {
+    return this.centavos(this.troca.diferenca);
+  }
+
   get caixaVenda(): number {
     return this.caixaAgora(this.venda);
   }
@@ -1467,7 +1645,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.osBuscando = false;
     this.compra = { valorPago: null, fornecedorNome: '' };
     this.venda = { aparelhoId: '', marca: '', modelo: '', cor: '', preco: null, desconto: null, acrescimo: null, observacoes: '', ...negociacaoVazia() };
-    this.troca = { aparelhoSaidaId: '', marca: '', modelo: '', cor: '', precoSaida: null, desconto: null, acrescimo: null, ...negociacaoVazia() };
+    this.troca = { aparelhoSaidaId: '', marca: '', modelo: '', cor: '', precoSaida: null, desconto: null, acrescimo: null, ...negociacaoVazia(), ...this.diferencaTrocaVazia() };
     this.entradasTroca = [this.novaFicha()];
     this.jurosVendaAberto = false;
     this.jurosTrocaAberto = false;
@@ -1676,7 +1854,9 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     if (a.saudeBateria != null) linhas.push(`Bateria ${a.saudeBateria}%`);
     if (a.bateriaPerfeita === true) linhas.push('Bateria em perfeitas condições');
     if (a.bateriaPerfeita === false) linhas.push('Bateria fora das perfeitas condições');
-    if (a.pecaTrocada?.trim()) linhas.push(a.mensagemPecaTrocada ? `Peça trocada: ${a.pecaTrocada.trim()} · aparece mensagem` : `Peça trocada: ${a.pecaTrocada.trim()}`);
+    if (a.alertaPermanente?.trim()) linhas.push(`Alerta permanente: ${a.alertaPermanente.trim()}`);
+    const pecas = this.textoPecas(a);
+    if (pecas) linhas.push(`Peças trocadas: ${pecas}`);
     return linhas.filter(linha => !!linha.trim()).join('\n');
   }
 
@@ -1765,8 +1945,26 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   rotuloForma(forma?: string): string {
+    if (forma === 'dinheiro') return 'Dinheiro';
+    if (forma === 'pix') return 'PIX';
+    if (forma === 'financiadora') return 'Financiadora';
     const achada = this.formasBusca.find(f => f.id === (forma || ''));
     return achada?.nome || '—';
+  }
+
+  onSentidoTroca(sentido: '' | 'loja' | 'cliente' | 'nenhuma'): void {
+    this.troca.sentido = sentido;
+    this.troca.pagamento = '';
+    this.troca.financiadoraNome = '';
+    if (sentido === 'nenhuma') this.troca.diferenca = null;
+  }
+
+  private diferencaTrocaVazia() {
+    return {
+      sentido: '' as '' | 'loja' | 'cliente' | 'nenhuma',
+      diferenca: null as number | null,
+      pagamento: '' as '' | 'dinheiro' | 'cartao' | 'financiadora' | 'pix',
+    };
   }
 
   capaDe(a: AparelhoLojaItem): string {
@@ -1841,14 +2039,30 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     }
   }
 
-  custoOperacao(resumo: { custoPecas?: number; custoMaoDeObra?: number }): number {
-    return (Number(resumo.custoPecas) || 0) + (Number(resumo.custoMaoDeObra) || 0);
+  custoTotalDe(a: { custo?: number; custoPecas?: number; custoTotal?: number }): number {
+    if (a.custoTotal != null) return Number(a.custoTotal) || 0;
+    return (Number(a.custo) || 0) + (Number(a.custoPecas) || 0);
   }
 
-  ordensDe(a: AparelhoLojaItem): string {
-    const lista = a.custosOs ?? [];
-    if (!lista.length) return '—';
-    return lista.map(c => c.numero || ('OS ' + c.osId)).join(', ');
+  linksOs(a: AparelhoLojaItem): { id: number; numero: string; pecas: number }[] {
+    const mapa = new Map<number, { id: number; numero: string; pecas: number }>();
+    if (a.osEntradaId) {
+      mapa.set(a.osEntradaId, {
+        id: a.osEntradaId,
+        numero: a.osEntradaNumero || String(a.osEntradaId),
+        pecas: 0,
+      });
+    }
+    for (const c of a.custosOs ?? []) {
+      if (!c.osId) continue;
+      const atual = mapa.get(c.osId);
+      mapa.set(c.osId, {
+        id: c.osId,
+        numero: c.numero || atual?.numero || String(c.osId),
+        pecas: (atual?.pecas || 0) + (Number(c.pecas) || 0),
+      });
+    }
+    return [...mapa.values()];
   }
 
   testesResumo(a: AparelhoLojaItem): string {
@@ -1992,6 +2206,72 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return formatarCpfCnpj(valor) || '';
   }
 
+  cadeiaAberta = '';
+  unidadeAberta = '';
+
+  get cadeias() {
+    return this.painel?.cadeias ?? [];
+  }
+
+  get meses() {
+    return this.painel?.meses ?? [];
+  }
+
+  rotuloMovimento(movimento?: string): string {
+    if (movimento === 'compra') return 'Compra';
+    if (movimento === 'entrou') return 'Entrou na troca';
+    if (movimento === 'saiu') return 'Saiu na troca';
+    if (movimento === 'venda') return 'Venda';
+    return movimento || '—';
+  }
+
+  alternarCadeia(id: string): void {
+    this.cadeiaAberta = this.cadeiaAberta === id ? '' : id;
+  }
+
+  chaveUnidade(u: AparelhoCadeiaUnidade): string {
+    return `${u.operacaoId || ''}|${u.imei}|${u.movimento}`;
+  }
+
+  alternarUnidade(u: AparelhoCadeiaUnidade): void {
+    const chave = this.chaveUnidade(u);
+    this.unidadeAberta = this.unidadeAberta === chave ? '' : chave;
+    this.cadeiaAberta = u.cadeiaId;
+  }
+
+  passoDaUnidade(u: AparelhoCadeiaUnidade): AparelhoCadeiaPasso | undefined {
+    return this.cadeias
+      .find(c => c.id === u.cadeiaId)
+      ?.passos.find(p => p.operacaoId === u.operacaoId);
+  }
+
+  fichaAparelho(item: AparelhoCadeiaItem): string {
+    const condicao = item.condicao ? this.rotuloCondicao(item.condicao) : '';
+    return [item.cor, condicao].filter(parte => !!parte).join(' · ');
+  }
+
+  formatarFone(valor?: string): string {
+    return formatarTelefone(valor) || '';
+  }
+
+  rotuloEtapa(passo: AparelhoCadeiaPasso): string {
+    if (passo.tipo === 'compra') return 'Investimento';
+    return passo.resultado < 0 ? 'Prejuízo desta etapa' : 'Resultado desta etapa';
+  }
+
+  valorEtapa(passo: AparelhoCadeiaPasso): number {
+    if (passo.tipo === 'compra') return passo.dinheiroSaiu;
+    const valor = Number(passo.resultado) || 0;
+    return valor < 0 ? -valor : valor;
+  }
+
+  dataCurta(iso?: string | null): string {
+    if (!iso) return '';
+    const data = new Date(iso);
+    if (Number.isNaN(data.getTime())) return '';
+    return data.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+  }
+
   dinheiro(valor?: number | null): string {
     return (Number(valor) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
@@ -2009,6 +2289,9 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       return;
     }
     const rascunho = this.cliente ? this.rascunhoCompra(aparelho, valor) : null;
+    this.imeisOsNova = this.entrada.passaPorAssistencia && !this.entrada.osNumero.trim()
+      ? [apenasDigitos(this.entrada.imei)]
+      : [];
     this.enviar(
       this.api.comprar({
         aparelho,
@@ -2057,7 +2340,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     }
     if (!this.validarNegociacao(this.venda, this.baseCartaoVenda)) return;
     const item = this.estoque.find(a => a.id === this.venda.aparelhoId);
-    const rascunho = item ? this.rascunhoVenda(item, preco, this.venda) : null;
+    const rascunho = item ? this.rascunhoVenda(item, preco, this.venda, this.textoParcelasCartao(this.opcaoJurosVenda)) : null;
     this.enviar(
       this.api.vender({
         aparelhoId: this.venda.aparelhoId,
@@ -2120,26 +2403,36 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       avisarErroUsuario('Informe o preço do aparelho que sai.');
       return;
     }
-    if (!this.validarNegociacao(this.troca, this.troca.forma === 'avista_cartao' ? this.diferencaTroca : null)) return;
+    if (!this.validarDiferencaTroca()) return;
     const complemento = prontos
       .map(p => `Aparelho dado na troca: ${p.aparelho.marca} ${p.aparelho.modelo} ${p.aparelho.configuracao}, IMEI ${p.aparelho.imei}, avaliado em R$ ${moedaContrato(p.avaliado)}. ${this.estadoDoAparelho(p.aparelho)}`)
       .join(' ');
     const rascunho = saida ? this.rascunhoVenda(saida, preco, this.troca, complemento) : null;
+    this.aplicarDiferencaNoContrato(rascunho, preco);
     const soma = prontos.reduce((total, p) => total + p.avaliado, 0);
+    const diferenca = this.troca.sentido === 'nenhuma' ? 0 : this.centavos(this.troca.diferenca);
+    this.imeisOsNova = this.entradasTroca
+      .filter(ficha => ficha.dados.passaPorAssistencia && !ficha.dados.osNumero.trim())
+      .map(ficha => apenasDigitos(ficha.dados.imei));
     this.enviarComMidias(
       this.api.trocar({
         aparelhoSaidaId: this.troca.aparelhoSaidaId,
         precoSaida: preco,
         precoTabela: Number(this.troca.precoSaida),
         desconto: this.centavos(this.troca.desconto),
-        acrescimo: this.ehFinanciada(this.troca.forma) ? this.centavos(this.troca.acrescimo) : 0,
+        acrescimo: 0,
         entradas: prontos.map(p => ({
           aparelho: p.aparelho,
           valorAvaliado: p.avaliado,
           sessaoToken: p.ficha.sessaoToken || undefined,
         })),
         valorAvaliado: Math.round(soma * 100) / 100,
-        ...this.corpoNegociacao(this.troca),
+        sentidoDiferenca: this.troca.sentido,
+        diferencaInformada: diferenca,
+        forma: this.troca.sentido === 'nenhuma' ? 'avista' : this.troca.pagamento,
+        financiadoraNome: this.troca.pagamento === 'financiadora' ? this.troca.financiadoraNome.trim() : '',
+        entradaLoja: 0,
+        repasse: 0,
         clienteId,
         observacoes: prontos.map(p => p.aparelho.observacoes).filter(texto => !!texto?.trim()).join(' · '),
       }),
@@ -2152,6 +2445,80 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   estornar(op: AparelhoOperacao): void {
     if (!op.id || !confirm('Desfazer esta operação? O estoque e o desconto voltam ao estado anterior.')) return;
     this.enviar(this.api.estornar(op.id), 'Operação desfeita.');
+  }
+
+  private validarDiferencaTroca(): boolean {
+    if (this.troca.sentido !== 'loja' && this.troca.sentido !== 'cliente' && this.troca.sentido !== 'nenhuma') {
+      avisarErroUsuario('Informe se a diferença volta para a loja, para o cliente ou se não há diferença.');
+      return false;
+    }
+    const diferenca = this.centavos(this.troca.diferenca);
+    if (this.troca.sentido === 'nenhuma') {
+      if (diferenca > 0) {
+        avisarErroUsuario('Se há diferença, informe se ela volta para a loja ou para o cliente.');
+        return false;
+      }
+      return true;
+    }
+    if (!(diferenca > 0)) {
+      avisarErroUsuario('Informe a diferença.');
+      return false;
+    }
+    if (this.troca.sentido === 'loja' && this.troca.pagamento !== 'dinheiro' && this.troca.pagamento !== 'cartao' && this.troca.pagamento !== 'financiadora') {
+      avisarErroUsuario('Informe se a diferença entra em dinheiro, cartão ou financiadora.');
+      return false;
+    }
+    if (this.troca.pagamento === 'financiadora' && !this.troca.financiadoraNome.trim()) {
+      avisarErroUsuario('Informe qual é a financiadora.');
+      return false;
+    }
+    if (this.troca.sentido === 'cliente' && this.troca.pagamento !== 'pix' && this.troca.pagamento !== 'dinheiro') {
+      avisarErroUsuario('Informe se a loja devolve em PIX ou em dinheiro.');
+      return false;
+    }
+    return true;
+  }
+
+  private aplicarDiferencaNoContrato(rascunho: RascunhoContrato | null, preco: number): void {
+    if (!rascunho) return;
+    const diferenca = this.centavos(this.troca.diferenca);
+    if (this.troca.sentido === 'nenhuma') {
+      rascunho.valores['valor_entrada'] = moedaContrato(0);
+      rascunho.valores['valor_saldo'] = moedaContrato(preco);
+      rascunho.formaPagamento = 'acombinar';
+      rascunho.entrada = '';
+      rascunho.complemento = `${rascunho.complemento || ''} Troca sem diferença em dinheiro.`.trim();
+      rascunho.valores['observacoes'] = rascunho.complemento;
+      return;
+    }
+    if (this.troca.sentido === 'loja') {
+      const saldo = Math.max(0, Math.round((preco - diferenca) * 100) / 100);
+      rascunho.valores['valor_entrada'] = moedaContrato(diferenca);
+      rascunho.valores['valor_saldo'] = moedaContrato(saldo);
+      rascunho.entrada = moedaContrato(diferenca);
+      rascunho.repasse = '';
+      if (this.troca.pagamento === 'dinheiro') rascunho.formaPagamento = 'dinheiro';
+      else if (this.troca.pagamento === 'cartao') rascunho.formaPagamento = 'cartao';
+      else {
+        rascunho.formaPagamento = 'outra';
+        rascunho.financiadoraNome = this.troca.financiadoraNome.trim();
+      }
+      const parcelas = this.troca.pagamento === 'cartao' ? this.textoParcelasCartao(this.opcaoJurosTroca) : '';
+      rascunho.complemento = `${rascunho.complemento || ''} Diferença de R$ ${moedaContrato(diferenca)} para a loja, em ${this.rotuloForma(this.troca.pagamento)}. ${parcelas}`.trim();
+      rascunho.valores['observacoes'] = rascunho.complemento;
+      return;
+    }
+    rascunho.valores['valor_entrada'] = moedaContrato(0);
+    rascunho.valores['valor_saldo'] = moedaContrato(preco);
+    rascunho.entrada = '';
+    rascunho.formaPagamento = this.troca.pagamento === 'dinheiro' ? 'dinheiro' : 'pix';
+    rascunho.complemento = `${rascunho.complemento || ''} A loja devolve R$ ${moedaContrato(diferenca)} em ${this.troca.pagamento === 'pix' ? 'PIX' : 'dinheiro'}.`.trim();
+    rascunho.valores['observacoes'] = rascunho.complemento;
+  }
+
+  private textoParcelasCartao(op: OpcaoParcela | null): string {
+    if (!op || op.parcelas <= 1) return '';
+    return `No cartão, ${op.parcelas}x de R$ ${moedaContrato(op.valorParcela)}, total R$ ${moedaContrato(op.total)}.`;
   }
 
   private caixaAgora(n: NegociacaoForm): number {
@@ -2268,17 +2635,22 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
         valor: moedaContrato(preco),
         valor_entrada: moedaContrato(entrada),
         valor_saldo: moedaContrato(saldo),
+        observacoes: complemento,
       },
       enderecoChave: 'comprador_endereco',
       endereco: pessoa?.endereco,
       formaPagamento: negociacao.forma === 'cartao'
-        ? 'Cartão de crédito'
+        ? 'cartao'
         : negociacao.forma === 'avista_cartao'
-          ? 'À vista + cartão'
+          ? 'avista_cartao'
           : negociacao.forma === 'avista' ? 'avista' : negociacao.forma,
       financiadoraNome: negociacao.forma === 'outra' ? negociacao.financiadoraNome.trim() : '',
-      entrada: aVistaOuCartao ? '' : moedaContrato(entrada),
-      repasse: aVistaOuCartao || !(repasse > 0) ? '' : moedaContrato(repasse),
+      entrada: negociacao.forma === 'avista_cartao'
+        ? moedaContrato(Number(negociacao.entrada ?? 0))
+        : aVistaOuCartao ? '' : moedaContrato(entrada),
+      repasse: negociacao.forma === 'avista_cartao'
+        ? moedaContrato(Number(negociacao.repasse ?? 0))
+        : aVistaOuCartao || !(repasse > 0) ? '' : moedaContrato(repasse),
       complemento,
     };
   }
@@ -2301,8 +2673,10 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     observacoes?: string;
     saudeBateria?: number | null;
     bateriaPerfeita?: boolean | null;
+    alertaPermanente?: string;
     pecaTrocada?: string;
     mensagemPecaTrocada?: boolean;
+    pecasTrocadas?: { nome: string; apareceMensagem: boolean }[];
     testes?: { nome: string; ok: boolean }[];
     osNumero?: string;
     testesNaOs?: boolean;
@@ -2313,11 +2687,9 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     if (!Number.isNaN(bateria) && bateria > 0) partes.push(`saúde da bateria ${bateria}%`);
     if (dados.bateriaPerfeita === true) partes.push('bateria em perfeitas condições');
     if (dados.bateriaPerfeita === false) partes.push('bateria fora das perfeitas condições');
-    if (dados.pecaTrocada?.trim()) {
-      partes.push(dados.mensagemPecaTrocada
-        ? `peça trocada: ${dados.pecaTrocada.trim()}, aparece mensagem`
-        : `peça trocada: ${dados.pecaTrocada.trim()}`);
-    }
+    if (dados.alertaPermanente?.trim()) partes.push(`alerta permanente: ${dados.alertaPermanente.trim()}`);
+    const pecas = this.textoPecas(dados);
+    if (pecas) partes.push(`peças trocadas: ${pecas}`);
     const os = (dados.osNumero || dados.osEntradaNumero || '').trim();
     if (os || dados.testesNaOs) {
       partes.push(os ? `testes feitos na OS ${os}` : 'testes feitos na ordem de serviço');
@@ -2655,7 +3027,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       avisarErroUsuario(`Informe se a saúde da bateria do iPhone${qual} está em perfeitas condições.`);
       return null;
     }
-    const pecaTrocada = iphone ? ficha.dados.pecaTrocada.trim() : '';
+    const pecas = iphone ? this.pecasPreenchidas(ficha.dados.pecas) : [];
     const valorVenda = Number(ficha.dados.valorVenda);
     const valorMinimoVenda = Number(ficha.dados.valorMinimoVenda);
     if (!(valorVenda > 0)) {
@@ -2682,10 +3054,12 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       valorVenda,
       valorMinimoVenda,
       observacoes: ficha.dados.observacoes,
+      alertaPermanente: ficha.dados.alertaPermanente.trim(),
       saudeBateria: ficha.dados.saudeBateria,
       bateriaPerfeita: iphone ? ficha.dados.bateriaPerfeita === 'sim' : null,
-      pecaTrocada,
-      mensagemPecaTrocada: !!pecaTrocada && ficha.dados.mensagemPecaTrocada,
+      pecasTrocadas: pecas,
+      pecaTrocada: pecas.map(p => p.nome).join(', '),
+      mensagemPecaTrocada: pecas.some(p => p.apareceMensagem),
       testes: this.osAbertaDe(ficha) ? [] : ficha.testes.map(t => ({ nome: t.nome, ok: t.ok })),
       passaPorAssistencia: ficha.dados.passaPorAssistencia,
       osNumero: ficha.dados.osNumero.trim(),
@@ -2704,6 +3078,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       next: painel => this.subirMidias(painel, grupos, sucesso, depois, false),
       error: (err: { error?: { erro?: string } }) => {
         this.salvando = false;
+        this.imeisOsNova = [];
         limparRascunhoContrato();
         this.erro = err?.error?.erro || 'Não foi possível salvar.';
         avisarErroUsuario(this.erro);
@@ -2759,7 +3134,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       avisarErroUsuario('Informe se a saúde da bateria do iPhone está em perfeitas condições.');
       return null;
     }
-    const pecaTrocada = this.ehIphone ? this.entrada.pecaTrocada.trim() : '';
+    const pecas = this.ehIphone ? this.pecasPreenchidas(this.entrada.pecas) : [];
     const valorVenda = Number(this.entrada.valorVenda);
     const valorMinimoVenda = Number(this.entrada.valorMinimoVenda);
     if (!(valorVenda > 0)) {
@@ -2786,10 +3161,12 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       valorVenda,
       valorMinimoVenda,
       observacoes: this.entrada.observacoes,
+      alertaPermanente: this.entrada.alertaPermanente.trim(),
       saudeBateria: this.entrada.saudeBateria,
       bateriaPerfeita: this.ehIphone ? this.entrada.bateriaPerfeita === 'sim' : null,
-      pecaTrocada,
-      mensagemPecaTrocada: !!pecaTrocada && this.entrada.mensagemPecaTrocada,
+      pecasTrocadas: pecas,
+      pecaTrocada: pecas.map(p => p.nome).join(', '),
+      mensagemPecaTrocada: pecas.some(p => p.apareceMensagem),
       testes: this.temOsInformada ? [] : this.testes.map(t => ({ nome: t.nome, ok: t.ok })),
       passaPorAssistencia: this.entrada.passaPorAssistencia,
       osNumero: this.entrada.osNumero.trim(),
@@ -2828,6 +3205,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       },
       error: (err: { error?: { erro?: string } }) => {
         this.salvando = false;
+        this.imeisOsNova = [];
         limparRascunhoContrato();
         this.erro = err?.error?.erro || 'Não foi possível salvar.';
         avisarErroUsuario(this.erro);
@@ -2850,6 +3228,8 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   private concluir(painel: AparelhoLojaPainel, sucesso: string): void {
+    const imeis = this.imeisOsNova;
+    this.imeisOsNova = [];
     this.painel = painel;
     this.salvando = false;
     this.modo = null;
@@ -2857,6 +3237,16 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.videos = [];
     this.fecharQr();
     avisarSucessoUsuario(sucesso);
+    this.imprimirOsGeradas(painel, imeis);
+  }
+
+  private imprimirOsGeradas(painel: AparelhoLojaPainel, imeis: string[]): void {
+    for (const imei of imeis) {
+      const item = painel.estoque.find(a => apenasDigitos(a.imei) === imei && !!a.osEntradaId);
+      if (!item?.osEntradaId) continue;
+      const os = { id: item.osEntradaId, numero: item.osEntradaNumero } as BlingOrdemServico;
+      this.impressao.imprimir(OS_IMPRESSAO_PADRAO_POS_CADASTRO, os);
+    }
   }
 
   private iniciarPoll(): void {
@@ -2903,6 +3293,38 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     }
   }
 
+  adicionarPeca(pecas: { nome: string; apareceMensagem: boolean }[]): void {
+    if (pecas.length >= 8) return;
+    pecas.push({ nome: '', apareceMensagem: false });
+  }
+
+  removerPeca(pecas: { nome: string; apareceMensagem: boolean }[], indice: number): void {
+    if (pecas.length < 2) return;
+    pecas.splice(indice, 1);
+  }
+
+  textoPecas(origem: {
+    pecasTrocadas?: { nome: string; apareceMensagem: boolean }[];
+    pecaTrocada?: string;
+    mensagemPecaTrocada?: boolean;
+  }): string {
+    const lista = (origem.pecasTrocadas ?? []).filter(p => p.nome?.trim());
+    if (lista.length) {
+      return lista
+        .map(p => p.apareceMensagem ? `${p.nome.trim()} · aparece mensagem` : p.nome.trim())
+        .join('; ');
+    }
+    const legado = origem.pecaTrocada?.trim() ?? '';
+    if (!legado) return '';
+    return origem.mensagemPecaTrocada ? `${legado} · aparece mensagem` : legado;
+  }
+
+  private pecasPreenchidas(pecas: { nome: string; apareceMensagem: boolean }[]): { nome: string; apareceMensagem: boolean }[] {
+    return pecas
+      .map(p => ({ nome: p.nome.trim(), apareceMensagem: !!p.nome.trim() && p.apareceMensagem }))
+      .filter(p => p.nome.length > 0);
+  }
+
   private testesVazios() {
     return [
       'Tela', 'Touch', 'Câmera frontal', 'Câmera traseira', 'Alto-falante',
@@ -2918,10 +3340,10 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       configuracao: '',
       condicao,
       observacoes: '',
+      alertaPermanente: '',
       saudeBateria: null as number | null,
       bateriaPerfeita: '' as '' | 'sim' | 'nao',
-      pecaTrocada: '',
-      mensagemPecaTrocada: false,
+      pecas: [{ nome: '', apareceMensagem: false }],
       passaPorAssistencia: false,
       osNumero: '',
       valorVenda: null as number | null,

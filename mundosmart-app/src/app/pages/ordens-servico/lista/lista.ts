@@ -17,6 +17,7 @@ import {
   osSituacaoRetiradoAguardandoPagamento,
   osSituacaoReparoAvancadoPlaca,
   osSituacaoCelularDaLoja,
+  clienteEhLojaMundoSmart,
   osSituacaoForaFiltroPadrao,
   osPrecisaEscolherTecnico,
   resolverTecnicoFixo,
@@ -1168,12 +1169,16 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       os.dataPrazoPeca = prazo;
     }
 
+    let alertaPermanente: { informado: boolean; texto: string } | undefined;
     if (osSituacaoConcluida(situacaoNormalizada) && !osSituacaoConcluida(situacaoAnterior)) {
-      const ok = await this.situacaoDialog.openConcluir({ osLabel });
-      if (!ok) {
+      const celular = osSituacaoCelularDaLoja(situacaoAnterior)
+        || clienteEhLojaMundoSmart(os.contato?.nome);
+      const conclusao = await this.situacaoDialog.openConcluir({ osLabel, celularDaLoja: celular });
+      if (!conclusao) {
         reverterERecarregar();
         return;
       }
+      if (celular) alertaPermanente = { informado: true, texto: conclusao.alertaPermanente };
     }
 
     const tecnicoFixo = resolverTecnicoFixo(situacaoNormalizada, this.tecnicosAtivos);
@@ -1206,6 +1211,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       motivoCancelamento,
       dataPrazoPeca,
       tecnicoNome,
+      alertaPermanente,
     ).subscribe({
       next: () => {
         this.alterandoSituacaoId = undefined;

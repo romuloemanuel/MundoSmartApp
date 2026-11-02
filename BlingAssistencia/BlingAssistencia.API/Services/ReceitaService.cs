@@ -99,13 +99,13 @@ public sealed class ReceitaService : IReceitaService
         {
             var faixa = dest[i].Celulares;
             faixa.Bruto += op.DinheiroRecebido;
-            faixa.CustoItem += op.Saida?.Custo ?? 0;
+            AparelhoLojaData? aparelho = null;
+            if (!string.IsNullOrWhiteSpace(op.Saida?.AparelhoId))
+                porId.TryGetValue(op.Saida.AparelhoId, out aparelho);
+            faixa.CustoItem += CustoDeCompraDaSaida(op.Saida, aparelho, op.Data.Date);
             faixa.CustoLoja += op.DinheiroPago;
-            if (!string.IsNullOrWhiteSpace(op.Saida?.AparelhoId)
-                && porId.TryGetValue(op.Saida.AparelhoId, out var aparelho))
-            {
+            if (aparelho is not null)
                 faixa.CustoLoja += PecasDaLoja(aparelho, op.Data.Date, osDaAssistencia);
-            }
 
             if (op.Tipo == AparelhoOperacaoTipo.Troca)
                 dest[i].CelularesEstoqueEntrou += CustoQueEntrou(op);
@@ -155,6 +155,28 @@ public sealed class ReceitaService : IReceitaService
             .Where(i => i.CustoPeca is not > 0 && !string.IsNullOrWhiteSpace(i.PecaId))
             .Select(i => i.PecaId!);
         return await _estoque.ObterCustosReferenciaPecasAsync(ids);
+    }
+
+    private static decimal CustoDeCompraDaSaida(AparelhoMovimentoData? saida, AparelhoLojaData? aparelho, DateTime dia)
+    {
+        var custo = saida?.Custo ?? 0;
+        if (aparelho is null || custo <= aparelho.Custo) return custo;
+        var pecas = PecasAte(aparelho, dia);
+        if (pecas <= 0) return custo;
+        var excesso = custo - aparelho.Custo;
+        return custo - Math.Min(excesso, pecas);
+    }
+
+    private static decimal PecasAte(AparelhoLojaData aparelho, DateTime dia)
+    {
+        decimal total = 0;
+        foreach (var custo in aparelho.CustosOs ?? [])
+        {
+            if (custo.Pecas <= 0) continue;
+            if (custo.AtualizadoEm != default && custo.AtualizadoEm.Date > dia) continue;
+            total += custo.Pecas;
+        }
+        return total;
     }
 
     private static decimal PecasDaLoja(AparelhoLojaData aparelho, DateTime dia, HashSet<long> osDaAssistencia)

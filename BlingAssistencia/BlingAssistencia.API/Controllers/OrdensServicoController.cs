@@ -371,6 +371,18 @@ public class OrdensServicoController : ControllerBase
         try
         {
             await GarantirAcessoOsAsync(id);
+            var existente = await _localRepo.ObterPorBlingIdAsync(id)
+                ?? throw new KeyNotFoundException($"OS {id} não encontrada.");
+            if (OsSituacaoHelper.EhConcluida(os.Situacao) && !OsSituacaoHelper.EhConcluida(existente.Situacao))
+            {
+                await _aparelhosLoja.RegistrarAlertaAoConcluirAsync(
+                    id,
+                    string.IsNullOrWhiteSpace(os.Imei) ? existente.Imei : os.Imei,
+                    os.Contato?.Nome ?? existente.ContatoNome,
+                    existente.Situacao,
+                    os.AlertaPermanenteInformado,
+                    os.AlertaPermanente);
+            }
             os.LojaOrigem = LojaAcessoHelper.AplicarNaCriacao(User, os.LojaOrigem);
             OsOrdemValidacao.Validar(os);
             os.TecnicoNome = await TecnicoDaSituacaoAsync(os.Situacao, os.TecnicoNome);
@@ -412,6 +424,16 @@ public class OrdensServicoController : ControllerBase
                     ? request.TecnicoNome.Trim()
                     : existente.TecnicoNome);
             await OsOrdemValidacao.ValidarTecnicoAsync(request.Situacao, tecnicoNome, _tecnicos);
+            if (OsSituacaoHelper.EhConcluida(request.Situacao) && !OsSituacaoHelper.EhConcluida(existente.Situacao))
+            {
+                await _aparelhosLoja.RegistrarAlertaAoConcluirAsync(
+                    id,
+                    existente.Imei,
+                    existente.ContatoNome,
+                    existente.Situacao,
+                    request.AlertaPermanenteInformado,
+                    request.AlertaPermanente);
+            }
             await _service.AlterarSituacaoAsync(
                 id,
                 request.Situacao,
@@ -653,6 +675,8 @@ public record AlterarSituacaoRequest(
     string Situacao,
     string? MotivoCancelamento = null,
     DateTime? DataPrazoPeca = null,
-    string? TecnicoNome = null);
+    string? TecnicoNome = null,
+    bool AlertaPermanenteInformado = false,
+    string? AlertaPermanente = null);
 public record JustificarAtrasoRequest(string JustificativaAtraso);
 public record AtualizarCategoriaFotoRequest(string? Categoria, string? DescricaoFoco = null);

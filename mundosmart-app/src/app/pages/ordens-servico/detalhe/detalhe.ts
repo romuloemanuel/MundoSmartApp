@@ -10,6 +10,8 @@ import { labelPagamentoAcordadoOs } from '../../../config/os-pagamento.config';
 import { labelOrigemPeca } from '../../../config/os-peca-origem.config';
 import {
   osSituacaoConcluida,
+  osSituacaoCelularDaLoja,
+  clienteEhLojaMundoSmart,
   osSituacaoFinalizada,
   osSituacaoCancelada,
   osSituacaoAguardandoPeca,
@@ -92,9 +94,13 @@ export class OrdensServicoDetalhe implements OnInit {
     const situacaoAjustada = ajustarSituacaoParaLoja(situacao, this.os.lojaOrigem);
     const osLabel = this.os.numero ? `OS #${this.os.numero}` : `OS #${this.os.id}`;
 
+    let alertaPermanente: { informado: boolean; texto: string } | undefined;
     if (osSituacaoConcluida(situacaoAjustada) && !osSituacaoConcluida(this.os.situacao)) {
-      const ok = await this.situacaoDialog.openConcluir({ osLabel });
-      if (!ok) return;
+      const celular = osSituacaoCelularDaLoja(this.os.situacao)
+        || clienteEhLojaMundoSmart(this.os.contato?.nome);
+      const conclusao = await this.situacaoDialog.openConcluir({ osLabel, celularDaLoja: celular });
+      if (!conclusao) return;
+      if (celular) alertaPermanente = { informado: true, texto: conclusao.alertaPermanente };
     }
 
     let motivoCancelamento: string | undefined;
@@ -133,6 +139,7 @@ export class OrdensServicoDetalhe implements OnInit {
       motivoCancelamento,
       dataPrazoPeca,
       tecnicoNome,
+      alertaPermanente,
     ).subscribe({
       next: () => {
         this.os!.situacao = situacaoAjustada;

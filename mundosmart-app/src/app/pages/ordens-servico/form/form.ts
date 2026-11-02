@@ -514,6 +514,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   private passivelTimer: ReturnType<typeof setTimeout> | null = null;
   private situacaoAoCarregar = '';
   private conclusaoConfirmada = false;
+  private alertaPermanenteColetado = false;
+  private alertaPermanenteConclusao = '';
   /** Evita que combineLate overwrite um prefill já aplicado. */
   private prefillOrcamentoAplicadoId?: number;
 
@@ -892,6 +894,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     this.os.situacao = padrao;
     this.situacaoAoCarregar = padrao;
     this.conclusaoConfirmada = false;
+    this.alertaPermanenteColetado = false;
+    this.alertaPermanenteConclusao = '';
     this.limparContatosAlternativos();
   }
 
@@ -1274,6 +1278,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     };
     this.situacaoAoCarregar = this.os.situacao || situacaoPadraoPorLoja(this.os.lojaOrigem);
     this.conclusaoConfirmada = osSituacaoConcluida(this.situacaoAoCarregar);
+    this.alertaPermanenteColetado = false;
+    this.alertaPermanenteConclusao = '';
     if (!this.podeEditarOsAtual()) {
       this.somenteLeitura = true;
       this.editando = false;
@@ -1991,6 +1997,12 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   }
 
   /** Datas operacionais: datetime-local → ISO com Z (relógio de parede, sem conversão de fuso). */
+  private exigeAlertaPermanente(situacaoAnterior?: string | null): boolean {
+    return osSituacaoCelularDaLoja(situacaoAnterior)
+      || osSituacaoCelularDaLoja(this.os.situacao)
+      || clienteEhLojaMundoSmart(this.os.contato?.nome);
+  }
+
   private prepararOsParaSalvar(): BlingOrdemServico {
     return {
       ...this.os,
@@ -2363,15 +2375,20 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     }
 
     if (osSituacaoConcluida(situacaoNormalizada) && !osSituacaoConcluida(anterior)) {
-      const ok = await this.situacaoDialog.openConcluir({ osLabel });
-      if (!ok) {
+      const celular = this.exigeAlertaPermanente(anterior);
+      const conclusao = await this.situacaoDialog.openConcluir({ osLabel, celularDaLoja: celular });
+      if (!conclusao) {
         this.os.situacao = anterior;
         this.cdr.markForCheck();
         return;
       }
       this.conclusaoConfirmada = true;
+      this.alertaPermanenteColetado = celular;
+      this.alertaPermanenteConclusao = conclusao.alertaPermanente;
     } else if (!osSituacaoConcluida(situacaoNormalizada)) {
       this.conclusaoConfirmada = false;
+      this.alertaPermanenteColetado = false;
+      this.alertaPermanenteConclusao = '';
     }
 
     const tecnicoFixo = resolverTecnicoFixo(situacaoNormalizada, this.tecnicosAtivos);
@@ -2561,9 +2578,12 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       const osLabel = this.os.numero
         ? `OS #${this.os.numero}`
         : (this.os.id ? `OS #${this.os.id}` : 'esta OS');
-      const ok = await this.situacaoDialog.openConcluir({ osLabel });
-      if (!ok) return;
+      const celular = this.exigeAlertaPermanente(this.situacaoAoCarregar);
+      const conclusao = await this.situacaoDialog.openConcluir({ osLabel, celularDaLoja: celular });
+      if (!conclusao) return;
       this.conclusaoConfirmada = true;
+      this.alertaPermanenteColetado = celular;
+      this.alertaPermanenteConclusao = conclusao.alertaPermanente;
       const agora = this.agoraDatetimeLocal();
       if (!this.dataValida(this.os.dataSaida)) this.os.dataSaida = agora;
       if (!this.dataValida(this.os.dataConclusao)) this.os.dataConclusao = agora;
@@ -2576,6 +2596,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     }
     this.prepararItensParaSalvar();
     const payload = this.prepararOsParaSalvar();
+    if (this.alertaPermanenteColetado) {
+      payload.alertaPermanenteInformado = true;
+      payload.alertaPermanente = this.alertaPermanenteConclusao;
+    }
     const op = this.editando
       ? this.service.atualizar(this.os.id!, payload)
       : this.service.criar(payload);

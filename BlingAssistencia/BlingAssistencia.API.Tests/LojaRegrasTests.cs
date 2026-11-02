@@ -222,16 +222,26 @@ public class LojaRegrasTests
     [Fact]
     public async Task Aparelho_na_assistencia_nao_vende_ate_ser_liberado()
     {
+        await GarantirClienteLoja();
         var imei = NovoImei();
         var cliente = await ClienteComDocumento();
+        var modelo = await PrimeiroModelo();
+        var ficha = Aparelho(imei, modelo.Marca, modelo.Nome, passaPorAssistencia: true);
+        ficha["modeloId"] = modelo.Id;
         var comprado = await Post("/api/aparelhos-loja/compra", new
         {
             valorPago = 1500,
             fornecedorNome = "Fornecedor teste",
-            aparelho = Aparelho(imei, passaPorAssistencia: true),
+            aparelho = ficha,
         });
         var retido = ExigirEstoque(comprado, imei);
         Assert.Equal("em_assistencia", retido["status"]!.GetValue<string>());
+        var numeroOs = retido["osEntradaNumero"]?.GetValue<string>();
+        Assert.False(string.IsNullOrWhiteSpace(numeroOs));
+        var os = await Get($"/api/ordens-servico/{numeroOs}");
+        Assert.Equal("Celular da loja", os["situacao"]?.GetValue<string>());
+        Assert.Equal("Mundo Smart", os["contato"]?["nome"]?.GetValue<string>());
+        Assert.Equal(imei, os["imei"]?.GetValue<string>());
 
         var bloqueio = await PostBruto("/api/aparelhos-loja/venda", Venda(retido["id"]!.GetValue<string>(), cliente, 1500));
         Assert.Equal(HttpStatusCode.BadRequest, bloqueio.StatusCode);
@@ -655,6 +665,89 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Troca_usa_a_diferenca_informada_e_nao_a_conta_dos_aparelhos()
+    {
+        var saida = NovoImei();
+        var entrada = NovoImei();
+        var cliente = await ClienteComDocumento();
+        var id = await IdComprado(saida, 2000);
+        var painel = await Post("/api/aparelhos-loja/troca", new
+        {
+            aparelhoSaidaId = id,
+            precoTabela = 2000,
+            desconto = 0,
+            acrescimo = 0,
+            precoSaida = 2000,
+            valorAvaliado = 1100,
+            sentidoDiferenca = "loja",
+            diferencaInformada = 400,
+            forma = "financiadora",
+            financiadoraNome = "Crediário da praça",
+            clienteId = cliente.Id,
+            entrada = Aparelho(entrada),
+        });
+        var op = ExigirOperacao(painel, saida, "troca");
+        Assert.Equal(400m, Num(op["dinheiroRecebido"]));
+        Assert.Equal(0m, Num(op["dinheiroPago"]));
+        Assert.Equal("financiadora", op["formaNegociacao"]!.GetValue<string>());
+        Assert.Equal("Crediário da praça", op["financiadoraNome"]!.GetValue<string>());
+        Assert.Equal(1100m, Num(ExigirEstoque(painel, entrada)["custo"]));
+
+        var devolve = NovoImei();
+        var idDevolve = await IdComprado(devolve, 1300);
+        var painelCliente = await Post("/api/aparelhos-loja/troca", new
+        {
+            aparelhoSaidaId = idDevolve,
+            precoTabela = 1300,
+            desconto = 0,
+            acrescimo = 0,
+            precoSaida = 1300,
+            valorAvaliado = 900,
+            sentidoDiferenca = "cliente",
+            diferencaInformada = 150,
+            forma = "pix",
+            clienteId = cliente.Id,
+            entrada = Aparelho(NovoImei()),
+        });
+        var volta = ExigirOperacao(painelCliente, devolve, "troca");
+        Assert.Equal(0m, Num(volta["dinheiroRecebido"]));
+        Assert.Equal(150m, Num(volta["dinheiroPago"]));
+        Assert.Equal("pix", volta["formaNegociacao"]!.GetValue<string>());
+
+        var semNome = await PostBruto("/api/aparelhos-loja/troca", new
+        {
+            aparelhoSaidaId = await IdComprado(NovoImei(), 1000),
+            precoTabela = 1000,
+            desconto = 0,
+            acrescimo = 0,
+            precoSaida = 1000,
+            valorAvaliado = 400,
+            sentidoDiferenca = "loja",
+            diferencaInformada = 200,
+            forma = "financiadora",
+            clienteId = cliente.Id,
+            entrada = Aparelho(NovoImei()),
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, semNome.StatusCode);
+
+        var cartaoParaCliente = await PostBruto("/api/aparelhos-loja/troca", new
+        {
+            aparelhoSaidaId = await IdComprado(NovoImei(), 1000),
+            precoTabela = 1000,
+            desconto = 0,
+            acrescimo = 0,
+            precoSaida = 1000,
+            valorAvaliado = 400,
+            sentidoDiferenca = "cliente",
+            diferencaInformada = 200,
+            forma = "cartao",
+            clienteId = cliente.Id,
+            entrada = Aparelho(NovoImei()),
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, cartaoParaCliente.StatusCode);
+    }
+
+    [Fact]
     public async Task Mesmo_modelo_sem_confirmar_imei_so_aponta_que_pode_ser_elegivel()
     {
         var imei = NovoImei();
@@ -783,6 +876,77 @@ public class LojaRegrasTests
         Assert.Equal(80m, Num(aparelho["custoPecas"]));
         Assert.Equal(0m, Num(aparelho["custoMaoDeObra"]));
         Assert.Equal(1000m, Num(aparelho["custo"]));
+        Assert.Equal(1080m, Num(aparelho["custoTotal"]));
+    }
+
+    [Fact]
+    public async Task Custo_total_soma_compra_e_peca_e_conclusao_grava_alerta()
+    {
+        await GarantirClienteLoja();
+        var imei = NovoImei();
+        var modelo = await PrimeiroModelo();
+        var ficha = Aparelho(imei, modelo.Marca, modelo.Nome, passaPorAssistencia: true);
+        ficha["modeloId"] = modelo.Id;
+        var comprado = await Post("/api/aparelhos-loja/compra", new
+        {
+            valorPago = 1400,
+            fornecedorNome = "Fornecedor teste",
+            aparelho = ficha,
+        });
+        var retido = ExigirEstoque(comprado, imei);
+        var osLojaId = retido["osEntradaId"]!.GetValue<long>();
+        var osLoja = await Get($"/api/ordens-servico/{osLojaId}");
+        var contatoId = osLoja["contato"]!["id"]!.GetValue<long>();
+
+        var criada = await Post("/api/ordens-servico", new
+        {
+            contato = new { id = contatoId, nome = "Mundo Smart" },
+            modeloId = modelo.Id,
+            modeloNome = modelo.Nome,
+            marcaNome = modelo.Marca,
+            imei,
+            estadoTela = "Inteira",
+            condicoesAparelho = "Liga",
+            defeito = "Bateria",
+            formaPagamento = "avista",
+            tipoServico = "orcamento",
+            senhaDispositivoTipo = "sem_senha",
+            situacao = "Celular da loja",
+            itens = new object[]
+            {
+                new { descricao = "Bateria", quantidade = 1, valorUnitario = 0, tipoItem = "peca", custoPeca = 400 },
+            },
+        });
+        var osPecaId = criada["id"]!.GetValue<long>();
+
+        var aparelho = ExigirEstoque(await Get("/api/aparelhos-loja"), imei);
+        Assert.Equal(1400m, Num(aparelho["custo"]));
+        Assert.Equal(400m, Num(aparelho["custoPecas"]));
+        Assert.Equal(1800m, Num(aparelho["custoTotal"]));
+        Assert.Contains(
+            aparelho["custosOs"]!.AsArray(),
+            c => c!["osId"]!.GetValue<long>() == osPecaId);
+
+        var sem = await PatchBruto($"/api/ordens-servico/{osLojaId}/situacao", new
+        {
+            situacao = "Concluído",
+            tecnicoNome = "Rômulo",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, sem.StatusCode);
+        Assert.Contains("permanente", await sem.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+        var com = await PatchBruto($"/api/ordens-servico/{osLojaId}/situacao", new
+        {
+            situacao = "Concluído",
+            tecnicoNome = "Rômulo",
+            alertaPermanenteInformado = true,
+            alertaPermanente = "Face ID sem conserto",
+        });
+        Assert.Equal(HttpStatusCode.NoContent, com.StatusCode);
+
+        var depois = ExigirEstoque(await Get("/api/aparelhos-loja"), imei);
+        Assert.Equal("Face ID sem conserto", depois["alertaPermanente"]!.GetValue<string>());
+        Assert.Equal(1800m, Num(depois["custoTotal"]));
     }
 
     [Fact]
@@ -963,6 +1127,19 @@ public class LojaRegrasTests
         return aparelho;
     }
 
+    private async Task GarantirClienteLoja()
+    {
+        var lista = await GetArray("/api/clientes?nome=Mundo%20Smart");
+        if (lista.Any(n => string.Equals(n?["nome"]?.GetValue<string>(), "Mundo Smart", StringComparison.OrdinalIgnoreCase)))
+            return;
+        await Post("/api/clientes", new
+        {
+            nome = "Mundo Smart",
+            telefone = NovoTelefone(),
+            cpfCnpj = NovoCpf(),
+        });
+    }
+
     private async Task<(long Id, string Cpf)> ClienteComDocumento()
     {
         var cpf = NovoCpf();
@@ -1058,6 +1235,9 @@ public class LojaRegrasTests
     private Task<HttpResponseMessage> PostBruto(string url, object body) =>
         _admin.PostAsJsonAsync(url, body);
 
+    private Task<HttpResponseMessage> PatchBruto(string url, object body) =>
+        _admin.PatchAsJsonAsync(url, body);
+
     private async Task<JsonObject> PostSemAuth(string url, object body)
     {
         using var cru = _factory.CreateClient();
@@ -1065,6 +1245,161 @@ public class LojaRegrasTests
         var texto = await res.Content.ReadAsStringAsync();
         Assert.True(res.IsSuccessStatusCode, $"{(int)res.StatusCode} {url}\n{texto}");
         return JsonNode.Parse(texto)!.AsObject();
+    }
+
+    [Fact]
+    public async Task Cadeia_mostra_o_prejuizo_da_troca_e_o_lucro_quando_acaba()
+    {
+        var cliente = await ClienteComDocumento();
+        var imei13 = NovoImei();
+        var id13 = await IdComprado(imei13, 2000, "Apple", "iPhone 13");
+        var imei16 = NovoImei();
+        var aberta = await Post("/api/aparelhos-loja/troca", new
+        {
+            aparelhoSaidaId = id13,
+            precoTabela = 3000,
+            desconto = 0,
+            acrescimo = 0,
+            precoSaida = 3000,
+            valorAvaliado = 3900,
+            sentidoDiferenca = "cliente",
+            diferencaInformada = 900,
+            forma = "dinheiro",
+            clienteId = cliente.Id,
+            entrada = Aparelho(imei16, "Apple", "iPhone 16"),
+        });
+        var cadeia = ExigirCadeia(aberta, imei13);
+        Assert.True(cadeia["aberta"]!.GetValue<bool>());
+        Assert.Equal(-900m, Num(cadeia["resultadoAteAgora"]));
+        Assert.True(cadeia["lucroFinal"] is null);
+        Assert.Contains("iPhone 16", cadeia["pendentes"]!.ToJsonString());
+
+        var id16 = ExigirEstoque(aberta, imei16)["id"]!.GetValue<string>();
+        var imei14 = NovoImei();
+        var meio = await Post("/api/aparelhos-loja/troca", new
+        {
+            aparelhoSaidaId = id16,
+            precoTabela = 4200,
+            desconto = 0,
+            acrescimo = 0,
+            precoSaida = 4200,
+            valorAvaliado = 1400,
+            sentidoDiferenca = "loja",
+            diferencaInformada = 2800,
+            forma = "dinheiro",
+            clienteId = cliente.Id,
+            entrada = Aparelho(imei14, "Apple", "iPhone 14"),
+        });
+        var andamento = ExigirCadeia(meio, imei13);
+        Assert.True(andamento["aberta"]!.GetValue<bool>());
+        Assert.Equal(1900m, Num(andamento["resultadoAteAgora"]));
+        Assert.Equal(cadeia["id"]!.GetValue<string>(), andamento["id"]!.GetValue<string>());
+
+        var id14 = ExigirEstoque(meio, imei14)["id"]!.GetValue<string>();
+        var fim = await Post("/api/aparelhos-loja/venda", Venda(id14, cliente, 2800, "Apple", "iPhone 14"));
+        var fechada = ExigirCadeia(fim, imei13);
+        Assert.False(fechada["aberta"]!.GetValue<bool>());
+        Assert.Equal(5600m, Num(fechada["dinheiroEntrou"]));
+        Assert.Equal(2900m, Num(fechada["dinheiroSaiu"]));
+        Assert.Equal(7300m, Num(fechada["valorEntrada"]));
+        Assert.Equal(10000m, Num(fechada["valorSaida"]));
+        Assert.Equal(2700m, Num(fechada["lucroFinal"]));
+        var troca13 = fechada["passos"]!.AsArray()
+            .Select(p => p!.AsObject())
+            .First(p => p["saiu"]!.AsArray().Any(s => s!["imei"]!.GetValue<string>() == imei13));
+        Assert.Contains(cliente.Cpf, troca13["clienteCpf"]!.GetValue<string>());
+        Assert.Contains("Cliente teste", troca13["clienteNome"]!.GetValue<string>());
+        Assert.False(string.IsNullOrWhiteSpace(troca13["clienteTelefone"]!.GetValue<string>()));
+        Assert.Equal(imei16, troca13["entrou"]![0]!["imei"]!.GetValue<string>());
+        Assert.Contains("iPhone 16", troca13["entrou"]![0]!["nome"]!.GetValue<string>());
+
+        var mes = fim["meses"]!.AsArray()
+            .Select(m => m!.AsObject())
+            .First(m => m["unidades"]!.AsArray().Any(u =>
+                u!["imei"]!.GetValue<string>() == imei14
+                && u["movimento"]!.GetValue<string>() == "venda"));
+        var unidades = mes["unidades"]!.AsArray();
+        Assert.Contains(unidades, u => u!["imei"]!.GetValue<string>() == imei13 && u["movimento"]!.GetValue<string>() == "saiu");
+        Assert.Contains(unidades, u => u!["imei"]!.GetValue<string>() == imei16 && u["movimento"]!.GetValue<string>() == "entrou");
+        Assert.Contains(unidades, u => u!["imei"]!.GetValue<string>() == imei16 && u["movimento"]!.GetValue<string>() == "saiu");
+        Assert.Contains(unidades, u => u!["imei"]!.GetValue<string>() == imei14 && u["movimento"]!.GetValue<string>() == "entrou");
+        Assert.Contains(unidades, u => u!["imei"]!.GetValue<string>() == imei14 && u["movimento"]!.GetValue<string>() == "venda");
+    }
+
+    [Fact]
+    public async Task Cadeia_da_troca_com_varios_aparelhos_so_fecha_na_ultima_venda()
+    {
+        var cliente = await ClienteComDocumento();
+        var imei16 = NovoImei();
+        var id16 = await IdComprado(imei16, 5000, "Apple", "iPhone 16");
+        var imei13a = NovoImei();
+        var imei13b = NovoImei();
+        var imei11 = NovoImei();
+        var troca = await Post("/api/aparelhos-loja/troca", new
+        {
+            aparelhoSaidaId = id16,
+            precoTabela = 5000,
+            desconto = 0,
+            acrescimo = 0,
+            precoSaida = 5000,
+            sentidoDiferenca = "loja",
+            diferencaInformada = 1200,
+            forma = "dinheiro",
+            clienteId = cliente.Id,
+            entradas = new object[]
+            {
+                new { valorAvaliado = 1500, aparelho = Aparelho(imei13a, "Apple", "iPhone 13") },
+                new { valorAvaliado = 1500, aparelho = Aparelho(imei13b, "Apple", "iPhone 13") },
+                new { valorAvaliado = 800, aparelho = Aparelho(imei11, "Apple", "iPhone 11") },
+            },
+        });
+        var cadeia = ExigirCadeia(troca, imei16);
+        Assert.True(cadeia["aberta"]!.GetValue<bool>());
+        Assert.Equal(3, cadeia["pendentes"]!.AsArray().Count);
+        Assert.Equal(1200m, Num(cadeia["resultadoAteAgora"]));
+
+        var vendido = await Post("/api/aparelhos-loja/venda", Venda(
+            ExigirEstoque(troca, imei13a)["id"]!.GetValue<string>(), cliente, 2000, "Apple", "iPhone 13"));
+        vendido = await Post("/api/aparelhos-loja/venda", Venda(
+            ExigirEstoque(vendido, imei11)["id"]!.GetValue<string>(), cliente, 1000, "Apple", "iPhone 11"));
+        var parcial = ExigirCadeia(vendido, imei16);
+        Assert.True(parcial["aberta"]!.GetValue<bool>());
+        Assert.Single(parcial["pendentes"]!.AsArray());
+
+        var imeiFinal = NovoImei();
+        var virou = await Post("/api/aparelhos-loja/troca", new
+        {
+            aparelhoSaidaId = ExigirEstoque(vendido, imei13b)["id"]!.GetValue<string>(),
+            precoTabela = 1800,
+            desconto = 0,
+            acrescimo = 0,
+            precoSaida = 1800,
+            valorAvaliado = 1600,
+            sentidoDiferenca = "cliente",
+            diferencaInformada = 200,
+            forma = "dinheiro",
+            clienteId = cliente.Id,
+            entrada = Aparelho(imeiFinal, "Apple", "iPhone 11"),
+        });
+        var ainda = ExigirCadeia(virou, imei16);
+        Assert.True(ainda["aberta"]!.GetValue<bool>());
+        Assert.Equal(cadeia["id"]!.GetValue<string>(), ainda["id"]!.GetValue<string>());
+
+        var fim = await Post("/api/aparelhos-loja/venda", Venda(
+            ExigirEstoque(virou, imeiFinal)["id"]!.GetValue<string>(), cliente, 900, "Apple", "iPhone 11"));
+        var fechada = ExigirCadeia(fim, imei16);
+        Assert.False(fechada["aberta"]!.GetValue<bool>());
+        Assert.Empty(fechada["pendentes"]!.AsArray());
+        Assert.Equal(Num(fechada["dinheiroEntrou"]) - Num(fechada["dinheiroSaiu"]), Num(fechada["lucroFinal"]));
+    }
+
+    private static JsonObject ExigirCadeia(JsonObject painel, string imei)
+    {
+        var achado = painel["cadeias"]!.AsArray()
+            .Select(c => c!.AsObject())
+            .FirstOrDefault(c => c.ToJsonString().Contains(imei));
+        Assert.True(achado is not null, $"IMEI {imei} não está numa transação.");
+        return achado!;
     }
 
     private static JsonObject ExigirEstoque(JsonObject painel, string imei)

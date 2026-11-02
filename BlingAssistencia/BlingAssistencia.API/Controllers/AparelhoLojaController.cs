@@ -157,6 +157,8 @@ public class AparelhoLojaController : ControllerBase
         foreach (var aparelho in painel.Estoque.Concat(painel.CustosAssistencia))
             ZerarCusto(aparelho);
         painel.CustosAssistencia = [];
+        painel.Cadeias = [];
+        painel.Meses = [];
 
         foreach (var operacao in painel.Operacoes)
         {
@@ -174,6 +176,7 @@ public class AparelhoLojaController : ControllerBase
     private static void ZerarCusto(AparelhoLojaDto aparelho)
     {
         aparelho.Custo = 0;
+        aparelho.CustoTotal = 0;
         aparelho.CustoPecas = 0;
         aparelho.CustoMaoDeObra = 0;
         foreach (var custo in aparelho.CustosOs)
