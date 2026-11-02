@@ -1361,6 +1361,8 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   entrada = this.entradaVazia();
   entradasTroca: FichaEntrada[] = [];
   private seqFicha = 0;
+  private cacheCoresVenda = { chave: '', lista: [] as { cor: string; qtd: number }[] };
+  private cacheCoresTroca = { chave: '', lista: [] as { cor: string; qtd: number }[] };
   compra = { valorPago: null as number | null, fornecedorNome: '' };
   venda = { aparelhoId: '', marca: '', modelo: '', cor: '', preco: null as number | null, desconto: null as number | null, acrescimo: null as number | null, observacoes: '', ...negociacaoVazia() };
   troca = { aparelhoSaidaId: '', marca: '', modelo: '', cor: '', precoSaida: null as number | null, desconto: null as number | null, acrescimo: null as number | null, ...negociacaoVazia(), ...this.diferencaTrocaVazia() };
@@ -1457,7 +1459,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   get coresVenda(): { cor: string; qtd: number }[] {
-    return this.coresDe(a => this.igual(a.marca, this.venda.marca) && this.igual(a.modelo, this.venda.modelo));
+    return this.coresEmCache(this.cacheCoresVenda, this.venda.marca, this.venda.modelo);
   }
 
   get unidadesVenda(): AparelhoLojaItem[] {
@@ -1477,7 +1479,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   get coresTroca(): { cor: string; qtd: number }[] {
-    return this.coresDe(a => this.igual(a.marca, this.troca.marca) && this.igual(a.modelo, this.troca.modelo));
+    return this.coresEmCache(this.cacheCoresTroca, this.troca.marca, this.troca.modelo);
   }
 
   get unidadesTroca(): AparelhoLojaItem[] {
@@ -2763,6 +2765,19 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       if (!mapa.has(chave)) mapa.set(chave, valor);
     }
     return [...mapa.values()].sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  }
+
+  private coresEmCache(
+    cache: { chave: string; lista: { cor: string; qtd: number }[] },
+    marca: string,
+    modelo: string,
+  ): { cor: string; qtd: number }[] {
+    const chave = `${marca}\0${modelo}\0${this.disponiveis.map(a => a.id).join(',')}`;
+    if (cache.chave !== chave) {
+      cache.chave = chave;
+      cache.lista = this.coresDe(a => this.igual(a.marca, marca) && this.igual(a.modelo, modelo));
+    }
+    return cache.lista;
   }
 
   private coresDe(filtro: (item: AparelhoLojaItem) => boolean): { cor: string; qtd: number }[] {
