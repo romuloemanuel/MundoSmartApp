@@ -156,7 +156,7 @@ export class ComissaoOrigemPage implements OnInit, OnDestroy {
   get explicacao(): string {
     return this.smartphones
       ? 'Aparelhos vendidos e trocados neste sistema. O produto é o que saiu. O líquido é o dinheiro que entrou menos o custo desse aparelho. Na troca, o que o cliente deixou não conta como venda.'
-      : 'Vendas de acessório e eletrônico que continuam no Bling. Celular não entra aqui: a venda do aparelho fica em Comissão de smartphones. O líquido é o valor do item menos o custo cadastrado no produto.';
+      : 'Vendas de acessório e eletrônico do Bling, atualizadas sozinhas a cada 30 minutos. O relatório abre com o que já foi lido. Celular fica em Comissão de smartphones. O líquido é o valor do item menos o custo cadastrado no produto.';
   }
 
   ngOnInit(): void {

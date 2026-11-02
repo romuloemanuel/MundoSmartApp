@@ -13,22 +13,27 @@ public interface IComissaoOrigemService
 {
     Task<ComissaoOrigemDto> SmartphonesAsync(string? inicio, string? fim, CancellationToken cancellationToken = default);
     Task<ComissaoOrigemDto> LojaAsync(string? inicio, string? fim, CancellationToken cancellationToken = default);
+    Task AtualizarLojaAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class ComissaoOrigemService : IComissaoOrigemService
 {
     private readonly IAparelhoLojaRepository _loja;
+    private readonly IBlingComissaoLojaRepository _cache;
     private readonly IBlingAuthService _auth;
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<ComissaoOrigemService> _log;
+    private readonly SemaphoreSlim _syncLoja = new(1, 1);
 
     public ComissaoOrigemService(
         IAparelhoLojaRepository loja,
+        IBlingComissaoLojaRepository cache,
         IBlingAuthService auth,
         IHttpClientFactory httpFactory,
         ILogger<ComissaoOrigemService> log)
     {
         _loja = loja;
+        _cache = cache;
         _auth = auth;
         _httpFactory = httpFactory;
         _log = log;
@@ -69,22 +74,66 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
     public async Task<ComissaoOrigemDto> LojaAsync(string? inicio, string? fim, CancellationToken cancellationToken = default)
     {
         var (de, ate) = Periodo(inicio, fim);
+        var deTxt = de.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var ateTxt = ate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var salvas = await _cache.ListarAsync(deTxt, ateTxt, cancellationToken);
+        var ultima = await _cache.UltimaAtualizacaoAsync(cancellationToken);
+        var (janelaDe, _) = JanelaAutomatica();
+        var aviso = ultima is null
+            ? "A comissão da loja está sendo lida do Bling agora. Abra de novo em alguns minutos."
+            : "Pedidos do Bling atualizados em " + FormatarBrasil(ultima.Value) + ". A próxima leitura é automática.";
+        if (de < janelaDe)
+            aviso += " A atualização automática começa em " + janelaDe.ToString("dd/MM/yyyy", CultureInfo.GetCultureInfo("pt-BR")) + ".";
+
+        var lancamentos = salvas.Select(x => new ComissaoLancamentoDto
+        {
+            Data = x.Data,
+            Tipo = "venda",
+            Vendedor = x.Vendedor,
+            Descricao = x.Pedido,
+            Produto = x.Produto,
+            Cliente = x.Cliente,
+            Valor = x.Valor,
+            Custo = x.Custo,
+            Liquido = x.Valor - (x.Custo ?? 0),
+        }).ToList();
+        return Montar(lancamentos, aviso);
+    }
+
+    public async Task AtualizarLojaAsync(CancellationToken cancellationToken = default)
+    {
+        if (!await _syncLoja.WaitAsync(0, cancellationToken))
+            return;
+
+        try
+        {
+            await AtualizarLojaDentroAsync(cancellationToken);
+        }
+        finally
+        {
+            _syncLoja.Release();
+        }
+    }
+
+    private async Task AtualizarLojaDentroAsync(CancellationToken cancellationToken)
+    {
+        var (de, ate) = JanelaAutomatica();
         var token = await TokenAsync();
         if (token is null)
         {
-            return new ComissaoOrigemDto
-            {
-                Aviso = "Bling não está conectado. As vendas da loja aparecem depois da conexão em Configurações → Bling.",
-            };
+            _log.LogWarning("Comissão da loja não atualizada: Bling não está conectado.");
+            return;
         }
 
         var http = _httpFactory.CreateClient("BlingProdutos");
         var dataInicial = de.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var dataFinal = ate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var lancamentos = new List<ComissaoLancamentoDto>();
+        var gravar = new List<BlingComissaoLojaData>();
         var produtos = new Dictionary<long, (string Nome, decimal? Custo)>();
+        var agora = DateTime.UtcNow;
+        var leu = false;
+        var incompleto = false;
         string? aviso = null;
-        var semCusto = 0;
 
         for (var pagina = 1; pagina <= 30; pagina++)
         {
@@ -92,10 +141,13 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
             var json = await GetJsonAsync(http, token, url, cancellationToken);
             if (json is null)
             {
+                incompleto = true;
                 if (pagina == 1)
                     aviso = "Não foi possível ler os pedidos de venda do Bling. Confira a permissão de Pedidos de venda.";
                 break;
             }
+
+            leu = true;
 
             using var doc = JsonDocument.Parse(json);
             if (!TryGet(doc.RootElement, "data", out var data) || data.ValueKind != JsonValueKind.Array)
@@ -118,16 +170,12 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
                 var itens = await ItensDoPedidoAsync(http, token, pedidoId, produtos, cancellationToken);
                 if (itens.Count == 0)
                 {
-                    semCusto++;
-                    lancamentos.Add(LinhaLoja(dia, vendedor, descricao, "", cliente, total, null));
+                    gravar.Add(LinhaCache(pedidoId, 0, dia, vendedor, descricao, "", cliente, total, null, agora));
                     continue;
                 }
 
                 foreach (var linha in itens)
-                {
-                    if (linha.Custo is null) semCusto++;
-                    lancamentos.Add(LinhaLoja(dia, vendedor, descricao, linha.Produto, cliente, linha.Valor, linha.Custo));
-                }
+                    gravar.Add(LinhaCache(pedidoId, linha.ItemId, dia, vendedor, descricao, linha.Produto, cliente, linha.Valor, linha.Custo, agora));
             }
 
             if (lidos < 100) break;
@@ -135,14 +183,54 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
                 aviso = "O recorte passou de 3.000 pedidos. Os mais antigos desta consulta podem ter ficado de fora.";
         }
 
-        if (semCusto > 0)
+        if (!leu || incompleto)
         {
-            var texto = "Alguns itens não têm preço de custo no Bling. O preço de venda não entrou no lugar do custo.";
-            aviso = string.IsNullOrWhiteSpace(aviso) ? texto : aviso + " " + texto;
+            _log.LogWarning("Comissão da loja mantida como estava. {Aviso}", aviso ?? "Leitura incompleta.");
+            return;
         }
 
-        return Montar(lancamentos, aviso);
+        await _cache.SubstituirJanelaAsync(dataInicial, dataFinal, gravar, cancellationToken);
+        _log.LogInformation("Comissão da loja gravada: {N} itens de {De} a {Ate}.", gravar.Count, dataInicial, dataFinal);
     }
+
+    private static (DateTime De, DateTime Ate) JanelaAutomatica()
+    {
+        var hoje = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HorarioBrasil.TimeZone).Date;
+        var inicio = new DateTime(hoje.Year, hoje.Month, 1).AddMonths(-1);
+        return (inicio, hoje);
+    }
+
+    private static string FormatarBrasil(DateTime utc)
+    {
+        var instante = utc.Kind == DateTimeKind.Utc ? utc : DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        var local = TimeZoneInfo.ConvertTimeFromUtc(instante, HorarioBrasil.TimeZone);
+        return local.ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"));
+    }
+
+    private static BlingComissaoLojaData LinhaCache(
+        long pedidoId,
+        long itemId,
+        string dia,
+        string vendedor,
+        string pedido,
+        string produto,
+        string cliente,
+        decimal valor,
+        decimal? custo,
+        DateTime agora) =>
+        new()
+        {
+            BlingPedidoId = pedidoId,
+            BlingItemId = itemId,
+            Data = dia,
+            Pedido = pedido,
+            Vendedor = vendedor,
+            Produto = produto,
+            Cliente = cliente,
+            Valor = valor,
+            Custo = custo,
+            AtualizadoEm = agora,
+        };
 
     private static ComissaoOrigemDto Montar(List<ComissaoLancamentoDto> lancamentos, string? aviso)
     {
@@ -285,35 +373,14 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
         return valor.ValueKind == JsonValueKind.String ? valor.GetString() ?? "" : valor.ToString();
     }
 
-    private static ComissaoLancamentoDto LinhaLoja(
-        string dia,
-        string vendedor,
-        string descricao,
-        string produto,
-        string cliente,
-        decimal valor,
-        decimal? custo) =>
-        new()
-        {
-            Data = dia,
-            Tipo = "venda",
-            Vendedor = vendedor,
-            Descricao = descricao,
-            Produto = produto,
-            Cliente = cliente,
-            Valor = valor,
-            Custo = custo,
-            Liquido = valor - (custo ?? 0),
-        };
-
-    private async Task<List<(string Produto, decimal Valor, decimal? Custo)>> ItensDoPedidoAsync(
+    private async Task<List<(long ItemId, string Produto, decimal Valor, decimal? Custo)>> ItensDoPedidoAsync(
         HttpClient http,
         string accessToken,
         long pedidoId,
         Dictionary<long, (string Nome, decimal? Custo)> produtos,
         CancellationToken cancellationToken)
     {
-        var linhas = new List<(string Produto, decimal Valor, decimal? Custo)>();
+        var linhas = new List<(long ItemId, string Produto, decimal Valor, decimal? Custo)>();
         if (pedidoId <= 0) return linhas;
         var json = await GetJsonAsync(http, accessToken, $"pedidos/vendas/{pedidoId}", cancellationToken);
         if (json is null) return linhas;
@@ -325,6 +392,7 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
 
         foreach (var linha in itens.EnumerateArray())
         {
+            var itemId = LerLong(linha, "id");
             var qtd = LerDecimal(linha, "quantidade");
             if (qtd <= 0) qtd = 1;
             var produtoId = IdDoProduto(linha);
@@ -355,7 +423,7 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
                 nome += " × " + qtd.ToString("0.##", CultureInfo.GetCultureInfo("pt-BR"));
             var valor = ValorDaLinha(linha, qtd);
             decimal? custo = temCusto ? Round(custoUnit * qtd) : null;
-            linhas.Add((nome, valor, custo));
+            linhas.Add((itemId, nome, valor, custo));
         }
 
         return linhas;

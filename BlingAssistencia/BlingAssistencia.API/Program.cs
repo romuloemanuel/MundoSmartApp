@@ -83,12 +83,14 @@ builder.Services.AddSingleton<IBlingVendaCelularRepository, BlingVendaCelularRep
 builder.Services.AddSingleton<IAparelhoLojaRepository, AparelhoLojaRepository>();
 builder.Services.AddSingleton<IAparelhoLojaService, AparelhoLojaService>();
 builder.Services.AddSingleton<IReceitaService, ReceitaService>();
+builder.Services.AddSingleton<IBlingComissaoLojaRepository, BlingComissaoLojaRepository>();
 builder.Services.AddSingleton<IComissaoOrigemService, ComissaoOrigemService>();
 builder.Services.AddSingleton<IClienteAparelhoCompradoService, ClienteAparelhoCompradoService>();
 builder.Services.AddSingleton<IBlingVendaCelularSyncService, BlingVendaCelularSyncService>();
 builder.Services.AddSingleton<IBlingEstoqueCelularImportService, BlingEstoqueCelularImportService>();
 builder.Services.AddHostedService<BlingProdutoSyncHostedService>();
 builder.Services.AddHostedService<BlingVendaCelularSyncHostedService>();
+builder.Services.AddHostedService<BlingComissaoLojaSyncHostedService>();
 builder.Services.AddHostedService<PaymobiSyncHostedService>();
 builder.Services.AddHostedService<PaymobiCobrancaHostedService>();
 builder.Services.AddScoped<IOsIntakeService, OsIntakeService>();
@@ -317,6 +319,7 @@ try
     Console.WriteLine("[MundoSmart API] Consulta de acessórios: só Bling (sem catálogo local).");
     var vendasCelRepo = app.Services.GetRequiredService<IBlingVendaCelularRepository>();
     await vendasCelRepo.EnsureIndexesAsync();
+    await app.Services.GetRequiredService<IBlingComissaoLojaRepository>().EnsureIndexesAsync();
     var aparelhosLojaRepo = app.Services.GetRequiredService<IAparelhoLojaRepository>();
     await aparelhosLojaRepo.EnsureIndexesAsync();
     var vinculoCel = app.Services.GetRequiredService<IClienteAparelhoCompradoService>();
