@@ -34,6 +34,8 @@ public class BlingAuthServiceLocalBypass : IBlingAuthService
 
     public BlingTokenResponse? GetCurrentToken() => _token;
 
+    public Task GarantirTokenAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
     public void SetToken(BlingTokenResponse token) => _token = token;
 }
 

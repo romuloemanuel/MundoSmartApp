@@ -147,6 +147,9 @@ public class BlingEffectiveSettings : IBlingEffectiveSettings
                 : dto.VendasCelularesPalavrasIphone.Trim(),
             VendasCelularesUltimaSyncEm = existente.VendasCelularesUltimaSyncEm,
             VendasCelularesUltimoAviso = existente.VendasCelularesUltimoAviso,
+            BlingAccessToken = existente.BlingAccessToken,
+            BlingRefreshToken = existente.BlingRefreshToken,
+            BlingTokenExpiraEm = existente.BlingTokenExpiraEm,
         };
 
         await _repo.SalvarAsync(doc, cancellationToken);

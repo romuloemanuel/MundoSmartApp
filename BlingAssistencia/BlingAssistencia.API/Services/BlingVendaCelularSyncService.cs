@@ -619,6 +619,7 @@ public sealed class BlingVendaCelularSyncService : IBlingVendaCelularSyncService
 
     private async Task<Models.Bling.BlingTokenResponse?> ObterTokenValidoAsync()
     {
+        await _auth.GarantirTokenAsync();
         var token = _auth.GetCurrentToken();
         if (token is null
             || string.IsNullOrWhiteSpace(token.AccessToken)

@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MundoSmart.BlingAssistencia.API.Models.Bling;
+using MundoSmart.BlingAssistencia.API.Repositories;
 
 namespace MundoSmart.BlingAssistencia.API.Services;
 
@@ -10,15 +11,19 @@ public interface IBlingAuthService
     Task<BlingTokenResponse> ExchangeCodeAsync(string code);
     Task<BlingTokenResponse> RefreshTokenAsync(string refreshToken);
     BlingTokenResponse? GetCurrentToken();
+    Task GarantirTokenAsync(CancellationToken cancellationToken = default);
     void SetToken(BlingTokenResponse token);
 }
 
 public class BlingAuthService : IBlingAuthService
 {
     private readonly IBlingEffectiveSettings _settings;
+    private readonly IBlingConfigRepository _config;
+    private readonly IServiceProvider _servicos;
     private readonly HttpClient _http;
     private readonly ILogger<BlingAuthService> _log;
     private readonly string _tokenPath;
+    private readonly string _tokenUploadsPath;
     private readonly object _gate = new();
     private BlingTokenResponse? _currentToken;
 
@@ -57,17 +62,27 @@ public class BlingAuthService : IBlingAuthService
 
     public BlingAuthService(
         IBlingEffectiveSettings settings,
+        IBlingConfigRepository config,
+        IServiceProvider servicos,
         IHttpClientFactory httpClientFactory,
         IHostEnvironment env,
         ILogger<BlingAuthService> log)
     {
         _settings = settings;
+        _config = config;
+        _servicos = servicos;
         _http = httpClientFactory.CreateClient("BlingAuth");
         _log = log;
         var dir = Path.Combine(env.ContentRootPath, "App_Data");
         Directory.CreateDirectory(dir);
         _tokenPath = Path.Combine(dir, "bling-consulta-token.json");
-        _currentToken = CarregarTokenDisco();
+        var uploads = Path.Combine(env.ContentRootPath, "uploads");
+        Directory.CreateDirectory(uploads);
+        _tokenUploadsPath = Path.Combine(uploads, "bling-consulta-token.json");
+        var carregado = CarregarTokenDisco();
+        _currentToken = carregado;
+        if (carregado is not null && TokenUtil(carregado))
+            _ = SalvarTokenBancoAsync(carregado);
     }
 
     public string GetAuthorizationUrl()
@@ -111,6 +126,7 @@ public class BlingAuthService : IBlingAuthService
 
         var mapped = MapToken(result);
         SetToken(mapped);
+        DispararLeituraDaComissao();
         return mapped;
     }
 
@@ -147,6 +163,31 @@ public class BlingAuthService : IBlingAuthService
         lock (_gate) return _currentToken;
     }
 
+    public async Task GarantirTokenAsync(CancellationToken cancellationToken = default)
+    {
+        if (TokenUtil(GetCurrentToken())) return;
+
+        var doDisco = CarregarTokenDisco();
+        if (TokenUtil(doDisco))
+        {
+            SetToken(doDisco!);
+            return;
+        }
+
+        var doc = await _config.ObterAsync(cancellationToken);
+        if (doc is null || string.IsNullOrWhiteSpace(doc.BlingAccessToken)) return;
+        var doBanco = new BlingTokenResponse
+        {
+            AccessToken = doc.BlingAccessToken,
+            RefreshToken = doc.BlingRefreshToken ?? "",
+            ExpiresAt = doc.BlingTokenExpiraEm ?? DateTime.UtcNow,
+            TokenType = "Bearer",
+        };
+        if (!TokenUtil(doBanco)) return;
+        SetToken(doBanco);
+        _log.LogInformation("Token Bling de consulta carregado do banco (expira {Exp})", doBanco.ExpiresAt);
+    }
+
     public void SetToken(BlingTokenResponse token)
     {
         lock (_gate)
@@ -154,14 +195,57 @@ public class BlingAuthService : IBlingAuthService
             _currentToken = token;
             SalvarTokenDisco(token);
         }
+
+        _ = SalvarTokenBancoAsync(token);
     }
+
+    private void DispararLeituraDaComissao()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var comissao = _servicos.GetRequiredService<IComissaoOrigemService>();
+                await comissao.AtualizarLojaAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Falha ao ler os pedidos do Bling depois de conectar.");
+            }
+        });
+    }
+
+    private async Task SalvarTokenBancoAsync(BlingTokenResponse token)
+    {
+        try
+        {
+            var doc = await _config.ObterAsync() ?? new Models.Mongo.BlingConfigData();
+            doc.BlingAccessToken = token.AccessToken;
+            doc.BlingRefreshToken = token.RefreshToken;
+            doc.BlingTokenExpiraEm = token.ExpiresAt;
+            await _config.SalvarAsync(doc);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Falha ao gravar token Bling no banco");
+        }
+    }
+
+    private static bool TokenUtil(BlingTokenResponse? token) =>
+        token is not null
+        && !string.IsNullOrWhiteSpace(token.AccessToken)
+        && !token.AccessToken.StartsWith("local-bypass", StringComparison.OrdinalIgnoreCase)
+        && (token.ExpiresAt > DateTime.UtcNow.AddMinutes(1) || !string.IsNullOrWhiteSpace(token.RefreshToken));
 
     private BlingTokenResponse? CarregarTokenDisco()
     {
         try
         {
-            if (!File.Exists(_tokenPath)) return null;
-            var json = File.ReadAllText(_tokenPath);
+            var caminho = File.Exists(_tokenUploadsPath) ? _tokenUploadsPath
+                : File.Exists(_tokenPath) ? _tokenPath
+                : null;
+            if (caminho is null) return null;
+            var json = File.ReadAllText(caminho);
             var token = JsonSerializer.Deserialize<BlingTokenResponse>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
@@ -189,6 +273,7 @@ public class BlingAuthService : IBlingAuthService
         {
             var json = JsonSerializer.Serialize(token);
             File.WriteAllText(_tokenPath, json);
+            File.WriteAllText(_tokenUploadsPath, json);
         }
         catch (Exception ex)
         {

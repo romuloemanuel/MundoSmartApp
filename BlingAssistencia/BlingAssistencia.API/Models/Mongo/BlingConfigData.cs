@@ -67,4 +67,13 @@ public class BlingConfigData
 
     [BsonElement("atualizadoEm")]
     public DateTime AtualizadoEm { get; set; } = DateTime.UtcNow;
+
+    [BsonElement("blingAccessToken")]
+    public string? BlingAccessToken { get; set; }
+
+    [BsonElement("blingRefreshToken")]
+    public string? BlingRefreshToken { get; set; }
+
+    [BsonElement("blingTokenExpiraEm")]
+    public DateTime? BlingTokenExpiraEm { get; set; }
 }

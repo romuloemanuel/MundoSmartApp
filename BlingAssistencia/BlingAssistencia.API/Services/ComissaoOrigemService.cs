@@ -560,6 +560,7 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
 
     private async Task<string?> TokenAsync()
     {
+        await _auth.GarantirTokenAsync();
         var token = _auth.GetCurrentToken();
         if (token is null
             || string.IsNullOrWhiteSpace(token.AccessToken)

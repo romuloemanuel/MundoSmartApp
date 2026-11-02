@@ -32,6 +32,8 @@ public sealed class BlingComissaoLojaSyncHostedService : BackgroundService
             try
             {
                 using var scope = _sp.CreateScope();
+                var auth = scope.ServiceProvider.GetRequiredService<IBlingAuthService>();
+                await auth.GarantirTokenAsync(stoppingToken);
                 var svc = scope.ServiceProvider.GetRequiredService<IComissaoOrigemService>();
                 await svc.AtualizarLojaAsync(stoppingToken);
                 _log.LogInformation("Comissão da loja atualizada com os pedidos do Bling. Próxima em 30 min.");
