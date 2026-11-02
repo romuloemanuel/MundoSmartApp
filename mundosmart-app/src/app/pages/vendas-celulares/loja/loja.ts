@@ -900,7 +900,7 @@ interface FichaEntrada {
             <div class="sub">{{ a.configuracao }}<span *ngIf="a.cor"> · {{ a.cor }}</span></div>
             <div class="sub" *ngIf="a.imei">IMEI {{ a.imei }}</div>
             <form class="imei-pendente" *ngIf="!a.imei" (click)="$event.stopPropagation()" (submit)="salvarImei(a)">
-              <input [(ngModel)]="imeiInformado[a.id]" [name]="'imei' + a.id" inputmode="numeric" placeholder="IMEI pendente" />
+              <input [(ngModel)]="imeiInformado[a.id || '']" [name]="'imei' + a.id" inputmode="numeric" placeholder="IMEI pendente" />
               <button type="submit">Salvar</button>
             </form>
             <dl>
