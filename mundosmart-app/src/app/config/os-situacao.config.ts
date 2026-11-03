@@ -1,5 +1,6 @@
 import { LOJA_OS_MOCOCA, normalizarLojaOs } from './os-loja.config';
 import { agoraDatetimeLocalBrasil } from '../utils/horario-brasil.util';
+import { environment } from '../../environments/environment';
 
 export const SITUACAO_OS_ABERTO = 'Aberto';
 export const SITUACAO_OS_EM_TRANSPORTE = 'Em transporte';
@@ -26,14 +27,21 @@ export const SITUACAO_OS_RETIRADO_AGUARDANDO_PAGAMENTO = 'Retirado aguardando pa
 export const SITUACAO_OS_REPARO_AVANCADO_PLACA = 'Reparo avançado em placa';
 export const TECNICO_OS_REPARO_AVANCADO_PLACA = 'Rômulo';
 /**
- * Aparelho da própria loja, sem prioridade de conserto.
- * Fora do filtro padrão da lista e do painel.
+ * Situação legada. Aparelho da loja passa a ser identificado pelo cliente Mundo Smart.
+ * Permanece válida para OS antigas; não entra mais no filtro da lista.
  */
 export const SITUACAO_OS_CELULAR_DA_LOJA = 'Celular da loja';
 export const SITUACAO_OS_CANCELADO = 'Cancelado';
 export const SITUACAO_OS_CONCLUIDO = 'Concluído';
 
-/** Valor do filtro de lista: em andamento, sem Concluído, Cancelado, placa e celular da loja. */
+/** Nome do cadastro da própria loja nas OS de aparelho para venda. */
+export const NOME_CLIENTE_LOJA_MUNDO_SMART = 'Mundo Smart';
+
+/** IDs do cadastro Mundo Smart (local e, quando informado, produção). */
+export const CONTATO_IDS_LOJA_MUNDO_SMART: readonly number[] =
+  environment.contatoIdsLojaMundoSmart ?? [];
+
+/** Valor do filtro de lista: em andamento, sem Concluído, Cancelado e placa. */
 export const SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO = '__exceto_concluido__';
 
 /** Padrão para nova OS (todas as lojas). */
@@ -65,9 +73,11 @@ export const SITUACOES_OS: string[] = [
 ];
 
 export const SITUACOES_OS_FILTRO: { value: string; label: string }[] = [
-  { value: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO, label: 'Todas (exceto Concluído, Cancelado, placa e celular da loja)' },
+  { value: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO, label: 'Todas (exceto Concluído, Cancelado e placa)' },
   { value: '', label: 'Todas' },
-  ...SITUACOES_OS.map(s => ({ value: s, label: s })),
+  ...SITUACOES_OS
+    .filter(s => s !== SITUACAO_OS_CELULAR_DA_LOJA)
+    .map(s => ({ value: s, label: s })),
 ];
 
 const ALIASES: Record<string, string> = {
@@ -151,19 +161,25 @@ export function osSituacaoCelularDaLoja(situacao?: string | null): boolean {
 }
 
 /** Cliente da própria loja (cadastro Mundo Smart), não um cliente externo. */
-export function clienteEhLojaMundoSmart(nome?: string | null): boolean {
+export function clienteEhLojaMundoSmart(nome?: string | null, id?: number | null): boolean {
+  if (id != null && CONTATO_IDS_LOJA_MUNDO_SMART.includes(Number(id))) return true;
   const n = semAcento(nome ?? '').trim();
   return n === 'mundo smart' || n === 'mundosmart' || n.startsWith('mundo smart ');
 }
 
-/** Fora do filtro padrão da lista (Concluído, Cancelado, placa e celular da loja). */
+export function osEhLojaMundoSmart(os?: {
+  contato?: { nome?: string | null; id?: number | null } | null;
+} | null): boolean {
+  return clienteEhLojaMundoSmart(os?.contato?.nome, os?.contato?.id);
+}
+
+/** Fora do filtro padrão da lista (Concluído, Cancelado e placa). */
 export function osSituacaoForaFiltroPadrao(situacao?: string | null): boolean {
   const s = normalizarSituacaoOs(situacao);
   return (
     s === SITUACAO_OS_CONCLUIDO
     || s === SITUACAO_OS_CANCELADO
     || s === SITUACAO_OS_REPARO_AVANCADO_PLACA
-    || s === SITUACAO_OS_CELULAR_DA_LOJA
   );
 }
 
@@ -228,18 +244,17 @@ export function situacoesDisponiveisPorLoja(_lojaOrigem?: string | null): string
 }
 
 /**
- * Celular da loja só entra na lista quando o cliente é a Mundo Smart,
- * ou quando a OS já está nessa situação (para poder sair dela).
+ * "Celular da loja" só permanece na lista quando a OS já está nessa situação,
+ * para poder sair dela. Aparelho da loja é o cliente Mundo Smart, não o status.
  */
 export function situacoesDisponiveisParaCliente(
   lojaOrigem?: string | null,
   clienteNome?: string | null,
   situacaoAtual?: string | null,
+  _clienteId?: number | null,
 ): string[] {
   const todas = situacoesDisponiveisPorLoja(lojaOrigem);
-  if (clienteEhLojaMundoSmart(clienteNome) || osSituacaoCelularDaLoja(situacaoAtual)) {
-    return todas;
-  }
+  if (osSituacaoCelularDaLoja(situacaoAtual)) return todas;
   return todas.filter(s => s !== SITUACAO_OS_CELULAR_DA_LOJA);
 }
 

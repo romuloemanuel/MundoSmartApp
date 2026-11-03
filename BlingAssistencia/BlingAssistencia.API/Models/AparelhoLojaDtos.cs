@@ -145,6 +145,7 @@ public class AparelhoFotoSessaoDto
 public class AparelhoLojaDto
 {
     public string? Id { get; set; }
+    public string Codigo { get; set; } = string.Empty;
     public string Imei { get; set; } = string.Empty;
     public string Marca { get; set; } = string.Empty;
     public string Modelo { get; set; } = string.Empty;
@@ -174,12 +175,14 @@ public class AparelhoLojaDto
     public string PecaTrocada { get; set; } = string.Empty;
     public bool MensagemPecaTrocada { get; set; }
     public List<PecaTrocadaDto> PecasTrocadas { get; set; } = [];
+    public string? VendedorEntradaId { get; set; }
     public string VendedorEntradaNome { get; set; } = string.Empty;
     public string VendedorSaidaNome { get; set; } = string.Empty;
     public string Observacoes { get; set; } = string.Empty;
     public string AlertaPermanente { get; set; } = string.Empty;
     public long? OsEntradaId { get; set; }
     public string OsEntradaNumero { get; set; } = string.Empty;
+    public string JustificativaAssistencia { get; set; } = string.Empty;
     public decimal Desagio { get; set; }
     public bool TestesNaOs { get; set; }
     public List<AparelhoTesteDto> Testes { get; set; } = [];
@@ -200,6 +203,8 @@ public class AparelhoOperacaoDto
     public string FornecedorNome { get; set; } = string.Empty;
     public string EntradaResumo { get; set; } = string.Empty;
     public string SaidaResumo { get; set; } = string.Empty;
+    public List<AparelhoCadeiaItemDto> Entrou { get; set; } = [];
+    public List<AparelhoCadeiaItemDto> Saiu { get; set; } = [];
     public decimal ValorAvaliado { get; set; }
     public decimal PrecoSaida { get; set; }
     public decimal DinheiroRecebido { get; set; }
@@ -209,6 +214,7 @@ public class AparelhoOperacaoDto
     public decimal EntradaLoja { get; set; }
     public decimal RepasseFinanciadora { get; set; }
     public string Observacoes { get; set; } = string.Empty;
+    public string? VendedorId { get; set; }
     public string VendedorNome { get; set; } = string.Empty;
     public bool PodeEstornar { get; set; }
 }
@@ -263,8 +269,25 @@ public class AparelhoListaPrecoDto
     public DateTime AtualizadoEm { get; set; }
 }
 
+public class AparelhoMovimentoLinhaDto
+{
+    public DateTime Data { get; set; }
+    public string Tipo { get; set; } = string.Empty;
+    /// <summary>entrada | saida</summary>
+    public string Sentido { get; set; } = string.Empty;
+    public string Codigo { get; set; } = string.Empty;
+    public string? AparelhoId { get; set; }
+    public string Nome { get; set; } = string.Empty;
+    public string Imei { get; set; } = string.Empty;
+    /// <summary>Valor do aparelho que entrou (positivo) ou saiu (negativo). Não é o caixa da troca.</summary>
+    public decimal Valor { get; set; }
+    public string Pessoa { get; set; } = string.Empty;
+}
+
 public class AparelhoCadeiaItemDto
 {
+    public string? AparelhoId { get; set; }
+    public string Codigo { get; set; } = string.Empty;
     public string Nome { get; set; } = string.Empty;
     public string Imei { get; set; } = string.Empty;
     public string Cor { get; set; } = string.Empty;
@@ -287,6 +310,8 @@ public class AparelhoCadeiaPassoDto
     public string ClienteEndereco { get; set; } = string.Empty;
     public string Forma { get; set; } = string.Empty;
     public string Financiadora { get; set; } = string.Empty;
+    public string? VendedorId { get; set; }
+    public string VendedorNome { get; set; } = string.Empty;
     public List<AparelhoCadeiaItemDto> Entrou { get; set; } = [];
     public List<AparelhoCadeiaItemDto> Saiu { get; set; } = [];
     public decimal DinheiroEntrou { get; set; }
@@ -348,11 +373,19 @@ public class AparelhoLojaPainelDto
     public List<AparelhoLojaDto> Estoque { get; set; } = [];
     public List<AparelhoLojaDto> CustosAssistencia { get; set; } = [];
     public List<AparelhoOperacaoDto> Operacoes { get; set; } = [];
+    public List<AparelhoMovimentoLinhaDto> Movimentos { get; set; } = [];
     public List<AparelhoCadeiaDto> Cadeias { get; set; } = [];
     public List<AparelhoCadeiaMesDto> Meses { get; set; } = [];
     public List<AparelhoListaPrecoDto> Lista { get; set; } = [];
+    public List<AparelhoVendedorCadastroDto> VendedoresCadastrados { get; set; } = [];
     public decimal DescontoVendaMaxPercentual { get; set; }
     public decimal AcrescimoFinanciadoraMaxPercentual { get; set; }
+}
+
+public class AparelhoVendedorCadastroDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Nome { get; set; } = string.Empty;
 }
 
 public class AparelhoImeiRequest

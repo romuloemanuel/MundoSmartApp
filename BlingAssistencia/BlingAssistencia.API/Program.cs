@@ -82,6 +82,7 @@ builder.Services.AddSingleton<IBlingProdutoAcessorioRepository, BlingProdutoAces
 builder.Services.AddSingleton<IBlingProdutoConsultaService, BlingProdutoConsultaService>();
 builder.Services.AddSingleton<IBlingVendaCelularRepository, BlingVendaCelularRepository>();
 builder.Services.AddSingleton<IAparelhoLojaRepository, AparelhoLojaRepository>();
+builder.Services.AddSingleton<IAparelhoCodigoEstoque, AparelhoCodigoEstoque>();
 builder.Services.AddSingleton<IAparelhoLojaService, AparelhoLojaService>();
 builder.Services.AddSingleton<IReceitaService, ReceitaService>();
 builder.Services.AddSingleton<IBlingComissaoLojaRepository, BlingComissaoLojaRepository>();

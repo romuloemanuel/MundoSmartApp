@@ -162,6 +162,43 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'vendas-celulares/compra',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
+        title: 'Compra',
+        data: { tela: 'compra' },
+      },
+      {
+        path: 'vendas-celulares/venda',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
+        title: 'Venda',
+        data: { tela: 'venda' },
+      },
+      {
+        path: 'vendas-celulares/troca',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
+        title: 'Troca',
+        data: { tela: 'troca' },
+      },
+      {
+        path: 'vendas-celulares/estoque',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
+        title: 'Estoque',
+        data: { tela: 'estoque' },
+      },
+      {
+        path: 'vendas-celulares/transacoes',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
+        title: 'Transações',
+        data: { tela: 'transacoes' },
+      },
+      { path: 'vendas-celulares/movimentos', redirectTo: '/vendas-celulares/transacoes', pathMatch: 'full' },
+      { path: 'vendas-celulares/cadeia', redirectTo: '/vendas-celulares/transacoes', pathMatch: 'full' },
+      {
         path: 'vendas-celulares/loja/financeiro',
         canActivate: [adminGuard],
         loadComponent: () =>
@@ -171,9 +208,8 @@ export const routes: Routes = [
       },
       {
         path: 'vendas-celulares/loja',
-        loadComponent: () =>
-          import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
-        title: 'Compra, venda e troca',
+        redirectTo: '/vendas-celulares/estoque',
+        pathMatch: 'full',
       },
       {
         path: 'vendas-celulares/consultar-desconto',

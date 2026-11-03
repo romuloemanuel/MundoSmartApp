@@ -37,7 +37,7 @@ import { AparelhoLojaService } from '../../../services/aparelho-loja.service';
         <div class="grade">
           <ng-container *ngFor="let f of fotos">
             <video *ngIf="ehVideo(f)" [src]="f.url" controls playsinline preload="metadata"></video>
-            <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto enviada" />
+            <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto enviada" (error)="fotoNaoAbriu()" />
           </ng-container>
         </div>
       </ng-container>
@@ -94,20 +94,22 @@ export class AparelhoFotosCelularPage implements OnInit {
     });
   }
 
-  enviar(evento: Event): void {
+  async enviar(evento: Event): Promise<void> {
     const input = evento.target as HTMLInputElement;
-    const arquivo = input.files?.[0];
-    if (!arquivo || !this.token) return;
+    const original = input.files?.[0];
+    if (!original || !this.token) return;
+    this.enviando = true;
+    this.erro = '';
+    this.sucesso = '';
+    const arquivo = await this.preparar(original);
     const video = arquivo.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|3gp)$/i.test(arquivo.name);
     const limite = video ? 40 * 1024 * 1024 : 8 * 1024 * 1024;
     if (arquivo.size > limite) {
+      this.enviando = false;
       this.erro = video ? 'Cada vídeo pode ter no máximo 40 MB.' : 'Cada foto pode ter no máximo 8 MB.';
       input.value = '';
       return;
     }
-    this.enviando = true;
-    this.erro = '';
-    this.sucesso = '';
     this.api.enviarFotoSessao(this.token, arquivo).subscribe({
       next: foto => {
         this.fotos = [...this.fotos, foto];
@@ -132,6 +134,38 @@ export class AparelhoFotosCelularPage implements OnInit {
     if (videos === 1) partes.push('1 vídeo');
     else if (videos > 1) partes.push(`${videos} vídeos`);
     return partes.join(' e ') + ' enviado(s)';
+  }
+
+  fotoNaoAbriu(): void {
+    this.erro = 'A foto foi enviada, mas a imagem não abriu. Gere o QR de novo no balcão.';
+  }
+
+  private async preparar(arquivo: File): Promise<File> {
+    const video = arquivo.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|3gp)$/i.test(arquivo.name);
+    if (video) return arquivo;
+    try {
+      const bitmap = await createImageBitmap(arquivo);
+      const maximo = 2000;
+      const escala = Math.min(1, maximo / Math.max(bitmap.width, bitmap.height));
+      const largura = Math.max(1, Math.round(bitmap.width * escala));
+      const altura = Math.max(1, Math.round(bitmap.height * escala));
+      const tela = document.createElement('canvas');
+      tela.width = largura;
+      tela.height = altura;
+      const ctx = tela.getContext('2d');
+      if (!ctx) {
+        bitmap.close();
+        return arquivo;
+      }
+      ctx.drawImage(bitmap, 0, 0, largura, altura);
+      bitmap.close();
+      const blob = await new Promise<Blob | null>(resolve => tela.toBlob(resolve, 'image/jpeg', 0.82));
+      if (!blob?.size) return arquivo;
+      const base = (arquivo.name || 'foto').replace(/\.[^.]+$/, '') || 'foto';
+      return new File([blob], `${base}.jpg`, { type: 'image/jpeg' });
+    } catch {
+      return arquivo;
+    }
   }
 
   ehVideo(item: { tipo?: string; url?: string }): boolean {

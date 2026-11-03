@@ -388,6 +388,7 @@ public class AppAuthService : IAppAuthService
             new(ClaimTypes.Name, user.Nome),
             new(ClaimTypes.Role, user.Role),
             new("uid", user.Id!),
+            new("nome", user.Nome),
         };
         if (!string.IsNullOrWhiteSpace(user.TecnicoId))
             claims.Add(new Claim("tecnicoId", user.TecnicoId));

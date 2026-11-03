@@ -40,8 +40,21 @@ export interface AparelhoEntradaPayload {
   desagio?: number;
 }
 
+export interface AparelhoMovimentoLinha {
+  data: string;
+  tipo: string;
+  sentido: string;
+  codigo: string;
+  aparelhoId?: string;
+  nome: string;
+  imei: string;
+  valor: number;
+  pessoa: string;
+}
+
 export interface AparelhoLojaItem {
   id?: string;
+  codigo?: string;
   imei: string;
   marca: string;
   modelo: string;
@@ -69,12 +82,14 @@ export interface AparelhoLojaItem {
   pecaTrocada?: string;
   mensagemPecaTrocada?: boolean;
   pecasTrocadas?: { nome: string; apareceMensagem: boolean }[];
+  vendedorEntradaId?: string;
   vendedorEntradaNome?: string;
   vendedorSaidaNome?: string;
   observacoes?: string;
   alertaPermanente?: string;
   osEntradaId?: number;
   osEntradaNumero?: string;
+  justificativaAssistencia?: string;
   desagio?: number;
   testesNaOs?: boolean;
   testes?: { nome: string; ok: boolean; observacao?: string }[];
@@ -94,6 +109,8 @@ export interface AparelhoOperacao {
   fornecedorNome: string;
   entradaResumo: string;
   saidaResumo: string;
+  entrou?: AparelhoCadeiaItem[];
+  saiu?: AparelhoCadeiaItem[];
   valorAvaliado: number;
   precoSaida: number;
   dinheiroRecebido: number;
@@ -103,6 +120,7 @@ export interface AparelhoOperacao {
   entradaLoja?: number;
   repasseFinanciadora?: number;
   observacoes: string;
+  vendedorId?: string;
   vendedorNome?: string;
   podeEstornar: boolean;
 }
@@ -122,6 +140,11 @@ export interface AparelhoLojaResumo {
   porVendedor?: AparelhoVendedorResumo[];
 }
 
+export interface AparelhoVendedorCadastro {
+  id?: string;
+  nome: string;
+}
+
 export interface AparelhoVendedorResumo {
   nome: string;
   entradas: number;
@@ -134,6 +157,8 @@ export interface AparelhoVendedorResumo {
 }
 
 export interface AparelhoCadeiaItem {
+  aparelhoId?: string;
+  codigo?: string;
   nome: string;
   imei: string;
   cor?: string;
@@ -155,6 +180,8 @@ export interface AparelhoCadeiaPasso {
   clienteEndereco?: string;
   forma?: string;
   financiadora?: string;
+  vendedorId?: string;
+  vendedorNome?: string;
   entrou: AparelhoCadeiaItem[];
   saiu: AparelhoCadeiaItem[];
   dinheiroEntrou: number;
@@ -209,8 +236,10 @@ export interface AparelhoLojaPainel {
   estoque: AparelhoLojaItem[];
   custosAssistencia?: AparelhoLojaItem[];
   operacoes: AparelhoOperacao[];
+  movimentos?: AparelhoMovimentoLinha[];
   cadeias?: AparelhoCadeia[];
   meses?: AparelhoCadeiaMes[];
+  vendedoresCadastrados?: AparelhoVendedorCadastro[];
   descontoVendaMaxPercentual?: number;
   acrescimoFinanciadoraMaxPercentual?: number;
 }
@@ -308,6 +337,14 @@ export class AparelhoLojaService {
     return this.http.post<AparelhoLojaPainel>(`${this.apiUrl}/operacoes/${id}/estornar`, {});
   }
 
+  excluirOperacao(id: string): Observable<AparelhoLojaPainel> {
+    return this.http.delete<AparelhoLojaPainel>(`${this.apiUrl}/operacoes/${id}`);
+  }
+
+  excluirAparelho(id: string): Observable<AparelhoLojaPainel> {
+    return this.http.delete<AparelhoLojaPainel>(`${this.apiUrl}/${id}`);
+  }
+
   consultarOs(numero: string): Observable<OsAbertaConsulta> {
     return this.http.get<OsAbertaConsulta>(`${this.apiUrl}/os`, { params: { numero } });
   }
@@ -340,6 +377,26 @@ export class AparelhoLojaService {
       form,
       { context: new HttpContext().set(SKIP_GLOBAL_ERROR_ALERT, true) },
     );
+  }
+
+  editarCadastro(id: string, body: {
+    imei?: string;
+    marca?: string;
+    modelo?: string;
+    marcaId?: string;
+    modeloId?: string;
+    cor?: string;
+    configuracao?: string;
+    condicao?: string;
+    valorVenda?: number;
+    valorMinimoVenda?: number;
+    observacoes?: string;
+    alertaPermanente?: string;
+    saudeBateria?: number | null;
+    bateriaPerfeita?: boolean | null;
+    pecasTrocadas?: { nome: string; apareceMensagem: boolean }[];
+  }): Observable<AparelhoLojaPainel> {
+    return this.http.put<AparelhoLojaPainel>(`${this.apiUrl}/${id}/cadastro`, body);
   }
 
   fotos(id: string, arquivos: File[]): Observable<AparelhoLojaPainel> {

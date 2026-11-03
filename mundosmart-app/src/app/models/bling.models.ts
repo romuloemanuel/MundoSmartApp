@@ -107,6 +107,8 @@ export interface BlingOrdemServico {
   /** Conclusão de celular da loja: grava o alerta permanente no estoque. */
   alertaPermanenteInformado?: boolean;
   alertaPermanente?: string;
+  valorAssistenciaInformado?: boolean;
+  valorAssistencia?: number;
   valorTotal?: number;
   /** Valor à vista (exibido na grid). */
   valorTotalAcordado?: number;

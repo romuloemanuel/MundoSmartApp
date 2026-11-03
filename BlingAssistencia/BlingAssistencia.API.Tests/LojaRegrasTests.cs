@@ -81,6 +81,51 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Codigo_separa_novo_e_usado_e_nao_muda_no_cadastro()
+    {
+        var usado = NovoImei();
+        var painel = await Comprar(usado, 800);
+        var item = ExigirEstoque(painel, usado);
+        var codigo = item["codigo"]!.GetValue<string>();
+        Assert.Matches("^U[1-9][0-9]*$", codigo);
+
+        var novo = Aparelho(NovoImei());
+        novo["condicao"] = "novo";
+        var painelNovo = await Post("/api/aparelhos-loja/compra", new
+        {
+            valorPago = 900,
+            fornecedorNome = "Fornecedor teste",
+            aparelho = novo,
+        });
+        var itemNovo = ExigirEstoque(painelNovo, (string)novo["imei"]!);
+        Assert.Matches("^N[1-9][0-9]*$", itemNovo["codigo"]!.GetValue<string>());
+
+        var outro = NovoImei();
+        var segundo = ExigirEstoque(await Comprar(outro, 700), outro);
+        var n1 = int.Parse(codigo[1..]);
+        var n2 = int.Parse(segundo["codigo"]!.GetValue<string>()[1..]);
+        Assert.True(n2 > n1);
+
+        var editado = await Put($"/api/aparelhos-loja/{segundo["id"]!.GetValue<string>()}/cadastro", new
+        {
+            imei = outro,
+            marca = "Apple",
+            modelo = "iPhone 13",
+            cor = "Preto",
+            configuracao = "128GB",
+            condicao = "novo",
+            valorVenda = 10000m,
+            valorMinimoVenda = 1m,
+            bateriaPerfeita = true,
+        });
+        var depois = ExigirEstoque(editado, outro);
+        Assert.Equal(segundo["codigo"]!.GetValue<string>(), depois["codigo"]!.GetValue<string>());
+        Assert.StartsWith("U", depois["codigo"]!.GetValue<string>());
+        Assert.Equal("novo", depois["condicao"]!.GetValue<string>());
+        Assert.Equal(Num(segundo["custo"]), Num(depois["custo"]));
+    }
+
+    [Fact]
     public async Task Compra_entra_no_estoque_sem_desconto_e_o_caixa_sai_o_valor_pago()
     {
         var imei = NovoImei();
@@ -92,6 +137,23 @@ public class LojaRegrasTests
         var op = ExigirOperacao(painel, imei, "compra");
         Assert.Equal(2500m, Num(op["dinheiroPago"]));
         Assert.Equal(0m, Num(op["dinheiroRecebido"]));
+    }
+
+    [Fact]
+    public async Task Compra_usa_o_nome_do_vendedor_cadastrado()
+    {
+        var imei = NovoImei();
+        var painel = await Comprar(imei, 900);
+        var op = ExigirOperacao(painel, imei, "compra");
+        Assert.Equal("Administrador", op["vendedorNome"]!.GetValue<string>());
+        Assert.False(string.IsNullOrWhiteSpace(op["vendedorId"]?.GetValue<string>()));
+        var item = ExigirEstoque(painel, imei);
+        Assert.Equal("Administrador", item["vendedorEntradaNome"]!.GetValue<string>());
+        var cadastrados = painel["vendedoresCadastrados"]!.AsArray()
+            .Select(v => v!["nome"]!.GetValue<string>())
+            .ToList();
+        Assert.Contains("Administrador", cadastrados);
+        Assert.DoesNotContain("Root", cadastrados);
     }
 
     [Fact]
@@ -239,7 +301,7 @@ public class LojaRegrasTests
         var numeroOs = retido["osEntradaNumero"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(numeroOs));
         var os = await Get($"/api/ordens-servico/{numeroOs}");
-        Assert.Equal("Celular da loja", os["situacao"]?.GetValue<string>());
+        Assert.Equal("Aberto", os["situacao"]?.GetValue<string>());
         Assert.Equal("Mundo Smart", os["contato"]?["nome"]?.GetValue<string>());
         Assert.Equal(imei, os["imei"]?.GetValue<string>());
 
@@ -247,8 +309,37 @@ public class LojaRegrasTests
         Assert.Equal(HttpStatusCode.BadRequest, bloqueio.StatusCode);
         Assert.Contains("assistência", await bloqueio.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
 
-        var liberado = await Post($"/api/aparelhos-loja/{retido["id"]!.GetValue<string>()}/liberar", new { });
-        Assert.Equal("em_estoque", ExigirEstoque(liberado, imei)["status"]!.GetValue<string>());
+        var liberarAberto = await PostBruto($"/api/aparelhos-loja/{retido["id"]!.GetValue<string>()}/liberar", new { });
+        Assert.Equal(HttpStatusCode.BadRequest, liberarAberto.StatusCode);
+        Assert.Contains("OS", await liberarAberto.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+        var osLojaId = retido["osEntradaId"]!.GetValue<long>();
+        var semValor = await PatchBruto($"/api/ordens-servico/{osLojaId}/situacao", new
+        {
+            situacao = "Concluído",
+            tecnicoNome = "Rômulo",
+            alertaPermanenteInformado = true,
+            alertaPermanente = "",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, semValor.StatusCode);
+        Assert.Contains("valor", await semValor.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+        var fechar = await PatchBruto($"/api/ordens-servico/{osLojaId}/situacao", new
+        {
+            situacao = "Concluído",
+            tecnicoNome = "Rômulo",
+            alertaPermanenteInformado = true,
+            alertaPermanente = "",
+            valorAssistenciaInformado = true,
+            valorAssistencia = 80,
+        });
+        Assert.Equal(HttpStatusCode.NoContent, fechar.StatusCode);
+
+        var liberado = ExigirEstoque(await Get("/api/aparelhos-loja"), imei);
+        Assert.Equal("em_estoque", liberado["status"]!.GetValue<string>());
+        Assert.Equal(80m, Num(liberado["custoMaoDeObra"]));
+        Assert.Equal(1500m, Num(liberado["custo"]));
+        Assert.Equal(1500m, Num(liberado["custoTotal"]));
         var vendido = await Post("/api/aparelhos-loja/venda", Venda(retido["id"]!.GetValue<string>(), cliente, 1500));
         Assert.Equal(1500m, Num(ExigirOperacao(vendido, imei, "venda")["dinheiroRecebido"]));
     }
@@ -935,17 +1026,32 @@ public class LojaRegrasTests
         Assert.Equal(HttpStatusCode.BadRequest, sem.StatusCode);
         Assert.Contains("permanente", await sem.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
 
-        var com = await PatchBruto($"/api/ordens-servico/{osLojaId}/situacao", new
+        var semValor = await PatchBruto($"/api/ordens-servico/{osLojaId}/situacao", new
         {
             situacao = "Concluído",
             tecnicoNome = "Rômulo",
             alertaPermanenteInformado = true,
             alertaPermanente = "Face ID sem conserto",
         });
+        Assert.Equal(HttpStatusCode.BadRequest, semValor.StatusCode);
+        Assert.Contains("valor", await semValor.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+        var com = await PatchBruto($"/api/ordens-servico/{osLojaId}/situacao", new
+        {
+            situacao = "Concluído",
+            tecnicoNome = "Rômulo",
+            alertaPermanenteInformado = true,
+            alertaPermanente = "Face ID sem conserto",
+            valorAssistenciaInformado = true,
+            valorAssistencia = 250,
+        });
         Assert.Equal(HttpStatusCode.NoContent, com.StatusCode);
 
         var depois = ExigirEstoque(await Get("/api/aparelhos-loja"), imei);
+        Assert.Equal("em_estoque", depois["status"]!.GetValue<string>());
         Assert.Equal("Face ID sem conserto", depois["alertaPermanente"]!.GetValue<string>());
+        Assert.Equal(1400m, Num(depois["custo"]));
+        Assert.Equal(250m, Num(depois["custoMaoDeObra"]));
         Assert.Equal(1800m, Num(depois["custoTotal"]));
     }
 
@@ -1224,6 +1330,25 @@ public class LojaRegrasTests
         return JsonNode.Parse(texto)!.AsArray();
     }
 
+    private async Task<JsonObject> Delete(string url)
+    {
+        var res = await _admin.DeleteAsync(url);
+        var texto = await res.Content.ReadAsStringAsync();
+        Assert.True(res.IsSuccessStatusCode, $"{(int)res.StatusCode} {url}\n{texto}");
+        return JsonNode.Parse(texto)!.AsObject();
+    }
+
+    private Task<HttpResponseMessage> DeleteBruto(string url) =>
+        _admin.DeleteAsync(url);
+
+    private async Task<JsonObject> Put(string url, object body)
+    {
+        var res = await _admin.PutAsJsonAsync(url, body);
+        var texto = await res.Content.ReadAsStringAsync();
+        Assert.True(res.IsSuccessStatusCode, $"{(int)res.StatusCode} {url}\n{texto}");
+        return JsonNode.Parse(texto)!.AsObject();
+    }
+
     private async Task<JsonObject> Post(string url, object body)
     {
         var res = await PostBruto(url, body);
@@ -1245,6 +1370,60 @@ public class LojaRegrasTests
         var texto = await res.Content.ReadAsStringAsync();
         Assert.True(res.IsSuccessStatusCode, $"{(int)res.StatusCode} {url}\n{texto}");
         return JsonNode.Parse(texto)!.AsObject();
+    }
+
+    [Fact]
+    public async Task Admin_exclui_compra_e_tira_aparelho_do_estoque()
+    {
+        var imei = NovoImei();
+        var id = await IdComprado(imei, 900);
+        var depois = await Delete($"/api/aparelhos-loja/{id}");
+        Assert.DoesNotContain(depois["estoque"]!.AsArray(), n => n!["imei"]!.GetValue<string>() == imei);
+        Assert.DoesNotContain(depois["operacoes"]!.AsArray(), n =>
+            n!["tipo"]!.GetValue<string>() == "compra"
+            && (n["entradaResumo"]?.GetValue<string>() ?? "").Contains(imei));
+    }
+
+    [Fact]
+    public async Task Admin_exclui_venda_e_aparelho_volta_ao_estoque()
+    {
+        var imei = NovoImei();
+        var id = await IdComprado(imei, 900);
+        var cliente = await ClienteComDocumento();
+        await Post("/api/aparelhos-loja/venda", Venda(id, cliente, 1200));
+        var painel = await Get("/api/aparelhos-loja");
+        var venda = ExigirOperacao(painel, imei, "venda");
+        var depois = await Delete($"/api/aparelhos-loja/operacoes/{venda["id"]!.GetValue<string>()}");
+        Assert.DoesNotContain(depois["operacoes"]!.AsArray(), n => n!["id"]!.GetValue<string>() == venda["id"]!.GetValue<string>());
+        Assert.Equal("em_estoque", ExigirEstoque(depois, imei)["status"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Nao_exclui_aparelho_que_ja_saiu()
+    {
+        var imei = NovoImei();
+        var id = await IdComprado(imei, 900);
+        var cliente = await ClienteComDocumento();
+        await Post("/api/aparelhos-loja/venda", Venda(id, cliente, 1200));
+        var res = await DeleteBruto($"/api/aparelhos-loja/{id}");
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        var texto = await res.Content.ReadAsStringAsync();
+        Assert.Contains("saiu", texto, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Nao_exclui_aparelho_que_entrou_por_troca()
+    {
+        var saida = NovoImei();
+        var id = await IdComprado(saida, 2000);
+        var cliente = await ClienteComDocumento();
+        var entrada = NovoImei();
+        var painel = await Trocar(id, cliente, 2500, entrada, 1000);
+        var entrou = ExigirEstoque(painel, entrada);
+        var res = await DeleteBruto($"/api/aparelhos-loja/{entrou["id"]!.GetValue<string>()}");
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        var texto = await res.Content.ReadAsStringAsync();
+        Assert.Contains("troca", texto, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

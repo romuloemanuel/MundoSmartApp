@@ -357,10 +357,17 @@ export class AutocompleteCriavel implements OnInit, OnDestroy, OnChanges {
       gap: 4,
       align: 'start',
     });
-    this.listaStyle = {
+    const next: Record<string, string> = {
       ...style,
       width: `${width}px`,
       right: 'auto',
     };
+    if (
+      this.listaStyle['top'] === next['top']
+      && this.listaStyle['left'] === next['left']
+      && this.listaStyle['bottom'] === next['bottom']
+      && this.listaStyle['width'] === next['width']
+    ) return;
+    this.listaStyle = next;
   }
 }

@@ -18,6 +18,7 @@ import {
   osSituacaoReparoAvancadoPlaca,
   osSituacaoCelularDaLoja,
   clienteEhLojaMundoSmart,
+  osEhLojaMundoSmart,
   osSituacaoForaFiltroPadrao,
   osPrecisaEscolherTecnico,
   resolverTecnicoFixo,
@@ -29,6 +30,7 @@ import {
   SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
   SITUACAO_OS_REPARO_AVANCADO_PLACA,
   SITUACAO_OS_CELULAR_DA_LOJA,
+  NOME_CLIENTE_LOJA_MUNDO_SMART,
   situacaoPadraoPorLoja,
 } from '../../../config/os-situacao.config';
 import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
@@ -230,9 +232,16 @@ import { AtalhoCobrancaPaymobi } from '../../../components/atalho-cobranca-paymo
       color: #312e81;
     }
     .btn-atalho.ativa-loja {
-      background: #f1f5f9;
-      border-color: #475569;
-      color: #0f172a;
+      background: #d8b4fe;
+      border-color: #9333ea;
+      color: #4c1d95;
+    }
+
+    .os-grid tbody tr.os-linha-loja-mundo-smart > td {
+      background: #d8b4fe;
+    }
+    .os-grid tbody tr.os-linha-loja-mundo-smart:hover > td {
+      background: #c4b5fd;
     }
 
     .grid-situacao-select {
@@ -314,9 +323,9 @@ import { AtalhoCobrancaPaymobi } from '../../../components/atalho-cobranca-paymo
     }
     .grid-situacao-badge--celular-loja,
     .grid-situacao-select--celular-loja {
-      background: #f1f5f9;
-      border-color: #cbd5e1;
-      color: #475569;
+      background: #c4b5fd;
+      border-color: #9333ea;
+      color: #4c1d95;
     }
     .grid-situacao-select--prazo-vencido {
       background: #fee2e2;
@@ -622,7 +631,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   }
 
   get filtroLojaAtivo(): boolean {
-    return this.filtros.situacao === SITUACAO_OS_CELULAR_DA_LOJA;
+    return clienteEhLojaMundoSmart(this.filtros.nome);
   }
 
   onSituacaoFiltroChange(): void {
@@ -632,24 +641,44 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     this.buscarComFiltros();
   }
 
-  /** Atalho da lista: só placa, ou só celular da loja. O segundo clique volta ao filtro padrão. */
+  /** Atalho da lista: só placa, ou só aparelhos da Mundo Smart. O segundo clique volta ao filtro padrão. */
   alternarAtalho(qual: 'placa' | 'loja'): void {
-    const destino = qual === 'placa'
-      ? SITUACAO_OS_REPARO_AVANCADO_PLACA
-      : SITUACAO_OS_CELULAR_DA_LOJA;
-    if (this.filtros.situacao === destino) {
+    if (qual === 'loja') {
+      if (this.filtroLojaAtivo) {
+        this.filtros.situacao = SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
+        this.filtros.nome = '';
+        this.restaurarDatasAtalho();
+        this.buscarComFiltros();
+        return;
+      }
+      if (!this.filtroPlacaAtivo) {
+        this.datasAntesAtalho = {
+          inicio: this.filtros.dataCadastroInicio ?? '',
+          fim: this.filtros.dataCadastroFim ?? '',
+        };
+      }
+      this.filtros.situacao = '';
+      this.filtros.nome = NOME_CLIENTE_LOJA_MUNDO_SMART;
+      this.filtros.dataCadastroInicio = '';
+      this.filtros.dataCadastroFim = '';
+      this.buscarComFiltros();
+      return;
+    }
+
+    if (this.filtroPlacaAtivo) {
       this.filtros.situacao = SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
       this.restaurarDatasAtalho();
       this.buscarComFiltros();
       return;
     }
-    if (!this.filtroPlacaAtivo && !this.filtroLojaAtivo) {
+    if (!this.filtroLojaAtivo) {
       this.datasAntesAtalho = {
         inicio: this.filtros.dataCadastroInicio ?? '',
         fim: this.filtros.dataCadastroFim ?? '',
       };
     }
-    this.filtros.situacao = destino;
+    if (this.filtroLojaAtivo) this.filtros.nome = '';
+    this.filtros.situacao = SITUACAO_OS_REPARO_AVANCADO_PLACA;
     this.filtros.dataCadastroInicio = '';
     this.filtros.dataCadastroFim = '';
     this.buscarComFiltros();
@@ -798,7 +827,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     let lista = [...itens];
     let removidosPadrao = 0;
 
-    // Filtro padrão: não exibir Concluído, Cancelado, Reparo avançado em placa nem Celular da loja.
+    // Filtro padrão: não exibir Concluído, Cancelado nem Reparo avançado em placa.
     // Busca por número ignora esse recorte — a OS específica deve aparecer.
     if (this.filtros.situacao === SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO && !this.filtros.numero?.trim()) {
       const antes = lista.length;
@@ -1079,7 +1108,12 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   }
 
   situacoesParaOs(os: BlingOrdemServico): string[] {
-    return situacoesDisponiveisParaCliente(os.lojaOrigem, os.contato?.nome, os.situacao);
+    return situacoesDisponiveisParaCliente(
+      os.lojaOrigem,
+      os.contato?.nome,
+      os.situacao,
+      os.contato?.id,
+    );
   }
 
   situacaoExibida(os: BlingOrdemServico): string {
@@ -1169,16 +1203,23 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       os.dataPrazoPeca = prazo;
     }
 
-    let alertaPermanente: { informado: boolean; texto: string } | undefined;
+    let alertaPermanente: { informado: boolean; texto: string; valorInformado?: boolean; valor?: number } | undefined;
     if (osSituacaoConcluida(situacaoNormalizada) && !osSituacaoConcluida(situacaoAnterior)) {
       const celular = osSituacaoCelularDaLoja(situacaoAnterior)
-        || clienteEhLojaMundoSmart(os.contato?.nome);
+        || osEhLojaMundoSmart(os);
       const conclusao = await this.situacaoDialog.openConcluir({ osLabel, celularDaLoja: celular });
       if (!conclusao) {
         reverterERecarregar();
         return;
       }
-      if (celular) alertaPermanente = { informado: true, texto: conclusao.alertaPermanente };
+      if (celular) {
+        alertaPermanente = {
+          informado: true,
+          texto: conclusao.alertaPermanente,
+          valorInformado: true,
+          valor: conclusao.valorAssistencia,
+        };
+      }
     }
 
     const tecnicoFixo = resolverTecnicoFixo(situacaoNormalizada, this.tecnicosAtivos);
@@ -1295,6 +1336,10 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   dataEntradaLabel(os: BlingOrdemServico): string | undefined {
     return os.dataEntrada || os.data;
+  }
+
+  osEhDaLoja(os: BlingOrdemServico): boolean {
+    return osEhLojaMundoSmart(os);
   }
 
   classeBadgeSituacao(os: BlingOrdemServico): string {

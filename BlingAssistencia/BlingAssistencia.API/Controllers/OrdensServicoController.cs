@@ -381,7 +381,10 @@ public class OrdensServicoController : ControllerBase
                     os.Contato?.Nome ?? existente.ContatoNome,
                     existente.Situacao,
                     os.AlertaPermanenteInformado,
-                    os.AlertaPermanente);
+                    os.AlertaPermanente,
+                    os.ValorAssistenciaInformado,
+                    os.ValorAssistencia,
+                    os.Contato?.Id > 0 ? os.Contato.Id : existente.ContatoId);
             }
             os.LojaOrigem = LojaAcessoHelper.AplicarNaCriacao(User, os.LojaOrigem);
             OsOrdemValidacao.Validar(os);
@@ -432,7 +435,10 @@ public class OrdensServicoController : ControllerBase
                     existente.ContatoNome,
                     existente.Situacao,
                     request.AlertaPermanenteInformado,
-                    request.AlertaPermanente);
+                    request.AlertaPermanente,
+                    request.ValorAssistenciaInformado,
+                    request.ValorAssistencia,
+                    existente.ContatoId);
             }
             await _service.AlterarSituacaoAsync(
                 id,
@@ -637,6 +643,13 @@ public class OrdensServicoController : ControllerBase
             if (string.IsNullOrWhiteSpace(os.Numero))
                 os.Numero = enviado.Numero;
             os.Id ??= enviado.Id;
+            if (string.IsNullOrWhiteSpace(os.Defeito))
+                os.Defeito = enviado.Defeito;
+            if (string.IsNullOrWhiteSpace(os.Situacao))
+                os.Situacao = enviado.Situacao;
+            os.Contato ??= enviado.Contato;
+            os.ValorAssistenciaInformado = enviado.ValorAssistenciaInformado;
+            os.ValorAssistencia = enviado.ValorAssistencia;
             await _aparelhosLoja.RegistrarCustoOsAsync(os);
         }
         catch (Exception ex)
@@ -677,6 +690,8 @@ public record AlterarSituacaoRequest(
     DateTime? DataPrazoPeca = null,
     string? TecnicoNome = null,
     bool AlertaPermanenteInformado = false,
-    string? AlertaPermanente = null);
+    string? AlertaPermanente = null,
+    bool ValorAssistenciaInformado = false,
+    decimal? ValorAssistencia = null);
 public record JustificarAtrasoRequest(string JustificativaAtraso);
 public record AtualizarCategoriaFotoRequest(string? Categoria, string? DescricaoFoco = null);

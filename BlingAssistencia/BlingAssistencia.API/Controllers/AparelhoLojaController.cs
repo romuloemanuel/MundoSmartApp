@@ -85,6 +85,10 @@ public class AparelhoLojaController : ControllerBase
         }
     }
 
+    [HttpPut("{id}/cadastro")]
+    public Task<IActionResult> EditarCadastro(string id, [FromBody] AparelhoEntradaRequest? body, CancellationToken cancellationToken) =>
+        Executar(() => _loja.EditarCadastroAsync(id, body ?? new AparelhoEntradaRequest(), cancellationToken));
+
     [HttpPost("{id}/imei")]
     public Task<IActionResult> InformarImei(string id, [FromBody] AparelhoImeiRequest? body, CancellationToken cancellationToken) =>
         Executar(() => _loja.InformarImeiAsync(id, body?.Imei, cancellationToken));
@@ -133,6 +137,16 @@ public class AparelhoLojaController : ControllerBase
     public Task<IActionResult> Estornar(string id, CancellationToken cancellationToken) =>
         Executar(() => _loja.EstornarAsync(id, cancellationToken));
 
+    [HttpDelete("operacoes/{id}")]
+    [Authorize(Roles = AppRoles.AdminOuRoot)]
+    public Task<IActionResult> ExcluirOperacao(string id, CancellationToken cancellationToken) =>
+        Executar(() => _loja.ExcluirOperacaoAsync(id, cancellationToken));
+
+    [HttpDelete("{id}")]
+    [Authorize(Roles = AppRoles.AdminOuRoot)]
+    public Task<IActionResult> ExcluirAparelho(string id, CancellationToken cancellationToken) =>
+        Executar(() => _loja.ExcluirAparelhoAsync(id, cancellationToken));
+
     private bool EhAdmin() =>
         User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Root);
 
@@ -157,7 +171,8 @@ public class AparelhoLojaController : ControllerBase
         foreach (var aparelho in painel.Estoque.Concat(painel.CustosAssistencia))
             ZerarCusto(aparelho);
         painel.CustosAssistencia = [];
-        painel.Cadeias = [];
+        foreach (var cadeia in painel.Cadeias)
+            ZerarDinheiroDaCadeia(cadeia);
         painel.Meses = [];
 
         foreach (var operacao in painel.Operacoes)
@@ -168,9 +183,32 @@ public class AparelhoLojaController : ControllerBase
             operacao.ValorAvaliado = 0;
             operacao.EntradaLoja = 0;
             operacao.RepasseFinanciadora = 0;
+            foreach (var item in operacao.Entrou.Concat(operacao.Saiu))
+                item.Custo = 0;
         }
 
+        foreach (var movimento in painel.Movimentos)
+            movimento.Valor = 0;
+
         return painel;
+    }
+
+    private static void ZerarDinheiroDaCadeia(AparelhoCadeiaDto cadeia)
+    {
+        cadeia.DinheiroEntrou = 0;
+        cadeia.DinheiroSaiu = 0;
+        cadeia.CustoPecas = 0;
+        cadeia.Investido = 0;
+        cadeia.ResultadoAteAgora = 0;
+        cadeia.LucroFinal = null;
+        foreach (var passo in cadeia.Passos)
+        {
+            passo.DinheiroEntrou = 0;
+            passo.DinheiroSaiu = 0;
+            passo.Resultado = 0;
+            foreach (var item in passo.Entrou.Concat(passo.Saiu))
+                item.Custo = 0;
+        }
     }
 
     private static void ZerarCusto(AparelhoLojaDto aparelho)
@@ -186,11 +224,25 @@ public class AparelhoLojaController : ControllerBase
         }
     }
 
-    private VendedorRef VendedorLogado() => new()
+    private VendedorRef VendedorLogado()
     {
-        Id = User.FindFirstValue("uid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier),
-        Nome = User.FindFirstValue(ClaimTypes.Name),
-    };
+        var login = User.FindFirstValue("unique_name");
+        var nomeCadastro = User.FindFirstValue("nome");
+        var nomes = User.FindAll(ClaimTypes.Name)
+            .Select(c => c.Value)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .ToList();
+        var nome = !string.IsNullOrWhiteSpace(nomeCadastro)
+            ? nomeCadastro.Trim()
+            : nomes.FirstOrDefault(n => !string.Equals(n, login, StringComparison.OrdinalIgnoreCase))
+                ?? nomes.FirstOrDefault()
+                ?? login;
+        return new()
+        {
+            Id = User.FindFirstValue("uid") ?? User.FindFirstValue(ClaimTypes.NameIdentifier),
+            Nome = nome,
+        };
+    }
 
     private async Task<IActionResult> Executar(Func<Task<AparelhoLojaPainelDto>> acao)
     {

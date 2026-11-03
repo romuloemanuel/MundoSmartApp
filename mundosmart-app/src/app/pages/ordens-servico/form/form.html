@@ -142,7 +142,7 @@
             [class.situacao-aguardando-peca]="os.situacao === 'Aguardando Peça'"
             [class.situacao-retirado-pagamento]="os.situacao === situacaoRetiradoPagamento"
             [class.situacao-reparo-placa]="os.situacao === situacaoReparoPlaca"
-            [class.situacao-celular-loja]="os.situacao === situacaoCelularLoja"
+            [class.situacao-celular-loja]="os.situacao === situacaoCelularLoja || clienteOsEhLoja"
             required
           >
             <option *ngFor="let s of situacoesDisponiveis" [ngValue]="s">{{ s }}</option>
@@ -151,7 +151,7 @@
           <span class="campo-hint" *ngIf="os.situacao === situacaoAguardandoCliente">Servi&ccedil;o pronto — aguardando retirada</span>
           <span class="campo-hint" *ngIf="os.situacao === situacaoRetiradoPagamento">Aparelho retirado — pagamento pendente</span>
           <span class="campo-hint" *ngIf="os.situacao === situacaoReparoPlaca">Fora do board padr&atilde;o — t&eacute;cnico R&ocirc;mulo</span>
-          <span class="campo-hint" *ngIf="os.situacao === situacaoCelularLoja">Aparelho da Mundo Smart — fora da fila de conserto</span>
+          <span class="campo-hint" *ngIf="clienteOsEhLoja">Aparelho da Mundo Smart</span>
           <span class="campo-hint" *ngIf="os.situacao === 'Aberto' || os.situacao === 'Em transporte'">
             Tempo de urg&ecirc;ncia inicia em &ldquo;Na assist&ecirc;ncia&rdquo;
           </span>

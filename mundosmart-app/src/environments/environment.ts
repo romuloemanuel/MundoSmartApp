@@ -11,6 +11,8 @@ export const environment = {
   intakeAppUrl: 'http://192.168.0.245:4200',
   /** Autenticação ligada (modo produção local — parear com Auth:Enabled=true na API). */
   authEnabled: true,
+  /** Cadastro local do cliente Mundo Smart (aparelhos da loja). */
+  contatoIdsLojaMundoSmart: [5],
   /** Limites de nível de estoque (sincronizado com appsettings Estoque__* na API) */
   estoque: {
     limiteLaranja: 3,

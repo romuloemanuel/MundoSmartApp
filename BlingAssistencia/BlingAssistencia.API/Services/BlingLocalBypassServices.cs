@@ -305,7 +305,7 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
         situacao = OsSituacaoHelper.AjustarParaLoja(situacao, local.LojaOrigem);
         OsSituacaoHelper.ValidarMotivoCancelamento(situacao, motivoCancelamento);
         OsSituacaoHelper.ValidarSituacaoPorLoja(situacao, local.LojaOrigem);
-        OsSituacaoHelper.ValidarCelularDaLoja(situacao, local.ContatoNome);
+        OsSituacaoHelper.ValidarCelularDaLoja(situacao, local.ContatoNome, local.ContatoId);
 
         var situacaoAnterior = local.Situacao;
 

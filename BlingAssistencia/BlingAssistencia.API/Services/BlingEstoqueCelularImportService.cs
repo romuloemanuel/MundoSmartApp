@@ -22,6 +22,7 @@ public sealed class BlingEstoqueCelularImportService : IBlingEstoqueCelularImpor
     private static readonly TimeSpan Throttle = TimeSpan.FromMilliseconds(250);
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly IAparelhoLojaRepository _loja;
+    private readonly IAparelhoCodigoEstoque _codigos;
     private readonly IAparelhoRepository _catalogo;
     private readonly IBlingAuthService _auth;
     private readonly IHttpClientFactory _httpFactory;
@@ -29,12 +30,14 @@ public sealed class BlingEstoqueCelularImportService : IBlingEstoqueCelularImpor
 
     public BlingEstoqueCelularImportService(
         IAparelhoLojaRepository loja,
+        IAparelhoCodigoEstoque codigos,
         IAparelhoRepository catalogo,
         IBlingAuthService auth,
         IHttpClientFactory httpFactory,
         ILogger<BlingEstoqueCelularImportService> log)
     {
         _loja = loja;
+        _codigos = codigos;
         _catalogo = catalogo;
         _auth = auth;
         _httpFactory = httpFactory;
@@ -177,9 +180,11 @@ public sealed class BlingEstoqueCelularImportService : IBlingEstoqueCelularImpor
                             BlingProdutoId = id,
                             DescontoVigente = false,
                         };
+                        await _codigos.AtribuirNaEntradaAsync([aparelho], cancellationToken);
                         var movimento = new AparelhoMovimentoData
                         {
                             AparelhoId = aparelhoId,
+                            Codigo = aparelho.Codigo,
                             Imei = imei,
                             Marca = marca,
                             Modelo = modelo,

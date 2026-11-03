@@ -20,8 +20,11 @@ public interface IAparelhoLojaService
     Task<AparelhoLojaPainelDto> TrocarAsync(AparelhoTrocaRequest pedido, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> LiberarAsync(string aparelhoId, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> InformarImeiAsync(string aparelhoId, string? imei, CancellationToken cancellationToken = default);
+    Task<AparelhoLojaPainelDto> EditarCadastroAsync(string aparelhoId, AparelhoEntradaRequest pedido, CancellationToken cancellationToken = default);
     Task<OsAbertaConsultaDto> ConsultarOsAbertaAsync(string? numero, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> EstornarAsync(string operacaoId, CancellationToken cancellationToken = default);
+    Task<AparelhoLojaPainelDto> ExcluirOperacaoAsync(string operacaoId, CancellationToken cancellationToken = default);
+    Task<AparelhoLojaPainelDto> ExcluirAparelhoAsync(string aparelhoId, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> SalvarListaAsync(AparelhoListaPrecoRequest pedido, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> RemoverListaAsync(string id, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> AdicionarFotosAsync(
@@ -37,6 +40,9 @@ public interface IAparelhoLojaService
         string? situacaoAnterior,
         bool informado,
         string? alerta,
+        bool valorInformado = false,
+        decimal? valorAssistencia = null,
+        long? contatoId = null,
         CancellationToken cancellationToken = default);
     Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, string? aparelhoId, CancellationToken cancellationToken = default);
     Task<AparelhoFotoSessaoDto?> ObterSessaoFotosAsync(string token, CancellationToken cancellationToken = default);
@@ -56,32 +62,38 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 {
     private static readonly CultureInfo PtBr = new("pt-BR");
     private readonly IAparelhoLojaRepository _repo;
+    private readonly IAparelhoCodigoEstoque _codigos;
     private readonly IOsLocalRepository _os;
     private readonly IClienteLocalRepository _clientes;
     private readonly IClienteAparelhoCompradoService _vinculo;
     private readonly IBlingEffectiveSettings _blingEff;
     private readonly IAparelhoRepository _catalogo;
+    private readonly IUsuarioRepository _usuarios;
     private readonly IServiceScopeFactory _escopos;
     private readonly IHostEnvironment _env;
     private readonly IntakeSettings _intake;
 
     public AparelhoLojaService(
         IAparelhoLojaRepository repo,
+        IAparelhoCodigoEstoque codigos,
         IOsLocalRepository os,
         IClienteLocalRepository clientes,
         IClienteAparelhoCompradoService vinculo,
         IBlingEffectiveSettings blingEff,
         IAparelhoRepository catalogo,
+        IUsuarioRepository usuarios,
         IServiceScopeFactory escopos,
         IHostEnvironment env,
         IOptions<IntakeSettings> intake)
     {
         _repo = repo;
+        _codigos = codigos;
         _os = os;
         _clientes = clientes;
         _vinculo = vinculo;
         _blingEff = blingEff;
         _catalogo = catalogo;
+        _usuarios = usuarios;
         _escopos = escopos;
         _env = env;
         _intake = intake.Value;
@@ -130,6 +142,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         PreencherFicha(aparelho, entrada, pedido.Vendedor, pedido.Observacoes);
         await ReterSeAssistenciaAsync(aparelho, entrada, cancellationToken);
         aparelho.Custo = await ValorDeEstoqueAsync(aparelho, valor, cancellationToken);
+        await _codigos.AtribuirNaEntradaAsync([aparelho], cancellationToken);
 
         var operacao = new AparelhoOperacaoData
         {
@@ -234,6 +247,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         var imeis = new HashSet<string>(StringComparer.Ordinal);
         foreach (var pronta in prontas)
         {
+            if (pronta.Pedido.Imei.Length != 15) continue;
             if (!imeis.Add(pronta.Pedido.Imei))
                 throw new InvalidOperationException("Não repita o mesmo IMEI na troca.");
             if (pronta.Pedido.Imei == saida.Imei)
@@ -318,6 +332,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             entrada.Custo = await ValorDeEstoqueAsync(entrada, pronta.Avaliado, cancellationToken);
             entradas.Add(entrada);
         }
+
+        await _codigos.AtribuirNaEntradaAsync(entradas, cancellationToken);
 
         saida.Status = AparelhoLojaStatus.Vendido;
         saida.OperacaoSaidaId = operacaoId;
@@ -517,6 +533,85 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
         operacao.Status = AparelhoOperacaoStatus.Estornada;
         await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
+        return await MontarPainelAsync(cancellationToken);
+    }
+
+    public async Task<AparelhoLojaPainelDto> ExcluirOperacaoAsync(
+        string operacaoId,
+        CancellationToken cancellationToken = default)
+    {
+        var operacao = await _repo.ObterOperacaoAsync(operacaoId, cancellationToken)
+            ?? throw new InvalidOperationException("Operação não encontrada.");
+
+        var entradasParaApagar = new List<string>();
+        if (operacao.Status == AparelhoOperacaoStatus.Ativa)
+        {
+            var desfazEntrada = operacao.Tipo is AparelhoOperacaoTipo.Compra or AparelhoOperacaoTipo.Troca;
+            var desfazSaida = operacao.Tipo is AparelhoOperacaoTipo.Venda or AparelhoOperacaoTipo.Troca;
+            if (!desfazEntrada && !desfazSaida)
+                throw new InvalidOperationException("Tipo de operação desconhecido.");
+
+            if (desfazEntrada)
+            {
+                var entradas = await ExigirEntradasNoEstoqueAsync(operacao, cancellationToken);
+                foreach (var entrada in entradas)
+                {
+                    if (!string.IsNullOrWhiteSpace(entrada.Id))
+                        entradasParaApagar.Add(entrada.Id);
+                }
+            }
+            if (desfazSaida)
+                await ExigirSaidaVendidaAsync(operacao, cancellationToken);
+
+            if (desfazEntrada)
+                await EstornarEntradaAsync(operacao, cancellationToken);
+            if (desfazSaida)
+                await EstornarSaidaAsync(operacao, cancellationToken);
+        }
+        else if (operacao.Status == AparelhoOperacaoStatus.Estornada)
+        {
+            foreach (var id in IdsDeEntrada(operacao))
+            {
+                var aparelho = await _repo.ObterAparelhoAsync(id, cancellationToken);
+                if (aparelho?.Status == AparelhoLojaStatus.Estornado)
+                    entradasParaApagar.Add(id);
+            }
+        }
+        else
+            throw new InvalidOperationException("Não dá para excluir esta operação.");
+
+        foreach (var id in entradasParaApagar.Distinct())
+        {
+            await _repo.RemoverAparelhoAsync(id, cancellationToken);
+            ApagarPastaFotos(id);
+        }
+
+        if (!string.IsNullOrWhiteSpace(operacao.Id))
+            await _repo.RemoverOperacaoAsync(operacao.Id, cancellationToken);
+
+        return await MontarPainelAsync(cancellationToken);
+    }
+
+    public async Task<AparelhoLojaPainelDto> ExcluirAparelhoAsync(
+        string aparelhoId,
+        CancellationToken cancellationToken = default)
+    {
+        var aparelho = await _repo.ObterAparelhoAsync(aparelhoId, cancellationToken)
+            ?? throw new InvalidOperationException("Aparelho não encontrado.");
+        if (!EstaNaLoja(aparelho.Status))
+            throw new InvalidOperationException("Este aparelho já saiu. Exclua a venda ou a troca nas transações.");
+
+        if (!string.IsNullOrWhiteSpace(aparelho.OperacaoEntradaId))
+        {
+            var operacao = await _repo.ObterOperacaoAsync(aparelho.OperacaoEntradaId, cancellationToken);
+            if (operacao is { Tipo: AparelhoOperacaoTipo.Troca, Status: AparelhoOperacaoStatus.Ativa })
+                throw new InvalidOperationException("Este aparelho entrou numa troca. Exclua a troca nas transações.");
+            if (operacao is { Tipo: AparelhoOperacaoTipo.Compra, Status: AparelhoOperacaoStatus.Ativa })
+                return await ExcluirOperacaoAsync(operacao.Id!, cancellationToken);
+        }
+
+        await _repo.RemoverAparelhoAsync(aparelho.Id!, cancellationToken);
+        ApagarPastaFotos(aparelho.Id!);
         return await MontarPainelAsync(cancellationToken);
     }
 
@@ -772,6 +867,46 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return await MontarPainelAsync(cancellationToken);
     }
 
+    public async Task<AparelhoLojaPainelDto> EditarCadastroAsync(
+        string aparelhoId,
+        AparelhoEntradaRequest pedido,
+        CancellationToken cancellationToken = default)
+    {
+        var aparelho = await _repo.ObterAparelhoAsync(aparelhoId, cancellationToken)
+            ?? throw new InvalidOperationException("Aparelho não encontrado no estoque.");
+        if (!EstaNaLoja(aparelho.Status))
+            throw new InvalidOperationException("Esse aparelho já saiu. O cadastro não pode mais ser alterado.");
+
+        var entrada = await NormalizarEntradaAsync(pedido, cancellationToken, aparelho.Id);
+        if (entrada.Cor.Length == 0)
+            throw new InvalidOperationException("Informe a cor do aparelho.");
+        if (entrada.Configuracao.Length == 0)
+            throw new InvalidOperationException("Selecione a configuração do aparelho.");
+
+        aparelho.Imei = entrada.Imei;
+        aparelho.Marca = entrada.Marca;
+        aparelho.Modelo = entrada.Modelo;
+        aparelho.MarcaId = entrada.MarcaId;
+        aparelho.ModeloId = entrada.ModeloId;
+        aparelho.Cor = entrada.Cor;
+        aparelho.Configuracao = entrada.Configuracao;
+        aparelho.Condicao = entrada.Condicao;
+        aparelho.ValorVenda = entrada.ValorVenda;
+        aparelho.ValorMinimoVenda = entrada.ValorMinimoVenda;
+        aparelho.Observacoes = entrada.Observacoes;
+        aparelho.AlertaPermanente = entrada.AlertaPermanente;
+        aparelho.SaudeBateria = entrada.SaudeBateria is >= 0 and <= 100 ? entrada.SaudeBateria : null;
+        aparelho.BateriaPerfeita = entrada.BateriaPerfeita;
+        aparelho.PecasTrocadas = (entrada.PecasTrocadas ?? [])
+            .Where(p => !string.IsNullOrWhiteSpace(p.Nome))
+            .Select(p => new PecaTrocadaData { Nome = Texto(p.Nome), ApareceMensagem = p.ApareceMensagem })
+            .ToList();
+        aparelho.PecaTrocada = ResumoPecas(entrada.PecasTrocadas ?? []);
+        aparelho.MensagemPecaTrocada = aparelho.PecasTrocadas.Any(p => p.ApareceMensagem);
+        await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+        return await MontarPainelAsync(cancellationToken);
+    }
+
     private static void ExigirImeiParaSair(AparelhoLojaData aparelho)
     {
         if (aparelho.Imei.Length == 15) return;
@@ -780,18 +915,17 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
     private async Task<AparelhoEntradaRequest> NormalizarEntradaAsync(
         AparelhoEntradaRequest? bruto,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? ignorarId = null)
     {
         if (bruto is null)
             throw new InvalidOperationException("Informe os dados do aparelho.");
 
         var imei = Imei(bruto.Imei);
-        if (imei.Length != 15)
-            throw new InvalidOperationException("O IMEI precisa ter 15 dígitos.");
-        if (imei.Distinct().Count() <= 1)
-            throw new InvalidOperationException("IMEI inválido.");
-
-        if (await _repo.ObterEmEstoquePorImeiAsync(imei, cancellationToken) is not null)
+        if (imei.Length != 15 || imei.Distinct().Count() <= 1)
+            imei = "";
+        else if (await _repo.ObterEmEstoquePorImeiAsync(imei, cancellationToken) is { } outro
+                 && !string.Equals(outro.Id, ignorarId, StringComparison.Ordinal))
             throw new InvalidOperationException("Já existe um aparelho com este IMEI no estoque.");
 
         var marca = Texto(bruto.Marca);
@@ -866,9 +1000,11 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
     private async Task<AparelhoLojaPainelDto> MontarPainelAsync(CancellationToken cancellationToken)
     {
+        await _codigos.CompletarFaltantesAsync(cancellationToken);
         var estoque = await _repo.ListarEstoqueAsync(cancellationToken);
+        await CompletarJustificativaAssistenciaAsync(estoque, cancellationToken);
         var comCusto = await _repo.ListarComCustoOsAsync(cancellationToken);
-        var operacoes = await _repo.ListarOperacoesAsync(80, cancellationToken);
+        var operacoes = await _repo.ListarOperacoesAsync(500, cancellationToken);
         var ativas = await _repo.ListarOperacoesAtivasAsync(cancellationToken);
         var ids = operacoes
             .SelectMany(IdsDaOperacao)
@@ -880,7 +1016,11 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             .Where(a => a.Id is not null)
             .ToDictionary(a => a.Id!);
         var lista = await _repo.ListarListaAsync(cancellationToken);
-        var cadeias = await MontarCadeiasAsync(cancellationToken);
+        var cadastro = new MapaVendedores(await _usuarios.ListarAsync(cancellationToken));
+        var cadeias = await MontarCadeiasAsync(cadastro, cancellationToken);
+        var porAparelho = (await _repo.ListarNaoEstornadosAsync(cancellationToken))
+            .Where(a => !string.IsNullOrWhiteSpace(a.Id))
+            .ToDictionary(a => a.Id!);
 
         return new AparelhoLojaPainelDto
         {
@@ -897,11 +1037,12 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 Trocas = ativas.Count(op => op.Tipo == AparelhoOperacaoTipo.Troca),
                 CustoPecas = comCusto.Sum(a => a.CustoPecas),
                 CustoMaoDeObra = comCusto.Sum(a => a.CustoMaoDeObra),
-                PorVendedor = AgruparVendedores(ativas, comCusto),
+                PorVendedor = AgruparVendedores(ativas, comCusto, cadastro),
             },
-            Estoque = estoque.Select(a => ComForma(ParaDto(a), a, ativas)).ToList(),
-            CustosAssistencia = comCusto.Select(ParaDto).ToList(),
-            Operacoes = operacoes.Select(op => ParaOperacaoDto(op, porId)).ToList(),
+            Estoque = estoque.Select(a => ComForma(ParaDto(a, cadastro), a, ativas)).ToList(),
+            CustosAssistencia = comCusto.Select(a => ParaDto(a, cadastro)).ToList(),
+            Operacoes = operacoes.Select(op => ParaOperacaoDto(op, porId, cadastro)).ToList(),
+            Movimentos = MontarMovimentos(ativas, porAparelho),
             Cadeias = cadeias,
             Meses = AgruparMeses(cadeias),
             DescontoVendaMaxPercentual = PercentualLimite(_blingEff.Current.VendasCelularesDescontoVendaMaxPercentual),
@@ -917,10 +1058,13 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 Preco = p.Preco,
                 AtualizadoEm = p.AtualizadoEm,
             }).ToList(),
+            VendedoresCadastrados = cadastro.Cadastrados(),
         };
     }
 
-    private async Task<List<AparelhoCadeiaDto>> MontarCadeiasAsync(CancellationToken cancellationToken)
+    private async Task<List<AparelhoCadeiaDto>> MontarCadeiasAsync(
+        MapaVendedores cadastro,
+        CancellationToken cancellationToken)
     {
         var aparelhos = await _repo.ListarNaoEstornadosAsync(cancellationToken);
         var operacoes = await _repo.ListarOperacoesAtivasAsync(cancellationToken);
@@ -969,7 +1113,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             if (!ops.Any(op => op.Tipo is AparelhoOperacaoTipo.Venda or AparelhoOperacaoTipo.Troca))
                 continue;
 
-            var passos = ops.Select(op => PassoDaCadeia(op, ClienteDaOperacao(op, clientes))).ToList();
+            var passos = ops.Select(op => PassoDaCadeia(op, ClienteDaOperacao(op, clientes), porId, cadastro)).ToList();
             var aberta = membros.Any(m => m.Status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia);
             var dinheiroEntrou = Dinheiro(ops.Sum(op => op.DinheiroRecebido));
             var dinheiroSaiu = Dinheiro(ops.Sum(op => op.DinheiroPago));
@@ -1005,10 +1149,14 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             .ToList();
     }
 
-    private static AparelhoCadeiaPassoDto PassoDaCadeia(AparelhoOperacaoData op, ClienteLocalData? cliente)
+    private static AparelhoCadeiaPassoDto PassoDaCadeia(
+        AparelhoOperacaoData op,
+        ClienteLocalData? cliente,
+        IReadOnlyDictionary<string, AparelhoLojaData> porId,
+        MapaVendedores cadastro)
     {
-        var entrou = MovimentosDaEntrada(op).Select(ItemDaCadeia).ToList();
-        var saiu = op.Saida is null ? [] : new List<AparelhoCadeiaItemDto> { ItemDaCadeia(op.Saida) };
+        var entrou = MovimentosDaEntrada(op).Select(m => ItemDaCadeia(m, porId)).ToList();
+        var saiu = op.Saida is null ? [] : new List<AparelhoCadeiaItemDto> { ItemDaCadeia(op.Saida, porId) };
         var telefone = Texto(cliente?.Celular);
         if (telefone.Length == 0) telefone = Texto(cliente?.Telefone);
         return new AparelhoCadeiaPassoDto
@@ -1024,6 +1172,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             ClienteEndereco = EnderecoDe(cliente?.Endereco),
             Forma = Texto(op.FormaNegociacao),
             Financiadora = Texto(op.FinanciadoraNome),
+            VendedorId = op.VendedorId,
+            VendedorNome = cadastro.Nome(op.VendedorId, op.VendedorNome),
             Entrou = entrou,
             Saiu = saiu,
             DinheiroEntrou = op.DinheiroRecebido,
@@ -1032,16 +1182,66 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         };
     }
 
-    private static AparelhoCadeiaItemDto ItemDaCadeia(AparelhoMovimentoData m) => new()
+    private static AparelhoCadeiaItemDto ItemDaCadeia(
+        AparelhoMovimentoData m,
+        IReadOnlyDictionary<string, AparelhoLojaData> porId)
     {
+        porId.TryGetValue(m.AparelhoId ?? "", out var aparelho);
+        return new()
+        {
+        AparelhoId = m.AparelhoId,
+        Codigo = string.IsNullOrWhiteSpace(m.Codigo) ? aparelho?.Codigo ?? "" : m.Codigo,
         Nome = NomeAparelho(m.Marca, m.Modelo, m.Configuracao),
         Imei = m.Imei,
         Cor = m.Cor,
         Configuracao = m.Configuracao,
         Condicao = m.Condicao,
-        Custo = m.Custo,
-        Valor = m.Preco,
-    };
+            Custo = m.Custo,
+            Valor = m.Preco,
+        };
+    }
+
+    private static List<AparelhoMovimentoLinhaDto> MontarMovimentos(
+        IEnumerable<AparelhoOperacaoData> operacoes,
+        IReadOnlyDictionary<string, AparelhoLojaData> porId)
+    {
+        var linhas = new List<AparelhoMovimentoLinhaDto>();
+        foreach (var op in operacoes.Where(o => o.Status == AparelhoOperacaoStatus.Ativa))
+        {
+            foreach (var entrada in MovimentosDaEntrada(op))
+                linhas.Add(LinhaMovimento(op, entrada, "entrada", porId));
+            if (op.Saida is not null)
+                linhas.Add(LinhaMovimento(op, op.Saida, "saida", porId));
+        }
+
+        return linhas
+            .OrderByDescending(l => l.Data)
+            .ThenBy(l => l.Codigo)
+            .ToList();
+    }
+
+    private static AparelhoMovimentoLinhaDto LinhaMovimento(
+        AparelhoOperacaoData op,
+        AparelhoMovimentoData movimento,
+        string sentido,
+        IReadOnlyDictionary<string, AparelhoLojaData> porId)
+    {
+        porId.TryGetValue(movimento.AparelhoId ?? "", out var aparelho);
+        var codigo = string.IsNullOrWhiteSpace(movimento.Codigo) ? aparelho?.Codigo ?? "" : movimento.Codigo;
+        var valor = Dinheiro(movimento.Preco);
+        return new AparelhoMovimentoLinhaDto
+        {
+            Data = op.Data,
+            Tipo = op.Tipo,
+            Sentido = sentido,
+            Codigo = codigo,
+            AparelhoId = movimento.AparelhoId,
+            Nome = NomeAparelho(movimento.Marca, movimento.Modelo, movimento.Configuracao),
+            Imei = movimento.Imei,
+            Valor = sentido == "saida" ? -valor : valor,
+            Pessoa = Texto(string.IsNullOrWhiteSpace(op.ClienteNome) ? op.FornecedorNome : op.ClienteNome),
+        };
+    }
 
     private async Task<Dictionary<long, ClienteLocalData>> ClientesDasOperacoesAsync(
         IEnumerable<AparelhoOperacaoData> operacoes,
@@ -1248,9 +1448,10 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return dto;
     }
 
-    private static AparelhoLojaDto ParaDto(AparelhoLojaData a) => new()
+    private static AparelhoLojaDto ParaDto(AparelhoLojaData a, MapaVendedores cadastro) => new()
     {
         Id = a.Id,
+        Codigo = a.Codigo ?? "",
         Imei = a.Imei,
         Marca = a.Marca,
         Modelo = a.Modelo,
@@ -1277,12 +1478,14 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             .Where(p => !string.IsNullOrWhiteSpace(p.Nome))
             .Select(p => new PecaTrocadaDto { Nome = p.Nome, ApareceMensagem = p.ApareceMensagem })
             .ToList(),
-        VendedorEntradaNome = a.VendedorEntradaNome,
-        VendedorSaidaNome = a.VendedorSaidaNome,
+        VendedorEntradaId = a.VendedorEntradaId,
+        VendedorEntradaNome = cadastro.Nome(a.VendedorEntradaId, a.VendedorEntradaNome),
+        VendedorSaidaNome = cadastro.Nome(a.VendedorSaidaId, a.VendedorSaidaNome),
         Observacoes = a.Observacoes,
         AlertaPermanente = a.AlertaPermanente,
         OsEntradaId = a.OsEntradaId,
         OsEntradaNumero = a.OsEntradaNumero,
+        JustificativaAssistencia = a.JustificativaAssistencia,
         Desagio = a.Desagio,
         TestesNaOs = a.TestesNaOs,
         Testes = (a.Testes ?? []).Select(t => new AparelhoTesteDto
@@ -1306,7 +1509,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
     private static AparelhoOperacaoDto ParaOperacaoDto(
         AparelhoOperacaoData op,
-        IReadOnlyDictionary<string, AparelhoLojaData> porId) => new()
+        IReadOnlyDictionary<string, AparelhoLojaData> porId,
+        MapaVendedores cadastro) => new()
     {
         Id = op.Id,
         Tipo = op.Tipo,
@@ -1317,6 +1521,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         FornecedorNome = op.FornecedorNome,
         EntradaResumo = ResumoEntradas(op),
         SaidaResumo = ResumoMovimento(op.Saida),
+        Entrou = MovimentosDaEntrada(op).Select(m => ItemDaCadeia(m, porId)).ToList(),
+        Saiu = op.Saida is null ? [] : [ItemDaCadeia(op.Saida, porId)],
         ValorAvaliado = op.ValorAvaliado,
         PrecoSaida = op.PrecoSaida,
         DinheiroRecebido = op.DinheiroRecebido,
@@ -1326,7 +1532,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         EntradaLoja = op.EntradaLoja,
         RepasseFinanciadora = op.RepasseFinanciadora,
         Observacoes = op.Observacoes,
-        VendedorNome = op.VendedorNome,
+        VendedorId = op.VendedorId,
+        VendedorNome = cadastro.Nome(op.VendedorId, op.VendedorNome),
         PodeEstornar = PodeEstornar(op, porId),
     };
 
@@ -1370,6 +1577,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     private static AparelhoMovimentoData Movimento(AparelhoLojaData a, decimal preco, bool comAssistencia = false) => new()
     {
         AparelhoId = a.Id,
+        Codigo = a.Codigo ?? "",
         Imei = a.Imei,
         Marca = a.Marca,
         Modelo = a.Modelo,
@@ -1405,9 +1613,10 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
     private static string ResumoMovimento(AparelhoMovimentoData? m)
     {
-        if (m is null || string.IsNullOrWhiteSpace(m.Imei)) return "";
+        if (m is null) return "";
         var nome = NomeAparelho(m.Marca, m.Modelo, m.Configuracao);
-        return string.IsNullOrWhiteSpace(nome) ? m.Imei : $"{nome} · {m.Imei}";
+        var partes = new[] { m.Codigo, nome, m.Imei }.Where(s => !string.IsNullOrWhiteSpace(s));
+        return string.Join(" · ", partes);
     }
 
     private static string NomeAparelho(string? marca, string? modelo, string? config) =>
@@ -1699,6 +1908,18 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             ?? throw new InvalidOperationException("Aparelho não encontrado.");
         if (aparelho.Status != AparelhoLojaStatus.EmAssistencia)
             throw new InvalidOperationException("Este aparelho já está liberado para venda.");
+        if (aparelho.OsEntradaId is > 0)
+        {
+            var os = await _os.ObterPorBlingIdAsync(aparelho.OsEntradaId.Value);
+            if (os is null || !OsSituacaoHelper.EhConcluida(os.Situacao))
+            {
+                var numero = string.IsNullOrWhiteSpace(aparelho.OsEntradaNumero)
+                    ? aparelho.OsEntradaId.ToString()
+                    : aparelho.OsEntradaNumero;
+                throw new InvalidOperationException(
+                    $"Feche a OS {numero} na assistência antes de liberar para venda. Informe se ficou defeito permanente e o valor da assistência técnica.");
+            }
+        }
         aparelho.Status = AparelhoLojaStatus.EmEstoque;
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
         return await MontarPainelAsync(cancellationToken);
@@ -1732,6 +1953,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
         aparelho.OsEntradaId = os.BlingId;
         aparelho.OsEntradaNumero = string.IsNullOrWhiteSpace(os.OsNumero) ? os.BlingId.ToString() : os.OsNumero;
+        aparelho.JustificativaAssistencia = Limitar(Texto(os.Defeito), 400);
         aparelho.TestesNaOs = true;
         aparelho.Testes = [];
         var nota = $"Testes feitos na OS {aparelho.OsEntradaNumero}. O deságio já está no valor pago pela loja.";
@@ -1772,7 +1994,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 Telefone = cliente.Telefone,
                 Celular = cliente.Celular,
             },
-            Situacao = OsSituacaoHelper.CelularDaLoja,
+            Situacao = OsSituacaoHelper.Aberto,
             LojaOrigem = "MCC",
             TipoServico = "orcamento",
             MarcaId = modelo.MarcaId,
@@ -1802,13 +2024,21 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         aparelho.OsEntradaNumero = string.IsNullOrWhiteSpace(criada.Numero)
             ? criada.Id?.ToString() ?? ""
             : criada.Numero;
+        aparelho.JustificativaAssistencia = Limitar(Texto(defeito), 400);
     }
 
     private async Task<ClienteLocalData> ClienteDaLojaAsync()
     {
-        var lista = await _clientes.ListarAsync("Mundo Smart");
+        foreach (var id in OsSituacaoHelper.ContatoIdsLojaMundoSmart)
+        {
+            var porId = await _clientes.ObterPorBlingIdAsync(id);
+            if (porId is not null && OsSituacaoHelper.ClienteEhLojaMundoSmart(porId.Nome))
+                return porId;
+        }
+
+        var lista = await _clientes.ListarAsync(OsSituacaoHelper.NomeClienteLojaMundoSmart);
         var cliente = lista.FirstOrDefault(c =>
-            c.BlingId > 0 && OsSituacaoHelper.ClienteEhLojaMundoSmart(c.Nome));
+            c.BlingId > 0 && OsSituacaoHelper.ClienteEhLojaMundoSmart(c.Nome, c.BlingId));
         if (cliente is null)
             throw new InvalidOperationException("Não encontrei o cliente Mundo Smart para abrir a ordem de serviço.");
         return cliente;
@@ -1829,8 +2059,39 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return (achado.Id, achado.Nome, achado.MarcaId, achado.MarcaNome ?? aparelho.Marca);
     }
 
+    private async Task CompletarJustificativaAssistenciaAsync(
+        List<AparelhoLojaData> estoque,
+        CancellationToken cancellationToken)
+    {
+        foreach (var aparelho in estoque.Where(a =>
+            a.Status == AparelhoLojaStatus.EmAssistencia
+            && Texto(a.JustificativaAssistencia).Length == 0
+            && a.OsEntradaId is > 0))
+        {
+            var os = await _os.ObterPorBlingIdAsync(aparelho.OsEntradaId.Value);
+            var defeito = Limitar(Texto(os?.Defeito), 400);
+            if (defeito.Length == 0) continue;
+            aparelho.JustificativaAssistencia = defeito;
+            await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+        }
+    }
+
     private static bool EstaNaLoja(string status) =>
         status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia;
+
+    private void ApagarPastaFotos(string? aparelhoId)
+    {
+        if (string.IsNullOrWhiteSpace(aparelhoId)) return;
+        var pasta = Path.Combine(_env.ContentRootPath, "uploads", "aparelhos", aparelhoId);
+        try
+        {
+            if (Directory.Exists(pasta))
+                Directory.Delete(pasta, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+    }
 
     private static void PreencherFicha(
         AparelhoLojaData aparelho,
@@ -1894,10 +2155,11 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
     private static List<AparelhoVendedorResumoDto> AgruparVendedores(
         IReadOnlyList<AparelhoOperacaoData> operacoes,
-        IReadOnlyList<AparelhoLojaData> estoque)
+        IReadOnlyList<AparelhoLojaData> estoque,
+        MapaVendedores cadastro)
     {
-        var nomes = operacoes.Select(o => o.VendedorNome)
-            .Concat(estoque.Select(a => a.VendedorEntradaNome))
+        var nomes = operacoes.Select(o => cadastro.Nome(o.VendedorId, o.VendedorNome))
+            .Concat(estoque.Select(a => cadastro.Nome(a.VendedorEntradaId, a.VendedorEntradaNome)))
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
@@ -1906,10 +2168,10 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return nomes.Select(nome =>
         {
             var doVendedor = operacoes
-                .Where(o => string.Equals(o.VendedorNome, nome, StringComparison.OrdinalIgnoreCase))
+                .Where(o => cadastro.Eh(o.VendedorId, o.VendedorNome, nome))
                 .ToList();
             var aparelhos = estoque
-                .Where(a => string.Equals(a.VendedorEntradaNome, nome, StringComparison.OrdinalIgnoreCase))
+                .Where(a => cadastro.Eh(a.VendedorEntradaId, a.VendedorEntradaNome, nome))
                 .ToList();
             return new AparelhoVendedorResumoDto
             {
@@ -1967,18 +2229,13 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
 
     public async Task RegistrarCustoOsAsync(BlingOrdemServico os, CancellationToken cancellationToken = default)
     {
-        var imei = Imei(os.Imei);
-        if (imei.Length != 15 || os.Id is not > 0) return;
+        if (os.Id is not > 0) return;
 
-        var lista = await _repo.ListarPorImeiAsync(imei, cancellationToken);
-        var aparelho = lista.FirstOrDefault(a => a.Status == AparelhoLojaStatus.EmEstoque)
-            ?? lista.FirstOrDefault(a => a.Status == AparelhoLojaStatus.EmAssistencia)
-            ?? lista.FirstOrDefault();
-        if (aparelho is null) return;
+        var aparelho = await LocalizarAparelhoDaOsAsync(os.Id.Value, os.Imei, cancellationToken);
+        if (aparelho is null || !NaLoja(aparelho.Status)) return;
 
-        var cancelada = (os.Situacao ?? "").Contains("cancel", StringComparison.OrdinalIgnoreCase);
+        var cancelada = OsSituacaoHelper.EhCancelada(os.Situacao);
         decimal pecas = 0;
-        decimal mao = 0;
         if (!cancelada)
         {
             foreach (var item in os.Itens ?? [])
@@ -1992,6 +2249,10 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         }
 
         aparelho.CustosOs ??= [];
+        var anterior = aparelho.CustosOs.FirstOrDefault(c => c.OsId == os.Id);
+        var mao = anterior?.MaoDeObra ?? 0m;
+        if (os.ValorAssistenciaInformado && os.ValorAssistencia is >= 0)
+            mao = os.ValorAssistencia.Value;
         aparelho.CustosOs.RemoveAll(c => c.OsId == os.Id);
         aparelho.CustosOs.Add(new AparelhoOsCustoData
         {
@@ -2003,6 +2264,10 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         });
         aparelho.CustoPecas = aparelho.CustosOs.Sum(c => c.Pecas);
         aparelho.CustoMaoDeObra = aparelho.CustosOs.Sum(c => c.MaoDeObra);
+
+        if (!OsSituacaoHelper.EhFinalizada(os.Situacao))
+            ReterNaAssistencia(aparelho, os, os.Contato?.Nome, os.Contato?.Id);
+
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
     }
 
@@ -2013,30 +2278,91 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         string? situacaoAnterior,
         bool informado,
         string? alerta,
+        bool valorInformado = false,
+        decimal? valorAssistencia = null,
+        long? contatoId = null,
         CancellationToken cancellationToken = default)
     {
-        var digitos = Imei(imei);
-        if (digitos.Length != 15 || osId <= 0) return;
+        if (osId <= 0) return;
 
-        var lista = await _repo.ListarPorImeiAsync(digitos, cancellationToken);
-        var aparelho = lista.FirstOrDefault(a => a.OsEntradaId == osId && NaLoja(a.Status))
-            ?? (CelularDaLoja(situacaoAnterior, contatoNome)
-                ? lista.FirstOrDefault(a => NaLoja(a.Status))
-                : null);
-        if (aparelho is null) return;
+        var aparelho = await LocalizarAparelhoDaOsAsync(osId, imei, cancellationToken);
+        if (aparelho is null || !NaLoja(aparelho.Status)) return;
+
+        var daLoja = aparelho.OsEntradaId == osId || CelularDaLoja(situacaoAnterior, contatoNome, contatoId);
+        if (!daLoja) return;
+
         if (!informado)
             throw new InvalidOperationException(
                 "Ao finalizar o celular da loja, informe se ficou algum problema permanente.");
+        if (!valorInformado || valorAssistencia is null || valorAssistencia < 0)
+            throw new InvalidOperationException(
+                "Ao finalizar o celular da loja, informe o valor da assistência técnica.");
 
         aparelho.AlertaPermanente = Limitar(Texto(alerta), 400);
+        AplicarValorAssistencia(aparelho, osId, aparelho.OsEntradaNumero, valorAssistencia.Value);
+        if (aparelho.Status == AparelhoLojaStatus.EmAssistencia)
+            aparelho.Status = AparelhoLojaStatus.EmEstoque;
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+    }
+
+    private async Task<AparelhoLojaData?> LocalizarAparelhoDaOsAsync(
+        long osId,
+        string? imei,
+        CancellationToken cancellationToken)
+    {
+        var porOs = await _repo.ObterPorOsEntradaAsync(osId, cancellationToken);
+        if (porOs is not null && NaLoja(porOs.Status)) return porOs;
+
+        var digitos = Imei(imei);
+        if (digitos.Length != 15) return porOs;
+
+        var lista = await _repo.ListarPorImeiAsync(digitos, cancellationToken);
+        return lista.FirstOrDefault(a => a.OsEntradaId == osId && NaLoja(a.Status))
+            ?? lista.FirstOrDefault(a => a.Status == AparelhoLojaStatus.EmAssistencia)
+            ?? lista.FirstOrDefault(a => a.Status == AparelhoLojaStatus.EmEstoque)
+            ?? porOs;
+    }
+
+    private static void ReterNaAssistencia(AparelhoLojaData aparelho, BlingOrdemServico os, string? contatoNome, long? contatoId = null)
+    {
+        var daLoja = os.Id is > 0 && aparelho.OsEntradaId == os.Id
+            || OsSituacaoHelper.EhCelularDaLoja(os.Situacao)
+            || OsSituacaoHelper.ClienteEhLojaMundoSmart(contatoNome, contatoId);
+        if (!daLoja) return;
+
+        if (aparelho.OsEntradaId is not > 0 && os.Id is > 0)
+        {
+            aparelho.OsEntradaId = os.Id;
+            aparelho.OsEntradaNumero = Texto(os.Numero).Length > 0 ? Texto(os.Numero) : os.Id.Value.ToString();
+        }
+        var defeito = Limitar(Texto(os.Defeito), 400);
+        if (defeito.Length > 0 && Texto(aparelho.JustificativaAssistencia).Length == 0)
+            aparelho.JustificativaAssistencia = defeito;
+        if (NaLoja(aparelho.Status))
+            aparelho.Status = AparelhoLojaStatus.EmAssistencia;
+    }
+
+    private static void AplicarValorAssistencia(AparelhoLojaData aparelho, long osId, string numero, decimal valor)
+    {
+        aparelho.CustosOs ??= [];
+        var existente = aparelho.CustosOs.FirstOrDefault(c => c.OsId == osId);
+        if (existente is null)
+        {
+            existente = new AparelhoOsCustoData { OsId = osId, Numero = numero, Pecas = 0 };
+            aparelho.CustosOs.Add(existente);
+        }
+        existente.MaoDeObra = Dinheiro(valor);
+        existente.AtualizadoEm = HorarioBrasil.Agora;
+        if (string.IsNullOrWhiteSpace(existente.Numero) && numero.Length > 0)
+            existente.Numero = numero;
+        aparelho.CustoMaoDeObra = aparelho.CustosOs.Sum(c => c.MaoDeObra);
     }
 
     private static bool NaLoja(string? status) =>
         status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia;
 
-    private static bool CelularDaLoja(string? situacao, string? contato) =>
-        OsSituacaoHelper.EhCelularDaLoja(situacao) || OsSituacaoHelper.ClienteEhLojaMundoSmart(contato);
+    private static bool CelularDaLoja(string? situacao, string? contatoNome, long? contatoId = null) =>
+        OsSituacaoHelper.EhCelularDaLoja(situacao) || OsSituacaoHelper.ClienteEhLojaMundoSmart(contatoNome, contatoId);
 
     public async Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, string? aparelhoId, CancellationToken cancellationToken = default)
     {
@@ -2249,6 +2575,53 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         if (EhVideo(ext) || ext is ".jpg" or ".png" or ".webp" or ".heic")
             return ext;
         throw new InvalidOperationException("Envie foto (jpg, png, webp ou heic) ou vídeo com áudio (mp4, mov ou webm).");
+    }
+
+    private sealed class MapaVendedores
+    {
+        private readonly IReadOnlyList<UsuarioData> _usuarios;
+
+        public MapaVendedores(IReadOnlyList<UsuarioData> usuarios) =>
+            _usuarios = usuarios ?? [];
+
+        public string Nome(string? id, string? gravado)
+        {
+            var cadastrado = Encontrar(id, gravado);
+            if (cadastrado is not null) return NomeCadastro(cadastrado);
+            var texto = (gravado ?? "").Trim();
+            return texto.Length == 0 ? "Loja" : texto;
+        }
+
+        public bool Eh(string? id, string? gravado, string nome) =>
+            string.Equals(Nome(id, gravado), nome, StringComparison.OrdinalIgnoreCase);
+
+        public List<AparelhoVendedorCadastroDto> Cadastrados() =>
+            _usuarios
+                .Where(u => u.Ativo && !AppRoles.EhRoot(u.Role) && !string.IsNullOrWhiteSpace(u.Id))
+                .Select(u => new AparelhoVendedorCadastroDto { Id = u.Id!, Nome = NomeCadastro(u) })
+                .OrderBy(u => u.Nome, StringComparer.Create(PtBr, true))
+                .ToList();
+
+        private UsuarioData? Encontrar(string? id, string? gravado)
+        {
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                var porId = _usuarios.FirstOrDefault(u => u.Id == id);
+                if (porId is not null) return porId;
+            }
+
+            var texto = (gravado ?? "").Trim();
+            if (texto.Length == 0) return null;
+            return _usuarios.FirstOrDefault(u =>
+                string.Equals(u.Nome, texto, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(u.Usuario, texto, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string NomeCadastro(UsuarioData usuario)
+        {
+            var nome = (usuario.Nome ?? "").Trim();
+            return nome.Length == 0 ? (usuario.Usuario ?? "").Trim() : nome;
+        }
     }
 
     private static class MidiaLimite

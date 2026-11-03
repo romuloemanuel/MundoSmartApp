@@ -226,7 +226,7 @@ export class OrdensServicoService {
     motivoCancelamento?: string,
     dataPrazoPeca?: string,
     tecnicoNome?: string,
-    alertaPermanente?: { informado: boolean; texto: string },
+    alertaPermanente?: { informado: boolean; texto: string; valorInformado?: boolean; valor?: number },
   ): Observable<void> {
     return this.http.patch<void>(`${this.apiUrl}/${id}/situacao`, {
       situacao,
@@ -235,6 +235,8 @@ export class OrdensServicoService {
       tecnicoNome: tecnicoNome || undefined,
       alertaPermanenteInformado: alertaPermanente?.informado || undefined,
       alertaPermanente: alertaPermanente?.informado ? alertaPermanente.texto : undefined,
+      valorAssistenciaInformado: alertaPermanente?.valorInformado || undefined,
+      valorAssistencia: alertaPermanente?.valorInformado ? alertaPermanente.valor : undefined,
     }).pipe(
       tap(() => {
         this.invalidarListaCache();

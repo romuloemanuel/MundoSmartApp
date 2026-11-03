@@ -10,16 +10,20 @@ public interface IAparelhoLojaRepository
     Task EnsureIndexesAsync(CancellationToken cancellationToken = default);
     Task InserirAparelhoAsync(AparelhoLojaData item, CancellationToken cancellationToken = default);
     Task SalvarAparelhoAsync(AparelhoLojaData item, CancellationToken cancellationToken = default);
+    Task RemoverAparelhoAsync(string id, CancellationToken cancellationToken = default);
     Task<AparelhoLojaData?> ObterAparelhoAsync(string id, CancellationToken cancellationToken = default);
     Task<AparelhoLojaData?> ObterEmEstoquePorImeiAsync(string imei, CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarEstoqueAsync(CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarNaoEstornadosAsync(CancellationToken cancellationToken = default);
+    Task<List<AparelhoLojaData>> ListarTodosAsync(CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarComCustoOsAsync(CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarPorImeiAsync(string imei, CancellationToken cancellationToken = default);
+    Task<AparelhoLojaData?> ObterPorOsEntradaAsync(long osId, CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarPorIdsAsync(IEnumerable<string> ids, CancellationToken cancellationToken = default);
     Task<List<AparelhoLojaData>> ListarDescontoVigenteAsync(long? clienteId, string? cpf, string? imei, CancellationToken cancellationToken = default);
     Task InserirOperacaoAsync(AparelhoOperacaoData item, CancellationToken cancellationToken = default);
     Task SalvarOperacaoAsync(AparelhoOperacaoData item, CancellationToken cancellationToken = default);
+    Task RemoverOperacaoAsync(string id, CancellationToken cancellationToken = default);
     Task<AparelhoOperacaoData?> ObterOperacaoAsync(string id, CancellationToken cancellationToken = default);
     Task<List<AparelhoOperacaoData>> ListarOperacoesAsync(int limite, CancellationToken cancellationToken = default);
     Task<List<AparelhoOperacaoData>> ListarOperacoesAtivasAsync(CancellationToken cancellationToken = default);
@@ -84,6 +88,9 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
     public Task SalvarAparelhoAsync(AparelhoLojaData item, CancellationToken cancellationToken = default) =>
         _aparelhos.ReplaceOneAsync(x => x.Id == item.Id, item, cancellationToken: cancellationToken);
 
+    public Task RemoverAparelhoAsync(string id, CancellationToken cancellationToken = default) =>
+        _aparelhos.DeleteOneAsync(x => x.Id == id, cancellationToken);
+
     public Task<AparelhoLojaData?> ObterAparelhoAsync(string id, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(id) || !ObjectId.TryParse(id, out _))
@@ -103,6 +110,9 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
     public Task<List<AparelhoLojaData>> ListarNaoEstornadosAsync(CancellationToken cancellationToken = default) =>
         _aparelhos.Find(x => x.Status != AparelhoLojaStatus.Estornado).ToListAsync(cancellationToken);
 
+    public Task<List<AparelhoLojaData>> ListarTodosAsync(CancellationToken cancellationToken = default) =>
+        _aparelhos.Find(FilterDefinition<AparelhoLojaData>.Empty).ToListAsync(cancellationToken);
+
     public Task<List<AparelhoLojaData>> ListarComCustoOsAsync(CancellationToken cancellationToken = default)
     {
         var filtro = Builders<AparelhoLojaData>.Filter.And(
@@ -118,6 +128,11 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
         _aparelhos.Find(x => x.Imei == imei && x.Status != AparelhoLojaStatus.Estornado)
             .SortByDescending(x => x.DataEntrada)
             .ToListAsync(cancellationToken);
+
+    public async Task<AparelhoLojaData?> ObterPorOsEntradaAsync(long osId, CancellationToken cancellationToken = default) =>
+        await _aparelhos.Find(x => x.OsEntradaId == osId && x.Status != AparelhoLojaStatus.Estornado)
+            .SortByDescending(x => x.DataEntrada)
+            .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<List<AparelhoLojaData>> ListarPorIdsAsync(
         IEnumerable<string> ids,
@@ -163,6 +178,9 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
     public Task SalvarOperacaoAsync(AparelhoOperacaoData item, CancellationToken cancellationToken = default) =>
         _operacoes.ReplaceOneAsync(x => x.Id == item.Id, item, cancellationToken: cancellationToken);
 
+    public Task RemoverOperacaoAsync(string id, CancellationToken cancellationToken = default) =>
+        _operacoes.DeleteOneAsync(x => x.Id == id, cancellationToken);
+
     public Task<AparelhoOperacaoData?> ObterOperacaoAsync(string id, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(id) || !ObjectId.TryParse(id, out _))
@@ -172,7 +190,7 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
 
     public Task<List<AparelhoOperacaoData>> ListarOperacoesAsync(int limite, CancellationToken cancellationToken = default)
     {
-        var lim = Math.Clamp(limite, 1, 200);
+        var lim = Math.Clamp(limite, 1, 2000);
         return _operacoes.Find(FilterDefinition<AparelhoOperacaoData>.Empty)
             .SortByDescending(x => x.Data)
             .Limit(lim)

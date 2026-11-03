@@ -57,6 +57,7 @@ import {
   SITUACAO_OS_CELULAR_DA_LOJA,
   osSituacaoCelularDaLoja,
   clienteEhLojaMundoSmart,
+  osEhLojaMundoSmart,
 } from '../../../config/os-situacao.config';
 import {
   LOJA_OS_PADRAO,
@@ -278,9 +279,9 @@ type ContatoAlternativoOpcao = {
       font-weight: 600;
     }
     select.situacao-celular-loja {
-      background: #f1f5f9;
-      border-color: #cbd5e1;
-      color: #475569;
+      background: #d8b4fe;
+      border-color: #9333ea;
+      color: #4c1d95;
       font-weight: 600;
     }
     .os-itens-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
@@ -516,6 +517,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   private conclusaoConfirmada = false;
   private alertaPermanenteColetado = false;
   private alertaPermanenteConclusao = '';
+  private valorAssistenciaColetado = false;
+  private valorAssistenciaConclusao = 0;
   /** Evita que combineLate overwrite um prefill já aplicado. */
   private prefillOrcamentoAplicadoId?: number;
 
@@ -569,7 +572,12 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       this.os.lojaOrigem,
       this.os.contato?.nome,
       this.os.situacao,
+      this.os.contato?.id,
     );
+  }
+
+  get clienteOsEhLoja(): boolean {
+    return osEhLojaMundoSmart(this.os);
   }
 
   get situacaoPadraoAtual(): string {
@@ -896,6 +904,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     this.conclusaoConfirmada = false;
     this.alertaPermanenteColetado = false;
     this.alertaPermanenteConclusao = '';
+    this.valorAssistenciaColetado = false;
+    this.valorAssistenciaConclusao = 0;
     this.limparContatosAlternativos();
   }
 
@@ -1280,6 +1290,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     this.conclusaoConfirmada = osSituacaoConcluida(this.situacaoAoCarregar);
     this.alertaPermanenteColetado = false;
     this.alertaPermanenteConclusao = '';
+    this.valorAssistenciaColetado = false;
+    this.valorAssistenciaConclusao = 0;
     if (!this.podeEditarOsAtual()) {
       this.somenteLeitura = true;
       this.editando = false;
@@ -1321,7 +1333,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
 
   onClienteSelecionado(cliente: BlingContato | null): void {
     this.os.contato = this.montarContatoRefOs(cliente);
-    if (osSituacaoCelularDaLoja(this.os.situacao) && !clienteEhLojaMundoSmart(cliente?.nome)) {
+    if (osSituacaoCelularDaLoja(this.os.situacao) && !clienteEhLojaMundoSmart(cliente?.nome, cliente?.id)) {
       this.os.situacao = situacaoPadraoPorLoja(this.os.lojaOrigem);
     }
 
@@ -2000,7 +2012,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
   private exigeAlertaPermanente(situacaoAnterior?: string | null): boolean {
     return osSituacaoCelularDaLoja(situacaoAnterior)
       || osSituacaoCelularDaLoja(this.os.situacao)
-      || clienteEhLojaMundoSmart(this.os.contato?.nome);
+      || osEhLojaMundoSmart(this.os);
   }
 
   private prepararOsParaSalvar(): BlingOrdemServico {
@@ -2385,10 +2397,14 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       this.conclusaoConfirmada = true;
       this.alertaPermanenteColetado = celular;
       this.alertaPermanenteConclusao = conclusao.alertaPermanente;
+      this.valorAssistenciaColetado = celular;
+      this.valorAssistenciaConclusao = conclusao.valorAssistencia;
     } else if (!osSituacaoConcluida(situacaoNormalizada)) {
       this.conclusaoConfirmada = false;
       this.alertaPermanenteColetado = false;
       this.alertaPermanenteConclusao = '';
+      this.valorAssistenciaColetado = false;
+      this.valorAssistenciaConclusao = 0;
     }
 
     const tecnicoFixo = resolverTecnicoFixo(situacaoNormalizada, this.tecnicosAtivos);
@@ -2584,6 +2600,8 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       this.conclusaoConfirmada = true;
       this.alertaPermanenteColetado = celular;
       this.alertaPermanenteConclusao = conclusao.alertaPermanente;
+      this.valorAssistenciaColetado = celular;
+      this.valorAssistenciaConclusao = conclusao.valorAssistencia;
       const agora = this.agoraDatetimeLocal();
       if (!this.dataValida(this.os.dataSaida)) this.os.dataSaida = agora;
       if (!this.dataValida(this.os.dataConclusao)) this.os.dataConclusao = agora;
@@ -2599,6 +2617,10 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     if (this.alertaPermanenteColetado) {
       payload.alertaPermanenteInformado = true;
       payload.alertaPermanente = this.alertaPermanenteConclusao;
+    }
+    if (this.valorAssistenciaColetado) {
+      payload.valorAssistenciaInformado = true;
+      payload.valorAssistencia = this.valorAssistenciaConclusao;
     }
     const op = this.editando
       ? this.service.atualizar(this.os.id!, payload)

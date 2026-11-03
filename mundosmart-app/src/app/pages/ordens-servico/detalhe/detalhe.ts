@@ -11,7 +11,7 @@ import { labelOrigemPeca } from '../../../config/os-peca-origem.config';
 import {
   osSituacaoConcluida,
   osSituacaoCelularDaLoja,
-  clienteEhLojaMundoSmart,
+  osEhLojaMundoSmart,
   osSituacaoFinalizada,
   osSituacaoCancelada,
   osSituacaoAguardandoPeca,
@@ -43,6 +43,7 @@ export class OrdensServicoDetalhe implements OnInit {
       this.os?.lojaOrigem,
       this.os?.contato?.nome,
       this.os?.situacao,
+      this.os?.contato?.id,
     );
   }
   readonly labelTipoServico = labelTipoServicoOs;
@@ -94,13 +95,20 @@ export class OrdensServicoDetalhe implements OnInit {
     const situacaoAjustada = ajustarSituacaoParaLoja(situacao, this.os.lojaOrigem);
     const osLabel = this.os.numero ? `OS #${this.os.numero}` : `OS #${this.os.id}`;
 
-    let alertaPermanente: { informado: boolean; texto: string } | undefined;
+    let alertaPermanente: { informado: boolean; texto: string; valorInformado?: boolean; valor?: number } | undefined;
     if (osSituacaoConcluida(situacaoAjustada) && !osSituacaoConcluida(this.os.situacao)) {
       const celular = osSituacaoCelularDaLoja(this.os.situacao)
-        || clienteEhLojaMundoSmart(this.os.contato?.nome);
+        || osEhLojaMundoSmart(this.os);
       const conclusao = await this.situacaoDialog.openConcluir({ osLabel, celularDaLoja: celular });
       if (!conclusao) return;
-      if (celular) alertaPermanente = { informado: true, texto: conclusao.alertaPermanente };
+      if (celular) {
+        alertaPermanente = {
+          informado: true,
+          texto: conclusao.alertaPermanente,
+          valorInformado: true,
+          valor: conclusao.valorAssistencia,
+        };
+      }
     }
 
     let motivoCancelamento: string | undefined;

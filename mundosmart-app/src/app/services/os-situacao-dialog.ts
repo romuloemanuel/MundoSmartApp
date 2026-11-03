@@ -18,7 +18,7 @@ export interface OsSituacaoDialogRequest {
 
 export type OsSituacaoDialogResult =
   | { kind: 'cancelar'; motivo: string }
-  | { kind: 'concluir'; alertaPermanente?: string }
+  | { kind: 'concluir'; alertaPermanente?: string; valorAssistencia?: number }
   | { kind: 'prazo'; dataPrazoPeca: string }
   | null;
 
@@ -41,13 +41,15 @@ export class OsSituacaoDialogService {
     }).then(r => (r?.kind === 'cancelar' ? r.motivo : null));
   }
 
-  openConcluir(opts: { osLabel?: string | null; celularDaLoja?: boolean } = {}): Promise<{ alertaPermanente: string } | null> {
+  openConcluir(opts: { osLabel?: string | null; celularDaLoja?: boolean } = {}): Promise<{ alertaPermanente: string; valorAssistencia: number } | null> {
     return this.open({
       kind: 'concluir',
       osLabel: opts.osLabel,
       situacao: 'Concluído',
       celularDaLoja: opts.celularDaLoja,
-    }).then(r => (r?.kind === 'concluir' ? { alertaPermanente: r.alertaPermanente ?? '' } : null));
+    }).then(r => (r?.kind === 'concluir'
+      ? { alertaPermanente: r.alertaPermanente ?? '', valorAssistencia: r.valorAssistencia ?? 0 }
+      : null));
   }
 
   openPrazo(opts: {

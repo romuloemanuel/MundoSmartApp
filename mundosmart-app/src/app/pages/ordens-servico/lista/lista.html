@@ -75,7 +75,7 @@
       class="btn-atalho"
       [class.ativa-loja]="filtroLojaAtivo"
       (click)="alternarAtalho('loja')"
-      title="Celular da loja"
+      title="Aparelhos da Mundo Smart"
     >Loja</button>
     <button (click)="filtrosAbertos = !filtrosAbertos" class="btn-filtros-avancados">
       Filtros avan&ccedil;ados <span *ngIf="filtrosAtivos > 0" class="badge-count">{{ filtrosAtivos }}</span>
@@ -238,7 +238,7 @@
       </tr>
     </thead>
     <tbody>
-      <tr *ngFor="let os of ordens">
+      <tr *ngFor="let os of ordens" [class.os-linha-loja-mundo-smart]="osEhDaLoja(os)">
         <td class="col-urgencia">
           <button
             type="button"

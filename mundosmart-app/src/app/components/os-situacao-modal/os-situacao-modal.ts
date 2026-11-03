@@ -94,6 +94,22 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
                 <p class="campo-hint-inline" *ngIf="teveProblema === 'sim'">
                   Esse texto fica em destaque no estoque do aparelho.
                 </p>
+                <label for="os-sit-valor">
+                  Valor da assistência técnica
+                  <span class="campo-obrigatorio" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="os-sit-valor"
+                  type="number"
+                  name="valorAssistencia"
+                  min="0"
+                  step="0.01"
+                  [(ngModel)]="valorAssistencia"
+                  placeholder="0,00"
+                />
+                <p class="campo-hint-inline">
+                  Mão de obra da assistência. Não entra no custo de compra do aparelho.
+                </p>
                 <p class="campo-erro" *ngIf="erro">{{ erro }}</p>
               </div>
             </ng-container>
@@ -216,6 +232,7 @@ import { avisarErroUsuario } from '../../services/user-feedback.service';
       margin-bottom: 8px;
     }
     .campo-obrigatorio { color: #dc2626; }
+    label[for="os-sit-valor"] { margin-top: 12px; }
     textarea, input[type="number"] {
       width: 100%;
       padding: 10px 12px;
@@ -284,6 +301,7 @@ export class OsSituacaoModal implements OnInit, OnDestroy {
   celularDaLoja = false;
   teveProblema: '' | 'sim' | 'nao' = '';
   alertaTexto = '';
+  valorAssistencia: number | null = null;
   prazoDias = PRAZO_AGUARDANDO_PECA_DIAS_PADRAO;
   prazoDiasPadrao = PRAZO_AGUARDANDO_PECA_DIAS_PADRAO;
   erro = '';
@@ -329,6 +347,7 @@ export class OsSituacaoModal implements OnInit, OnDestroy {
     this.celularDaLoja = !!req.celularDaLoja;
     this.teveProblema = '';
     this.alertaTexto = '';
+    this.valorAssistencia = null;
     this.prazoDiasPadrao = req.prazoDiasPadrao ?? PRAZO_AGUARDANDO_PECA_DIAS_PADRAO;
     this.prazoDias = this.prazoDiasPadrao;
     this.erro = '';
@@ -375,8 +394,18 @@ export class OsSituacaoModal implements OnInit, OnDestroy {
         avisarErroUsuario(this.erro);
         return;
       }
+      const valor = Number(this.valorAssistencia);
+      if (this.valorAssistencia === null || this.valorAssistencia === undefined || !Number.isFinite(valor) || valor < 0) {
+        this.erro = 'Informe o valor da assistência técnica.';
+        avisarErroUsuario(this.erro);
+        return;
+      }
       this.aberto = false;
-      this.dialog.complete({ kind: 'concluir', alertaPermanente: this.teveProblema === 'sim' ? texto : '' });
+      this.dialog.complete({
+        kind: 'concluir',
+        alertaPermanente: this.teveProblema === 'sim' ? texto : '',
+        valorAssistencia: valor,
+      });
       return;
     }
 

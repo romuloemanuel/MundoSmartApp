@@ -40,6 +40,10 @@ public class AparelhoLojaData
     [BsonElement("imei")]
     public string Imei { get; set; } = string.Empty;
 
+    /// <summary>Etiqueta colada no aparelho. N de novo ou U de usado, mais um número que não volta. Ex.: N14.</summary>
+    [BsonElement("codigo")]
+    public string Codigo { get; set; } = string.Empty;
+
     [BsonElement("marca")]
     public string Marca { get; set; } = string.Empty;
 
@@ -141,6 +145,10 @@ public class AparelhoLojaData
     [BsonElement("osEntradaNumero")]
     public string OsEntradaNumero { get; set; } = string.Empty;
 
+    /// <summary>Defeito da OS enquanto o aparelho está na assistência. Aparece no I da grade.</summary>
+    [BsonElement("justificativaAssistencia")]
+    public string JustificativaAssistencia { get; set; } = string.Empty;
+
     /// <summary>Legado. O deságio novo já está no valor pago pela loja e não é gravado à parte.</summary>
     [BsonRepresentation(BsonType.Decimal128)]
     [BsonElement("desagio")]
@@ -199,6 +207,9 @@ public class AparelhoMovimentoData
 {
     [BsonElement("aparelhoId")]
     public string? AparelhoId { get; set; }
+
+    [BsonElement("codigo")]
+    public string Codigo { get; set; } = string.Empty;
 
     [BsonElement("imei")]
     public string Imei { get; set; } = string.Empty;

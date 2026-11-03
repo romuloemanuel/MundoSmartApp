@@ -78,11 +78,15 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
               <span class="nav-grupo-seta" aria-hidden="true"></span>
             </button>
             <div class="nav-submenu" *ngIf="submenuCelularesAberto">
+              <a routerLink="/vendas-celulares/estoque" routerLinkActive="active" (click)="aoClicarItemCelulares()">Estoque</a>
+              <a routerLink="/vendas-celulares/compra" routerLinkActive="active" (click)="aoClicarItemCelulares()">Compra</a>
+              <a routerLink="/vendas-celulares/venda" routerLinkActive="active" (click)="aoClicarItemCelulares()">Venda</a>
+              <a routerLink="/vendas-celulares/troca" routerLinkActive="active" (click)="aoClicarItemCelulares()">Troca</a>
+              <a routerLink="/vendas-celulares/transacoes" routerLinkActive="active" (click)="aoClicarItemCelulares()">Transações</a>
               <a routerLink="/vendas-celulares/payjoy" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas Payjoy</a>
               <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas PayMobi</a>
               <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi/cobranca" routerLinkActive="active" (click)="aoClicarItemCelulares()">Gerenciamento de cobrança</a>
               <a routerLink="/vendas-celulares/iniciar-paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Iniciar uma Venda Paymobi</a>
-              <a routerLink="/vendas-celulares/loja" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="aoClicarItemCelulares()">Compra, venda e troca</a>
               <a *ngIf="appAuth.isAdmin()" routerLink="/vendas-celulares/loja/financeiro" routerLinkActive="active" (click)="aoClicarItemCelulares()">Financeiro dos aparelhos</a>
               <a routerLink="/vendas-celulares/consultar-desconto" routerLinkActive="active" (click)="aoClicarItemCelulares()">Consultar Cliente Desconto</a>
             </div>

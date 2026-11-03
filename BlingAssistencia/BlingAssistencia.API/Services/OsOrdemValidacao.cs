@@ -40,7 +40,7 @@ public static class OsOrdemValidacao
         os.Situacao = OsSituacaoHelper.AjustarParaLoja(os.Situacao, os.LojaOrigem);
         OsSituacaoHelper.ValidarMotivoCancelamento(os.Situacao, os.MotivoCancelamento);
         OsSituacaoHelper.ValidarSituacaoPorLoja(os.Situacao, os.LojaOrigem);
-        OsSituacaoHelper.ValidarCelularDaLoja(os.Situacao, os.Contato?.Nome);
+        OsSituacaoHelper.ValidarCelularDaLoja(os.Situacao, os.Contato?.Nome, os.Contato?.Id);
 
         if (OsSituacaoHelper.EhAguardandoPeca(os.Situacao)
             && !OsSituacaoHelper.DataUtilValida(os.DataPrazoPeca))

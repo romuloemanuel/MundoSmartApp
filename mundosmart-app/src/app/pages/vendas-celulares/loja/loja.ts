@@ -8,6 +8,9 @@ import { map } from 'rxjs/operators';
 import { ClienteAutocomplete } from '../../../components/cliente-autocomplete/cliente-autocomplete';
 import { NovoClienteModal } from '../../../components/novo-cliente-modal/novo-cliente-modal';
 import { AutocompleteCriavel, AutocompleteItem } from '../../../components/autocomplete-criavel/autocomplete-criavel';
+import { EditarAparelhoLojaModal } from './editar-aparelho-loja-modal';
+import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
+import { GridPaginationState } from '../../../utils/grid-pagination.state';
 import { AparelhosService } from '../../../services/aparelhos';
 import { AppAuthService } from '../../../services/app-auth';
 import {
@@ -15,17 +18,20 @@ import {
   AparelhoCadeiaPasso,
   AparelhoCadeiaUnidade,
   AparelhoLojaItem,
+  AparelhoMovimentoLinha,
   AparelhoLojaPainel,
   AparelhoLojaService,
   AparelhoOperacao,
+  AparelhoVendedorCadastro,
   AparelhoVendedorResumo,
   OsAbertaConsulta,
 } from '../../../services/aparelho-loja.service';
-import { avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
+import { avisarAvisoUsuario, avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
 import { OsImpressaoService } from '../../../services/os-impressao.service';
 import { OS_IMPRESSAO_PADRAO_POS_CADASTRO } from '../../../config/os-impressao.config';
 import { BlingContato, BlingContatoRef, BlingOrdemServico, MarcaAparelho, ModeloAparelho } from '../../../models/bling.models';
 import { MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
+import { modeloParaAutocomplete } from '../../../utils/modelo-autocomplete.util';
 import { apenasDigitos, formatarCpfCnpj, formatarTelefone } from '../../../utils/contato-validacao';
 import { mensagemAlertaImei } from '../../../utils/imei.util';
 import {
@@ -42,6 +48,9 @@ import {
 } from '../../../config/calculo-juros.config';
 
 type Modo = 'compra' | 'venda' | 'troca';
+type TelaLoja = Modo | 'estoque' | 'transacoes' | 'financeiro';
+type VisaoTransacoes = 'lista' | 'cadeia';
+type PeriodoDias = 7 | 14 | 30 | 90;
 type FormaNegociacao = 'avista' | 'cartao' | 'avista_cartao' | 'payjoy' | 'paymobi' | 'crefaz' | 'outra';
 
 interface NegociacaoForm {
@@ -101,32 +110,37 @@ interface FichaEntrada {
     ClienteAutocomplete,
     NovoClienteModal,
     AutocompleteCriavel,
+    EditarAparelhoLojaModal,
+    GridPaginator,
   ],
   template: `
     <div class="page">
       <div class="page-header">
-        <h2>{{ financeiro ? 'Financeiro dos aparelhos' : 'Compra, venda e troca' }}</h2>
-        <a *ngIf="financeiro" routerLink="/vendas-celulares/loja">Voltar para compra, venda e troca</a>
-        <a *ngIf="isAdmin && !financeiro" routerLink="/vendas-celulares/loja/financeiro">Financeiro</a>
+        <h2>{{ tituloTela }}</h2>
+        <a *ngIf="tela !== 'estoque'" routerLink="/vendas-celulares/estoque">Voltar para o estoque</a>
       </div>
-      <section class="iniciar" *ngIf="!financeiro">
-        <h3>Iniciar</h3>
-        <p class="hint">Toque em um dos três. O formulário abre aqui embaixo.</p>
-        <div class="modos">
-          <button type="button" (click)="abrir('compra')" [class.ativo]="modo === 'compra'">
-            <strong>Compra</strong>
-            <span>A loja recebe um aparelho</span>
-          </button>
-          <button type="button" (click)="abrir('venda')" [class.ativo]="modo === 'venda'">
-            <strong>Venda</strong>
-            <span>O cliente leva um aparelho do estoque</span>
-          </button>
-          <button type="button" (click)="abrir('troca')" [class.ativo]="modo === 'troca'">
-            <strong>Troca</strong>
-            <span>Entra um aparelho e sai outro</span>
-          </button>
+      <p class="hint">{{ dicaTela }}</p>
+      <div class="modos" *ngIf="tela === 'estoque'">
+        <a routerLink="/vendas-celulares/compra">
+          <strong>Compra</strong>
+          <span>A loja recebe um aparelho</span>
+        </a>
+        <a routerLink="/vendas-celulares/venda">
+          <strong>Venda</strong>
+          <span>O cliente leva um aparelho do estoque</span>
+        </a>
+        <a routerLink="/vendas-celulares/troca">
+          <strong>Troca</strong>
+          <span>Entra um ou dois aparelhos e sai outro</span>
+        </a>
+      </div>
+      <div class="codigo-banner" *ngIf="codigosRecem.length">
+        <p>Escreva este código nas costas do aparelho</p>
+        <div *ngFor="let c of codigosRecem">
+          <strong>{{ c.codigo }}</strong>
+          <span>{{ c.nome }}</span>
         </div>
-      </section>
+      </div>
       <p class="hint" *ngIf="financeiro">
         Valor de estoque e o dinheiro que entrou e saiu. Esta parte fica só para administrador.
         A transação de uma troca segue até o último aparelho ser vendido.
@@ -253,6 +267,7 @@ interface FichaEntrada {
           <p>
             <strong>{{ p.data | date:'dd/MM/yyyy HH:mm':'UTC' }}</strong>
             · {{ rotuloTipo(p.tipo) }}
+            <span *ngIf="p.vendedorNome"> · {{ p.vendedorNome }}</span>
           </p>
           <div class="lado">
             <h4>Cliente</h4>
@@ -317,9 +332,217 @@ interface FichaEntrada {
 
       <p *ngIf="erro" class="erro">{{ erro }}</p>
 
-      <form class="painel" *ngIf="modo === 'compra'" (ngSubmit)="salvarCompra()" (keydown.enter)="bloquearEnterDaBusca($event)">
+      <ng-container *ngIf="tela === 'transacoes'">
+        <div class="filtros-periodo">
+          <button type="button" *ngFor="let p of periodos" [class.ativo]="periodoDias === p.dias" (click)="escolherPeriodo(p.dias)">{{ p.nome }}</button>
+        </div>
+        <p class="hint">Clique no vendedor para ver só o resultado dele neste período.</p>
+        <table class="data-grid" *ngIf="resultadosPorVendedor.length">
+          <thead>
+            <tr>
+              <th>Vendedor</th>
+              <th>Compras</th>
+              <th>Vendas</th>
+              <th>Trocas</th>
+              <th *ngIf="isAdmin">Entrou</th>
+              <th *ngIf="isAdmin">Saiu</th>
+              <th *ngIf="isAdmin">Resultado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let v of resultadosPorVendedor"
+              class="clicavel"
+              [class.selecionada]="buscaVendedor === v.nome"
+              (click)="escolherVendedor(v.nome)"
+            >
+              <td>{{ v.nome }}</td>
+              <td>{{ v.compras }}</td>
+              <td>{{ v.vendas }}</td>
+              <td>{{ v.trocas }}</td>
+              <td *ngIf="isAdmin">{{ dinheiro(v.entrou) }}</td>
+              <td *ngIf="isAdmin">{{ dinheiro(v.saiu) }}</td>
+              <td *ngIf="isAdmin" [class.valor-positivo]="v.resultado >= 0" [class.valor-negativo]="v.resultado < 0">{{ dinheiro(v.resultado) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="cards" *ngIf="resumoVendedor as r">
+          <div class="card">
+            <span>{{ r.nome }}</span>
+            <strong>{{ r.vendas }} {{ r.vendas === 1 ? 'venda' : 'vendas' }}</strong>
+            <small>{{ r.trocas }} {{ r.trocas === 1 ? 'troca' : 'trocas' }} · {{ r.compras }} {{ r.compras === 1 ? 'compra' : 'compras' }}</small>
+          </div>
+          <div class="card" *ngIf="isAdmin">
+            <span>Dinheiro que entrou</span>
+            <strong class="valor-positivo">{{ dinheiro(r.entrou) }}</strong>
+            <small>Vendas e diferenças a favor da loja</small>
+          </div>
+          <div class="card" *ngIf="isAdmin">
+            <span>Dinheiro que saiu</span>
+            <strong class="valor-negativo">{{ dinheiro(r.saiu) }}</strong>
+            <small>Compras e diferenças pagas ao cliente</small>
+          </div>
+          <div class="card" *ngIf="isAdmin">
+            <span>Resultado</span>
+            <strong [class.valor-positivo]="r.resultado >= 0" [class.valor-negativo]="r.resultado < 0">{{ dinheiro(r.resultado) }}</strong>
+            <small>Neste período</small>
+          </div>
+        </div>
+        <div class="modos visoes">
+          <button type="button" [class.ativo]="visaoTransacoes === 'lista'" (click)="visaoTransacoes = 'lista'">
+            <strong>Transações</strong>
+            <span>Uma linha por negócio. Troca com um ou dois aparelhos fica agrupada.</span>
+          </button>
+          <button type="button" [class.ativo]="visaoTransacoes === 'cadeia'" (click)="abrirVisaoCadeia()">
+            <strong>Cadeia da troca</strong>
+            <span>Do aparelho inicial até o último sair da loja.</span>
+          </button>
+        </div>
+
+        <ng-container *ngIf="visaoTransacoes === 'lista'">
+          <div class="busca-estoque busca-transacoes">
+            <div class="form-group">
+              <label>Código</label>
+              <input [(ngModel)]="filtroCodigoTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroCodigoTx" placeholder="U1 ou 1" />
+            </div>
+            <div class="form-group">
+              <label>Data</label>
+              <input type="date" [(ngModel)]="filtroDataTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroDataTx" />
+            </div>
+            <div class="form-group">
+              <label>Tipo</label>
+              <select [(ngModel)]="filtroTipoTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroTipoTx">
+                <option value="">Todos</option>
+                <option value="compra">Compra</option>
+                <option value="troca">Troca</option>
+                <option value="venda">Venda</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Vendedor</label>
+              <select [(ngModel)]="buscaVendedor" (ngModelChange)="resetPaginaTransacoes()" name="filtroVendedorTx">
+                <option value="">Todos</option>
+                <option *ngFor="let v of vendedoresCadastrados; trackBy: trackVendedor" [value]="v.nome">{{ v.nome }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Modelo</label>
+              <input [(ngModel)]="filtroModeloTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroModeloTx" placeholder="ip 11, sm a54…" />
+            </div>
+            <div class="form-group">
+              <label>Valor de</label>
+              <input type="number" min="0" step="0.01" [(ngModel)]="filtroValorDeTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroValorDeTx" />
+            </div>
+            <div class="form-group">
+              <label>Valor até</label>
+              <input type="number" min="0" step="0.01" [(ngModel)]="filtroValorAteTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroValorAteTx" />
+            </div>
+          </div>
+          <p class="hint" *ngIf="!carregando && !transacoesFiltradas.length">Nenhuma transação com esse filtro.</p>
+          <app-grid-paginator
+            *ngIf="transacoesFiltradas.length"
+            [total]="transacoesFiltradas.length"
+            [page]="gridTransacoes.page"
+            [pageSize]="gridTransacoes.pageSize"
+            (pageChange)="gridTransacoes.onPageChange($event)"
+            (pageSizeChange)="gridTransacoes.onPageSizeChange($event)"
+          />
+          <table class="data-grid" *ngIf="transacoesPaginadas.length">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Data</th>
+                <th>Tipo</th>
+                <th>Vendedor</th>
+                <th>Pessoa</th>
+                <th>Aparelhos</th>
+                <th>Valor</th>
+                <th *ngIf="isAdmin">Caixa</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let op of transacoesPaginadas" [class.estornada]="op.status === 'estornada'">
+                <td class="codigo-celula">{{ codigosTransacao(op) }}</td>
+                <td>{{ op.data | date:'dd/MM/yyyy HH:mm':'UTC' }}</td>
+                <td>
+                  {{ rotuloTipo(op.tipo) }}
+                  <div class="sub" *ngIf="op.status === 'estornada'">Desfeita</div>
+                </td>
+                <td>{{ op.vendedorNome || '—' }}</td>
+                <td>
+                  {{ op.clienteNome || op.fornecedorNome || '—' }}
+                </td>
+                <td>
+                  <div class="grupo-aparelhos" *ngFor="let a of aparelhosSaiu(op)">
+                    <span class="valor-negativo">− {{ dinheiro(a.valor) }}</span>
+                    <span>saiu {{ textoAparelhoGrupo(a) }}</span>
+                  </div>
+                  <div class="grupo-aparelhos" *ngFor="let a of aparelhosEntrou(op)">
+                    <span class="valor-positivo">+ {{ dinheiro(a.valor) }}</span>
+                    <span>entrou {{ textoAparelhoGrupo(a) }}</span>
+                  </div>
+                  <div class="sub" *ngIf="!aparelhosSaiu(op).length && !aparelhosEntrou(op).length">
+                    {{ op.saidaResumo || op.entradaResumo || '—' }}
+                  </div>
+                </td>
+                <td>{{ valorTransacao(op) ? dinheiro(valorTransacao(op)) : '—' }}</td>
+                <td *ngIf="isAdmin">
+                  <div class="valor-positivo" *ngIf="op.dinheiroRecebido">+ {{ dinheiro(op.dinheiroRecebido) }}</div>
+                  <div class="valor-negativo" *ngIf="op.dinheiroPago">− {{ dinheiro(op.dinheiroPago) }}</div>
+                  <div class="sub" *ngIf="!op.dinheiroRecebido && !op.dinheiroPago">Sem dinheiro</div>
+                </td>
+                <td>
+                  <button type="button" class="link" (click)="abrirCadeiaDaOperacao(op)">Ver cadeia</button>
+                  <button type="button" class="secundario" *ngIf="op.podeEstornar" [disabled]="salvando" (click)="estornar(op)">Desfazer</button>
+                  <button type="button" class="perigo" *ngIf="isAdmin && (op.podeEstornar || op.status === 'estornada')" [disabled]="salvando" (click)="excluirOperacao(op)">Excluir</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </ng-container>
+
+        <ng-container *ngIf="visaoTransacoes === 'cadeia'">
+          <div class="form-group" style="max-width: 420px">
+            <label>Abrir um aparelho</label>
+            <input [ngModel]="buscaCadeia" (ngModelChange)="onBuscaCadeia($event)" name="buscaCadeia" placeholder="Código, IMEI ou modelo" />
+          </div>
+          <p class="hint">Cada bloco junta a compra, as trocas e a venda daquele aparelho. O que saiu fica negativo; o que entrou, positivo.</p>
+          <p class="hint" *ngIf="avisoCadeia">{{ avisoCadeia }}</p>
+          <p class="hint" *ngIf="!carregando && !avisoCadeia && !cadeiasDoPeriodo.length">Nenhuma cadeia neste período{{ buscaVendedor ? ' para este vendedor' : '' }}. Cadeia só existe depois de uma troca ou venda.</p>
+          <p class="hint" *ngIf="buscaCadeia.trim() && !avisoCadeia && !cadeiasDoPeriodo.length">Esse aparelho ainda não gerou troca nem venda.</p>
+          <article class="cadeia" *ngFor="let c of cadeiasDoPeriodo" [attr.id]="'cadeia-' + c.id" [class.aberta]="c.aberta" [class.fechada]="!c.aberta" [class.focada]="cadeiaAberta === c.id">
+            <div class="cadeia-topo">
+              <strong>{{ c.titulo }}</strong>
+              <span>{{ c.aberta ? 'Ainda tem aparelho na loja' : 'Último aparelho já saiu' }}</span>
+            </div>
+            <p class="sub" *ngIf="c.aberta && c.pendentes.length">Ainda na loja: {{ c.pendentes.join(', ') }}</p>
+            <div class="passos">
+              <div class="passo" *ngFor="let p of c.passos">
+                <p><strong>{{ p.data | date:'dd/MM/yyyy HH:mm':'UTC' }}</strong> · {{ rotuloTipo(p.tipo) }}<span *ngIf="p.vendedorNome"> · {{ p.vendedorNome }}</span><span *ngIf="p.pessoa"> · {{ p.pessoa }}</span></p>
+                <p *ngFor="let a of p.saiu">
+                  <span class="valor-negativo">− {{ dinheiro(a.valor) }}</span>
+                  saiu {{ textoAparelhoGrupo(a) }}
+                </p>
+                <p *ngFor="let a of p.entrou">
+                  <span class="valor-positivo">+ {{ dinheiro(a.valor) }}</span>
+                  entrou {{ textoAparelhoGrupo(a) }}
+                </p>
+                <p class="sub" *ngIf="isAdmin && (p.dinheiroEntrou || p.dinheiroSaiu)">
+                  Caixa
+                  <span *ngIf="p.dinheiroEntrou" class="valor-positivo"> + {{ dinheiro(p.dinheiroEntrou) }}</span>
+                  <span *ngIf="p.dinheiroSaiu" class="valor-negativo"> − {{ dinheiro(p.dinheiroSaiu) }}</span>
+                </p>
+              </div>
+            </div>
+          </article>
+        </ng-container>
+      </ng-container>
+
+      <form class="painel" *ngIf="tela === 'compra'" (ngSubmit)="salvarCompra()" (keydown.enter)="bloquearEnterDaBusca($event)">
         <h3>Compra</h3>
         <p class="hint">A loja paga e o aparelho entra no estoque. Quem vendeu para a loja não ganha desconto na assistência.</p>
+        <p class="hint">O código das costas (N para novo, U para usado) o sistema gera na hora da entrada. Não precisa informar.</p>
         <p class="etapa">1. Aparelho</p>
         <div class="form-row">
           <div class="form-group">
@@ -358,8 +581,9 @@ interface FichaEntrada {
         <div class="form-row">
           <div class="form-group">
             <label>IMEI</label>
-            <input [ngModel]="entrada.imei" (ngModelChange)="onImei($event)" name="imeiCompra" inputmode="numeric" placeholder="15 dígitos" />
+            <input [ngModel]="entrada.imei" (ngModelChange)="onImei($event)" name="imeiCompra" inputmode="numeric" placeholder="Opcional, 15 dígitos" />
             <span class="campo-aviso" *ngIf="alertaImei">{{ alertaImei }}</span>
+            <p class="hint">Aparelho quebrado pode entrar sem IMEI. Informe os 15 dígitos depois do conserto.</p>
           </div>
           <div class="form-group">
             <label>Cor</label>
@@ -450,7 +674,7 @@ interface FichaEntrada {
           <input type="checkbox" [(ngModel)]="entrada.passaPorAssistencia" name="assistenciaCompra" />
           Passa pela assistência antes de vender
         </label>
-        <p class="hint" *ngIf="entrada.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Não entra na venda nem na troca até a assistência liberar.</p>
+        <p class="hint" *ngIf="entrada.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Não entra na venda nem na troca até a assistência fechar a OS, com o defeito permanente e o valor da assistência.</p>
         <details class="mais">
           <summary>Testes e OS já aberta</summary>
         <div class="form-group">
@@ -484,9 +708,21 @@ interface FichaEntrada {
         </div>
       </form>
 
-      <form class="painel" *ngIf="modo === 'venda'" (ngSubmit)="salvarVenda()" (keydown.enter)="bloquearEnterDaBusca($event)">
+      <form class="painel" *ngIf="tela === 'venda'" (ngSubmit)="salvarVenda()" (keydown.enter)="bloquearEnterDaBusca($event)">
         <h3>Venda</h3>
         <p class="etapa">1. Aparelho do estoque</p>
+        <div class="form-group">
+          <label>Buscar código</label>
+          <input [ngModel]="buscaCodigoVenda" (ngModelChange)="onBuscaCodigoVenda($event)" name="codigoVenda" placeholder="N14 ou só o número" autocomplete="off" />
+          <p class="hint campo-hint">O sistema gerou esse código quando o aparelho entrou. Está nas costas. N é novo, U é usado.</p>
+        </div>
+        <div class="grade-codigo" *ngIf="achadosCodigoVenda.length > 1">
+          <button type="button" *ngFor="let a of achadosCodigoVenda" (click)="escolherVendaPorCodigo(a)">
+            {{ a.codigo }} · {{ a.marca }} {{ a.modelo }}
+          </button>
+        </div>
+        <p class="codigo-etiqueta" *ngIf="aparelhoVendaSelecionado?.codigo as cod">{{ cod }}</p>
+        <p class="hint" *ngIf="achadosCodigoVenda.length === 0 && buscaCodigoVenda.trim()">Nenhum aparelho liberado com esse código.</p>
         <div class="form-row">
           <div class="form-group">
             <label>Marca</label>
@@ -641,14 +877,26 @@ interface FichaEntrada {
         </div>
         <div class="acoes">
           <button type="submit" [disabled]="salvando">{{ salvando ? 'Salvando…' : 'Registrar venda' }}</button>
-          <button type="button" class="secundario" (click)="modo = null">Cancelar</button>
+          <button type="button" class="secundario" (click)="cancelar()">Limpar</button>
         </div>
       </form>
 
-      <form class="painel" *ngIf="modo === 'troca'" (ngSubmit)="salvarTroca()" (keydown.enter)="bloquearEnterDaBusca($event)">
+      <form class="painel" *ngIf="tela === 'troca'" (ngSubmit)="salvarTroca()" (keydown.enter)="bloquearEnterDaBusca($event)">
         <h3>Troca</h3>
         <p class="hint">O caixa registra só a diferença. O aparelho que entra fica no estoque pelo valor avaliado.</p>
         <p class="etapa">1. Aparelho que sai</p>
+        <div class="form-group">
+          <label>Buscar código</label>
+          <input [ngModel]="buscaCodigoTroca" (ngModelChange)="onBuscaCodigoTroca($event)" name="codigoTroca" placeholder="N14 ou só o número" autocomplete="off" />
+          <p class="hint campo-hint">O sistema gerou esse código quando o aparelho entrou. Está nas costas do que o cliente vai levar.</p>
+        </div>
+        <div class="grade-codigo" *ngIf="achadosCodigoTroca.length > 1">
+          <button type="button" *ngFor="let a of achadosCodigoTroca" (click)="escolherTrocaPorCodigo(a)">
+            {{ a.codigo }} · {{ a.marca }} {{ a.modelo }}
+          </button>
+        </div>
+        <p class="codigo-etiqueta" *ngIf="aparelhoTrocaSelecionado?.codigo as cod">{{ cod }}</p>
+        <p class="hint" *ngIf="achadosCodigoTroca.length === 0 && buscaCodigoTroca.trim()">Nenhum aparelho liberado com esse código.</p>
         <div class="form-row">
           <div class="form-group">
             <label>Marca que sai</label>
@@ -791,6 +1039,7 @@ interface FichaEntrada {
             <h4>4. Aparelho que entra<span *ngIf="entradasTroca.length > 1"> {{ i + 1 }}</span></h4>
             <button type="button" class="secundario" *ngIf="entradasTroca.length > 1" (click)="removerEntradaTroca(f)">Remover</button>
           </div>
+          <p class="hint">O código das costas deste aparelho o sistema gera quando ele entrar. Não precisa informar.</p>
           <div class="form-row">
             <div class="form-group">
               <label>Marca</label>
@@ -828,8 +1077,9 @@ interface FichaEntrada {
           <div class="form-row">
             <div class="form-group">
               <label>IMEI</label>
-              <input [ngModel]="f.dados.imei" (ngModelChange)="onImeiFicha($event, f)" [name]="'imeiTroca' + f.id" inputmode="numeric" />
+              <input [ngModel]="f.dados.imei" (ngModelChange)="onImeiFicha($event, f)" [name]="'imeiTroca' + f.id" inputmode="numeric" placeholder="Opcional, 15 dígitos" />
               <span class="campo-aviso" *ngIf="alertaImeiDe(f) as alerta">{{ alerta }}</span>
+              <p class="hint">Pode entrar sem IMEI. Informe depois do conserto.</p>
             </div>
             <div class="form-group">
               <label>Cor</label>
@@ -904,7 +1154,7 @@ interface FichaEntrada {
             <input type="checkbox" [(ngModel)]="f.dados.passaPorAssistencia" [name]="'assistenciaTroca' + f.id" />
             Este aparelho passa pela assistência antes de vender
           </label>
-          <p class="hint" *ngIf="f.dados.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Ele fica no estoque, mas não entra na venda nem na troca até a assistência liberar.</p>
+          <p class="hint" *ngIf="f.dados.passaPorAssistencia">Abre uma ordem de serviço no cliente Mundo Smart e manda o papel para impressão. Ele fica no estoque, mas não entra na venda nem na troca até a assistência fechar a OS, com o defeito permanente e o valor da assistência.</p>
           <details class="mais">
             <summary>Testes e OS já aberta</summary>
           <div class="form-group">
@@ -942,26 +1192,13 @@ interface FichaEntrada {
         </div>
       </form>
 
-      <div class="cards" *ngIf="painel && !financeiro">
-        <div class="card" *ngFor="let g of disponiveisPorMarca">
-          <span>{{ g.marca }}</span>
-          <strong>{{ g.qtd }}</strong>
-          <small>{{ textoDisponiveis(g.qtd) }}</small>
-        </div>
-        <div class="card" *ngIf="!disponiveisPorMarca.length">
-          <span>Disponíveis</span>
-          <strong>0</strong>
-        </div>
-        <div class="card" *ngIf="painel.resumo.emAssistencia">
-          <span>Na assistência</span>
-          <strong>{{ painel.resumo.emAssistencia }}</strong>
-          <small>Fora de venda até liberar</small>
-        </div>
-      </div>
-
-      <h3 class="secao">Estoque da loja</h3>
-      <p class="hint" *ngIf="!carregando && estoque.length === 0">Nenhum celular no estoque da loja.</p>
+      <ng-container *ngIf="tela === 'estoque'">
+      <p class="hint" *ngIf="!carregando && estoque.length === 0">Nenhum celular no estoque. Use Compra para receber o primeiro aparelho.</p>
       <div class="busca-estoque" *ngIf="estoque.length">
+        <div class="form-group">
+          <label>Código</label>
+          <input [(ngModel)]="buscaCodigo" name="buscaCodigo" placeholder="N14 ou 14" />
+        </div>
         <div class="form-group">
           <label>Marca</label>
           <select [ngModel]="buscaMarca" (ngModelChange)="onBuscaMarca($event)" name="buscaMarca">
@@ -969,9 +1206,34 @@ interface FichaEntrada {
             <option *ngFor="let m of marcasBusca" [value]="m">{{ m }}</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group filtro-modelo">
           <label>Modelo</label>
-          <input [(ngModel)]="buscaModelo" name="buscaModelo" placeholder="Digite o modelo" />
+          <ng-container *ngFor="let k of [modeloFiltroKey]">
+            <app-autocomplete-criavel
+              placeholder="ip 11, sm a54…"
+              [buscarFn]="buscarModeloEstoqueFn"
+              [permitirCriar]="false"
+              [valorInicial]="buscaModeloLabel"
+              [valorInicialId]="buscaModeloId"
+              [valorInicialMarcaNome]="buscaModeloMarca"
+              (itemSelecionadoChange)="onFiltroModeloEstoque($event)"
+            />
+          </ng-container>
+        </div>
+        <div class="form-group">
+          <label>Vendedor</label>
+          <select [(ngModel)]="buscaVendedor" name="buscaVendedorEstoque">
+            <option value="">Todos</option>
+            <option *ngFor="let v of vendedoresCadastrados; trackBy: trackVendedor" [value]="v.nome">{{ v.nome }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Configuração</label>
+          <input [(ngModel)]="buscaConfig" name="buscaConfig" placeholder="128 GB" />
+        </div>
+        <div class="form-group">
+          <label>Cor</label>
+          <input [(ngModel)]="buscaCor" name="buscaCor" placeholder="Cor" />
         </div>
         <div class="form-group">
           <label>Valor de</label>
@@ -981,121 +1243,140 @@ interface FichaEntrada {
           <label>Valor até</label>
           <input type="number" min="0" step="0.01" [(ngModel)]="buscaValorAte" name="buscaValorAte" />
         </div>
-        <div class="form-group">
-          <label>Forma de pagamento</label>
-          <select [(ngModel)]="buscaForma" name="buscaForma">
-            <option value="">Todas</option>
-            <option *ngFor="let f of formasBusca" [value]="f.id">{{ f.nome }}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Estado</label>
-          <select [(ngModel)]="buscaEstado" name="buscaEstado">
-            <option value="">Novo e usado</option>
-            <option value="novo">Novo</option>
-            <option value="usado">Usado</option>
-          </select>
-        </div>
       </div>
-      <p class="hint" *ngIf="estoque.length && !estoqueFiltrado.length">Nenhum aparelho com esses filtros.</p>
-      <ng-container *ngFor="let g of estoquePorMarca">
-        <h3 class="marca-estoque">{{ g.marca }} <span *ngIf="g.disponiveis">{{ textoDisponiveis(g.disponiveis) }}</span></h3>
-        <div class="grade-estoque">
-        <article class="card-aparelho" *ngFor="let a of g.itens" [id]="'aparelho-' + a.id" [class.aberta]="fichaId === a.id" (click)="alternarFicha(a.id)">
-          <img *ngIf="capaDe(a) as foto" class="capa" [src]="foto" alt="" />
-          <div class="capa vazia" *ngIf="!capaDe(a)">Sem foto</div>
-          <div class="corpo">
-            <strong>{{ a.marca }} {{ a.modelo }}</strong>
-            <div class="sub">{{ a.configuracao }}<span *ngIf="a.cor"> · {{ a.cor }}</span></div>
-            <div class="sub" *ngIf="a.imei">IMEI {{ a.imei }}</div>
-            <p class="alerta-permanente" *ngIf="a.alertaPermanente">{{ a.alertaPermanente }}</p>
-            <form class="imei-pendente" *ngIf="!a.imei" (click)="$event.stopPropagation()" (submit)="salvarImei(a)">
-              <input [(ngModel)]="imeiInformado[a.id || '']" [name]="'imei' + a.id" inputmode="numeric" placeholder="IMEI pendente" />
-              <button type="submit">Salvar</button>
-            </form>
-            <dl>
-              <div>
-                <dt>Valor</dt>
-                <dd>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</dd>
-              </div>
-              <div *ngIf="a.valorMinimoVenda">
-                <dt>Mínimo</dt>
-                <dd>{{ dinheiro(a.valorMinimoVenda) }}</dd>
-              </div>
-              <div>
-                <dt>Forma de pagamento</dt>
-                <dd>{{ rotuloFormaAparelho(a) }}</dd>
-              </div>
-              <div>
-                <dt>Estado</dt>
-                <dd>{{ rotuloCondicao(a.condicao) }}</dd>
-              </div>
-            </dl>
-            <div class="sub">
-              {{ rotuloSituacao(a.status) }}
-              <a *ngIf="a.osEntradaId" class="os-link" [routerLink]="['/ordens-servico', a.osEntradaId]" (click)="$event.stopPropagation()">OS {{ a.osEntradaNumero || a.osEntradaId }}</a>
-              <span *ngIf="!a.osEntradaId && a.osEntradaNumero"> · OS {{ a.osEntradaNumero }}</span>
-            </div>
-            <p class="sub" *ngIf="financeiro">
-              Custo {{ dinheiro(custoTotalDe(a)) }}
-              <span *ngIf="(a.custoPecas || 0) > 0">
-                · compra {{ dinheiro(a.custo) }} + assistência {{ dinheiro(a.custoPecas) }}
-              </span>
-            </p>
-            <p class="sub" *ngIf="financeiro && linksOs(a).length">
-              <a
-                *ngFor="let os of linksOs(a)"
-                class="os-link"
-                [routerLink]="['/ordens-servico', os.id]"
+      <p class="hint" *ngIf="estoque.length && !estoqueFiltrado.length">Nenhum aparelho com esse filtro.</p>
+      <table class="data-grid" *ngIf="estoqueFiltrado.length">
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Valor</th>
+            <th>Configuração</th>
+            <th>Cor</th>
+            <th>Situação</th>
+            <th>Vendedor</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let a of estoqueFiltrado" class="clicavel" [class.selecionada]="fichaId === a.id" [class.na-assistencia]="a.status === 'em_assistencia'" (click)="alternarFicha(a.id)">
+            <td class="codigo-celula">{{ a.codigo || '—' }}</td>
+            <td>{{ a.marca }}</td>
+            <td>{{ a.modelo }}</td>
+            <td>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</td>
+            <td>{{ a.configuracao || '—' }}</td>
+            <td>{{ a.cor || '—' }}</td>
+            <td class="celula-situacao">
+              <span>{{ rotuloSituacao(a.status) }}</span>
+              <span
+                *ngIf="a.status === 'em_assistencia'"
+                class="info-os"
+                [attr.aria-label]="dicaAssistencia(a)"
+                (mouseenter)="mostrarDicaAssistencia($event, a)"
+                (mouseleave)="esconderDicaAssistencia()"
                 (click)="$event.stopPropagation()"
-              >OS {{ os.numero }}<span *ngIf="os.pecas"> ({{ dinheiro(os.pecas) }})</span></a>
-            </p>
-            <button
-              *ngIf="a.status === 'em_assistencia'"
-              type="button"
-              class="secundario"
-              (click)="$event.stopPropagation(); liberar(a)"
-            >Liberar para venda</button>
-          </div>
-          <div class="ficha-card" *ngIf="fichaId === a.id" (click)="$event.stopPropagation()">
-            <p *ngIf="a.observacoes">{{ a.observacoes }}</p>
-            <p class="sub" *ngIf="a.saudeBateria != null">Bateria {{ a.saudeBateria }}%</p>
-            <p class="sub" *ngIf="a.bateriaPerfeita === true">Bateria em perfeitas condições.</p>
-            <p class="sub" *ngIf="a.bateriaPerfeita === false">Bateria fora das perfeitas condições.</p>
-            <p class="sub" *ngIf="textoPecas(a) as pecas">Peças trocadas: {{ pecas }}</p>
-            <p class="sub" *ngIf="a.testesNaOs">Testes feitos na OS {{ a.osEntradaNumero || 'vinculada' }}.</p>
-            <p class="sub" *ngIf="a.testes?.length">{{ testesResumo(a) }}</p>
-            <p class="sub" *ngIf="financeiro && linksOs(a).length">
-              Assistência:
-              <a
-                *ngFor="let os of linksOs(a)"
-                class="os-link"
-                [routerLink]="['/ordens-servico', os.id]"
-              >OS {{ os.numero }}<span *ngIf="os.pecas"> — peças {{ dinheiro(os.pecas) }}</span></a>
-            </p>
-            <div class="fotos" *ngIf="a.fotos?.length">
-              <div class="foto-escolha" *ngFor="let f of a.fotos" [class.marcada]="fotoMarcada(f)">
-                <input type="checkbox" [checked]="fotoMarcada(f)" (change)="alternarFoto(f)" [attr.aria-label]="'Selecionar para o WhatsApp'" />
-                <video *ngIf="ehVideo(f)" [src]="f.url" controls playsinline preload="metadata"></video>
-                <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto do aparelho" (click)="alternarFoto(f)" />
+              >i</span>
+            </td>
+            <td>{{ a.vendedorEntradaNome || '—' }}</td>
+            <td class="acoes-celula" (click)="$event.stopPropagation()">
+              <button type="button" class="link" *ngIf="podeEditar(a)" (click)="abrirEdicao(a)">Editar</button>
+              <button type="button" class="link perigo" *ngIf="isAdmin && podeEditar(a)" [disabled]="salvando" (click)="excluirAparelho(a)">Excluir</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div
+        class="dica-flutuante"
+        *ngIf="dicaAssistenciaAberta as dica"
+        [style.top.px]="dica.top"
+        [style.left.px]="dica.left"
+      >{{ dica.texto }}</div>
+      <div class="ficha-card" *ngIf="aparelhoFicha as a" id="cadastro-aberto">
+            <div class="ficha-grade">
+              <p class="codigo-etiqueta" *ngIf="a.codigo">{{ a.codigo }}</p>
+              <p class="hint codigo-faixa" *ngIf="a.codigo">O sistema gerou este código na entrada, para colar nas costas. Ele não muda se você editar o cadastro.</p>
+              <div class="ficha-fotos">
+                <h4>Fotos deste aparelho</h4>
+                <p class="hint" *ngIf="!a.fotos?.length">Nenhuma foto ainda. Inclua daqui ou pelo celular.</p>
+                <div class="galeria" *ngIf="a.fotos?.length">
+                  <div class="galeria-item" *ngFor="let f of a.fotos" [class.marcada]="fotoMarcada(f)">
+                    <label class="marca-whats">
+                      <input type="checkbox" [checked]="fotoMarcada(f)" (change)="alternarFoto(f)" [attr.aria-label]="'Selecionar para o WhatsApp'" />
+                    </label>
+                    <button type="button" class="mini" (click)="ampliarFoto(f)">
+                      <video *ngIf="ehVideo(f)" [src]="f.url" muted></video>
+                      <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto do aparelho" />
+                    </button>
+                  </div>
+                </div>
+                <figure class="foto-ampliada" *ngIf="fotoAmpliada as grande">
+                  <video *ngIf="ehVideo(grande)" [src]="grande.url" controls playsinline></video>
+                  <img *ngIf="!ehVideo(grande)" [src]="grande.url" alt="Foto ampliada" />
+                  <button type="button" class="secundario" (click)="fotoAmpliada = null">Fechar imagem</button>
+                </figure>
+                <label class="secundario arquivo">
+                  {{ enviandoFotos ? 'Enviando fotos…' : 'Incluir fotos deste computador' }}
+                  <input type="file" accept="image/*,video/*" multiple hidden [disabled]="enviandoFotos" (change)="incluirFotos(a, $event)" />
+                </label>
+                <button type="button" class="secundario" (click)="abrirQrAparelho(a)">QR code — câmera do celular</button>
+                <div class="qr-box" *ngIf="qrAparelhoId === a.id && qrAberto">
+                  <p class="hint">Escaneie para fotografar este aparelho. A foto entra neste cadastro.</p>
+                  <img *ngIf="qrDataUrl" [src]="qrDataUrl" alt="QR code das fotos e vídeos" class="qr" />
+                  <p class="hint" *ngIf="fotosSessao.length">{{ textoMidiaRecebida }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="secundario"
+                  *ngIf="a.fotos?.length"
+                  [disabled]="enviandoWhatsapp || !temFotoMarcada(a)"
+                  (click)="enviarWhatsapp(a)"
+                >{{ enviandoWhatsapp ? 'Enviando…' : 'Enviar fotos marcadas no WhatsApp' }}</button>
+              </div>
+              <div class="ficha-dados">
+                <h4>Cadastro</h4>
+                <dl>
+                  <div><dt>Modelo</dt><dd>{{ a.marca }} {{ a.modelo }}</dd></div>
+                  <div><dt>Cor</dt><dd>{{ a.cor || '—' }}</dd></div>
+                  <div><dt>Configuração</dt><dd>{{ a.configuracao || '—' }}</dd></div>
+                  <div><dt>Estado</dt><dd>{{ rotuloCondicao(a.condicao) }}</dd></div>
+                  <div><dt>IMEI</dt><dd>{{ a.imei || 'Pendente' }}</dd></div>
+                  <div><dt>Situação</dt><dd>{{ rotuloSituacao(a.status) }}</dd></div>
+                  <div><dt>Entrou</dt><dd>{{ a.dataEntrada | date:'dd/MM/yyyy':'UTC' }}</dd></div>
+                  <div><dt>Origem</dt><dd>{{ rotuloTipo(a.origem) }}</dd></div>
+                  <div *ngIf="a.clienteOrigemNome"><dt>Veio de</dt><dd>{{ a.clienteOrigemNome }}</dd></div>
+                  <div *ngIf="a.vendedorEntradaNome"><dt>Vendedor</dt><dd>{{ a.vendedorEntradaNome }}</dd></div>
+                  <div><dt>Pagamento</dt><dd>{{ rotuloFormaAparelho(a) }}</dd></div>
+                  <div><dt>Venda</dt><dd>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</dd></div>
+                  <div *ngIf="a.valorMinimoVenda"><dt>Mínimo</dt><dd>{{ dinheiro(a.valorMinimoVenda) }}</dd></div>
+                  <div *ngIf="financeiro"><dt>Custo</dt><dd>{{ dinheiro(custoTotalDe(a)) }}</dd></div>
+                  <div *ngIf="a.saudeBateria != null"><dt>Saúde da bateria</dt><dd>{{ a.saudeBateria }}%</dd></div>
+                  <div *ngIf="a.bateriaPerfeita === true"><dt>Bateria</dt><dd>Em perfeitas condições</dd></div>
+                  <div *ngIf="a.bateriaPerfeita === false"><dt>Bateria</dt><dd>Fora das perfeitas condições</dd></div>
+                  <div *ngIf="a.osEntradaId || a.osEntradaNumero">
+                    <dt>OS</dt>
+                    <dd>
+                      <a *ngIf="a.osEntradaId" class="os-link" [routerLink]="['/ordens-servico', a.osEntradaId]">OS {{ a.osEntradaNumero || a.osEntradaId }}</a>
+                      <span *ngIf="!a.osEntradaId">OS {{ a.osEntradaNumero }}</span>
+                    </dd>
+                  </div>
+                </dl>
+                <p *ngIf="a.observacoes">{{ a.observacoes }}</p>
+                <p class="os-alerta" *ngIf="a.status === 'em_assistencia' && a.justificativaAssistencia">{{ a.justificativaAssistencia }}</p>
+                <p class="alerta-permanente" *ngIf="a.alertaPermanente">{{ a.alertaPermanente }}</p>
+                <p class="sub" *ngIf="textoPecas(a) as pecas">Peças trocadas: {{ pecas }}</p>
+                <p class="sub" *ngIf="a.testesNaOs">Testes feitos na OS {{ a.osEntradaNumero || 'vinculada' }}.</p>
+                <p class="sub" *ngIf="a.testes?.length">{{ testesResumo(a) }}</p>
+                <div class="acoes-ficha">
+                  <button type="button" *ngIf="podeEditar(a)" (click)="abrirEdicao(a)">Editar cadastro</button>
+                  <a *ngIf="a.status === 'em_estoque'" class="secundario" [routerLink]="['/vendas-celulares/venda']" [queryParams]="{ codigo: a.codigo }">Vender</a>
+                  <a *ngIf="a.status === 'em_estoque'" class="secundario" [routerLink]="['/vendas-celulares/troca']" [queryParams]="{ codigo: a.codigo }">Trocar</a>
+                  <button type="button" class="perigo" *ngIf="isAdmin && podeEditar(a)" [disabled]="salvando" (click)="excluirAparelho(a)">Excluir aparelho</button>
+                </div>
+                <p class="hint" *ngIf="!podeEditar(a)">Este aparelho já saiu. O cadastro fica só para consulta.</p>
               </div>
             </div>
-            <button
-              type="button"
-              class="secundario"
-              *ngIf="a.fotos?.length"
-              [disabled]="enviandoWhatsapp || !temFotoMarcada(a)"
-              (click)="enviarWhatsapp(a)"
-            >{{ enviandoWhatsapp ? 'Enviando…' : 'Enviar fotos selecionadas no WhatsApp' }}</button>
-            <button type="button" class="secundario" (click)="abrirQrAparelho(a)">QR code — câmera do celular</button>
-            <div class="qr-box" *ngIf="qrAparelhoId === a.id && qrAberto">
-              <p class="hint">O cadastro já existe. Escaneie para incluir ou trocar fotos e vídeos deste aparelho.</p>
-              <img *ngIf="qrDataUrl" [src]="qrDataUrl" alt="QR code das fotos e vídeos" class="qr" />
-              <p class="hint" *ngIf="fotosSessao.length">{{ textoMidiaRecebida }}</p>
-            </div>
           </div>
-        </article>
-        </div>
       </ng-container>
 
       <h3 class="secao" *ngIf="financeiro && custosAssistencia.length">Custo de assistência por aparelho</h3>
@@ -1135,14 +1416,13 @@ interface FichaEntrada {
         </tbody>
       </table>
 
-      <h3 class="secao" *ngIf="!financeiro">Movimento</h3>
       <h3 class="secao" *ngIf="financeiro">Dinheiro do movimento</h3>
-      <p class="hint" *ngIf="!financeiro && isAdmin">
+      <p class="hint" *ngIf="financeiro && isAdmin">
         O percentual do desconto na assistência continua em
         <a routerLink="/configuracoes/bling">Configurações → Bling</a>.
         Vendas antigas já importadas do Bling seguem valendo na consulta de desconto.
       </p>
-      <table class="data-grid" *ngIf="operacoes.length">
+      <table class="data-grid" *ngIf="financeiro && operacoes.length">
         <thead>
           <tr>
             <th>Data</th>
@@ -1189,14 +1469,21 @@ interface FichaEntrada {
                 [disabled]="salvando"
                 (click)="estornar(op)"
               >Desfazer</button>
+              <button
+                type="button"
+                class="perigo"
+                *ngIf="isAdmin && (op.podeEstornar || op.status === 'estornada')"
+                [disabled]="salvando"
+                (click)="excluirOperacao(op)"
+              >Excluir</button>
               <span class="sub" *ngIf="op.status === 'estornada'">Desfeita</span>
             </td>
           </tr>
         </tbody>
       </table>
 
-      <h3 class="secao" *ngIf="vendedores.length && !financeiro">Por vendedor</h3>
-      <table class="data-grid" *ngIf="vendedores.length && !financeiro">
+      <h3 class="secao" *ngIf="false">Por vendedor</h3>
+      <table class="data-grid" *ngIf="false">
         <thead>
           <tr>
             <th>Vendedor</th>
@@ -1221,9 +1508,69 @@ interface FichaEntrada {
       (clienteCriado)="onClienteCriado($event)"
       (fecharModal)="modalCliente = false"
     />
+
+    <app-editar-aparelho-loja-modal
+      *ngIf="aparelhoEmEdicao as a"
+      [aparelho]="a"
+      [marcas]="marcas"
+      [podeExcluir]="isAdmin"
+      (fechou)="cancelarEdicao()"
+      (salvou)="aoSalvarEdicao($event)"
+      (atualizou)="aoAtualizarEdicao($event)"
+      (excluiu)="aoExcluirAparelho($event)"
+    />
   `,
   styles: [`
     .hint { color: #64748b; font-size: 13px; margin: 0 0 14px; max-width: 820px; line-height: 1.45; }
+    .codigo-etiqueta, .codigo-faixa { grid-column: 1 / -1; }
+    .codigo-etiqueta { font-size: 48px; font-weight: 800; letter-spacing: 1px; margin: 0 0 8px; line-height: 1; }
+    .codigo-banner { background: #0f172a; color: #fff; border-radius: 12px; padding: 16px 18px; margin: 0 0 16px; max-width: 920px; }
+    .codigo-banner p { margin: 0 0 8px; color: #cbd5e1; }
+    .codigo-banner strong { display: block; font-size: 64px; letter-spacing: 2px; line-height: 1; }
+    .codigo-banner span { color: #e2e8f0; }
+    .codigo-celula { font-size: 18px; font-weight: 800; }
+    .valor-positivo { color: #166534; font-weight: 700; }
+    .valor-negativo { color: #9a3412; font-weight: 700; }
+    tr.selecionada td { background: #eff6ff; }
+    tr.na-assistencia td { background: #fee2e2; }
+    tr.na-assistencia.selecionada td, tr.na-assistencia:hover td { background: #fecaca; }
+    .celula-situacao { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .info-os {
+      display: inline-flex;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1.5px solid #9a3412;
+      color: #9a3412;
+      background: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      font-style: italic;
+      font-family: Georgia, 'Times New Roman', serif;
+      align-items: center;
+      justify-content: center;
+      cursor: help;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .dica-flutuante {
+      position: fixed;
+      z-index: 5000;
+      min-width: 180px;
+      max-width: 280px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #7f1d1d;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.4;
+      white-space: pre-line;
+      pointer-events: none;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    }
+    .grade-codigo { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+    .grade-codigo button { background: #fff; color: #0f172a; border: 1px solid #cbd5e1; }
     .campo-hint { margin: 4px 0 0; }
     .form-group app-autocomplete-criavel { display: block; }
     .form-row .grow { flex: 1; min-width: 220px; }
@@ -1244,15 +1591,25 @@ interface FichaEntrada {
     .iniciar { margin: 0 0 8px; }
     .iniciar h3 { margin: 0 0 4px; font-size: 18px; }
     .modos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; }
-    .modos button {
+    .modos button, .modos a {
       display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
       padding: 16px 18px; background: #2563eb; color: #fff; border: none; border-radius: 12px; text-align: left;
-      min-height: 76px;
+      min-height: 76px; text-decoration: none; cursor: pointer;
     }
-    .modos button:hover { background: #1d4ed8; }
-    .modos button strong { font-size: 18px; color: #fff; }
-    .modos button span { color: #dbeafe; font-size: 13px; font-weight: 500; line-height: 1.35; }
-    .modos button.ativo { background: #1e3a8a; outline: 3px solid #93c5fd; }
+    .modos button:hover, .modos a:hover { background: #1d4ed8; }
+    .modos button strong, .modos a strong { font-size: 18px; color: #fff; }
+    .modos button span, .modos a span { color: #dbeafe; font-size: 13px; font-weight: 500; line-height: 1.35; }
+    .modos button.ativo, .modos a.ativo { background: #1e3a8a; outline: 3px solid #93c5fd; }
+    .modos.visoes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .filtros-periodo { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+    .filtros-periodo button { background: #fff; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 999px; padding: 6px 12px; }
+    .filtros-periodo button.ativo { background: #0f172a; color: #fff; border-color: #0f172a; }
+    .filtro-vendedor { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 14px; }
+    .filtro-vendedor label { font-size: 13px; font-weight: 600; }
+    .filtro-vendedor select { min-width: 220px; }
+    .grupo-aparelhos { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; margin: 0 0 4px; }
+    .acoes-ficha a.secundario { display: inline-flex; align-items: center; text-decoration: none; padding: 8px 12px; border-radius: 8px; }
+    .ficha-card { border: 1px solid #e2e8f0; border-radius: 12px; margin-top: 12px; background: #fff; overflow: hidden; }
     .etapa { margin: 16px 0 8px; font-size: 13px; font-weight: 700; color: #0f172a; }
     .mais { margin: 8px 0 12px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; background: #f8fafc; }
     .mais summary { cursor: pointer; font-size: 13px; font-weight: 600; color: #334155; }
@@ -1281,7 +1638,9 @@ interface FichaEntrada {
     .cadeia { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin: 8px 0; background: #fff; }
     .cadeia.aberta { border-color: #fdba74; }
     .cadeia.fechada { border-color: #86efac; }
-    .cadeia-topo { display: flex; gap: 12px; align-items: baseline; width: 100%; background: transparent; border: 0; padding: 0; text-align: left; cursor: pointer; }
+    .cadeia.focada { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+    .cadeia-topo { display: flex; gap: 12px; align-items: baseline; width: 100%; background: transparent; border: 0; padding: 0; text-align: left; }
+    button.cadeia-topo { cursor: pointer; }
     .passos { margin-top: 8px; }
     .passo { padding: 8px 0; border-top: 1px solid #f1f5f9; }
     .mes { margin: 16px 0 24px; }
@@ -1301,11 +1660,60 @@ interface FichaEntrada {
     .testes label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
     .busca-estoque { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 14px; }
     .busca-estoque .form-group { min-width: 140px; }
+    .busca-estoque select { min-width: 180px; }
+    .busca-estoque .filtro-modelo { min-width: 260px; flex: 1.4; }
     .marca-estoque { margin: 18px 0 8px; font-size: 16px; }
     .marca-estoque span { margin-left: 8px; color: #64748b; font-size: 13px; font-weight: 500; }
     .grade-estoque { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 8px; }
     .card-aparelho { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; cursor: pointer; }
-    .card-aparelho.aberta { outline: 2px solid #0f172a; }
+    .card-aparelho.aberta { outline: 2px solid #0f172a; grid-column: 1 / -1; }
+    .ficha-grade { display: grid; grid-template-columns: minmax(240px, 360px) minmax(0, 1fr); gap: 16px; padding: 12px; background: #f8fafc; }
+    .ficha-fotos h4, .ficha-dados h4 { margin: 0 0 8px; }
+    .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; }
+    .galeria-item { position: relative; }
+    .galeria-item.marcada .mini { outline: 3px solid #0f766e; }
+    .marca-whats { position: absolute; top: 6px; left: 6px; z-index: 1; background: #fff; border-radius: 4px; padding: 2px; }
+    .galeria .mini { width: 100%; padding: 0; border: 0; background: #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; }
+    .galeria img, .galeria video { width: 100%; height: 108px; object-fit: cover; display: block; }
+    .foto-ampliada { margin: 8px 0; }
+    .foto-ampliada img, .foto-ampliada video { width: 100%; max-height: 420px; object-fit: contain; background: #0f172a; border-radius: 8px; }
+    .arquivo { display: inline-block; margin: 8px 8px 8px 0; cursor: pointer; }
+    .ficha-dados dl { display: grid; gap: 6px; margin: 0 0 10px; }
+    .ficha-dados dl div { display: flex; justify-content: space-between; gap: 12px; }
+    .ficha-dados dt { color: #64748b; }
+    .ficha-dados dd { margin: 0; font-weight: 600; text-align: right; }
+    .ficha-dados label { display: block; margin: 8px 0; font-size: 13px; }
+    .ficha-dados textarea, .ficha-dados input, .ficha-dados select { width: 100%; box-sizing: border-box; }
+    .peca-linha { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .peca-linha input[type="text"], .peca-linha input:not([type="checkbox"]) { flex: 1; }
+    .acoes-ficha { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .acoes-celula { white-space: nowrap; }
+    .perigo { color: #9a3412; border-color: #fecaca; background: #fff; }
+    button.link.perigo { border: 0; background: transparent; }
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 10100;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-box {
+      background: #fff; border-radius: 12px; width: 100%; max-width: 760px; max-height: 90vh;
+      display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25); overflow: hidden;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 16px 20px; background: #0d0d0d; color: #fff;
+    }
+    .modal-header h3 { margin: 0; font-size: 16px; color: #fff; }
+    .modal-close { background: transparent; border: 0; color: rgba(255,255,255,0.75); font-size: 18px; cursor: pointer; }
+    .modal-close:hover { color: #fff; }
+    .modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .modal-body .hint { margin-bottom: 12px; }
+    .modal-body .codigo-etiqueta { font-size: 36px; margin-bottom: 4px; }
+    .modal-body label { display: block; margin: 8px 0; font-size: 13px; }
+    .modal-body textarea, .modal-body input, .modal-body select { width: 100%; box-sizing: border-box; }
+    .modal-footer {
+      display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid #e2e8f0;
+    }
+    @media (max-width: 720px) { .ficha-grade { grid-template-columns: 1fr; } }
     .card-aparelho .capa { width: 100%; height: 140px; object-fit: cover; background: #f1f5f9; display: block; }
     .card-aparelho .capa.vazia { display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 13px; }
     .card-aparelho .corpo { padding: 10px 12px 12px; }
@@ -1347,6 +1755,7 @@ interface FichaEntrada {
   `],
 })
 export class AparelhosLojaPage implements OnInit, OnDestroy {
+  dicaAssistenciaAberta: { top: number; left: number; texto: string } | null = null;
   painel: AparelhoLojaPainel | null = null;
   carregando = false;
   salvando = false;
@@ -1368,6 +1777,37 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   ];
   buscaMarca = '';
   buscaModelo = '';
+  buscaModeloId = '';
+  buscaModeloLabel = '';
+  buscaModeloMarca = '';
+  modeloFiltroKey = 0;
+  buscaConfig = '';
+  buscaCor = '';
+  buscaCodigo = '';
+  buscaCodigoVenda = '';
+  achadosCodigoVenda: AparelhoLojaItem[] = [];
+  buscaCodigoTroca = '';
+  achadosCodigoTroca: AparelhoLojaItem[] = [];
+  visaoTransacoes: VisaoTransacoes = 'lista';
+  avisoCadeia = '';
+  buscaVendedor = '';
+  filtroCodigoTx = '';
+  filtroDataTx = '';
+  filtroTipoTx = '';
+  filtroModeloTx = '';
+  filtroValorDeTx: number | null = null;
+  filtroValorAteTx: number | null = null;
+  gridTransacoes = new GridPaginationState();
+  periodoDias: PeriodoDias = 30;
+  readonly periodos: { dias: PeriodoDias; nome: string }[] = [
+    { dias: 7, nome: '1 semana' },
+    { dias: 14, nome: '2 semanas' },
+    { dias: 30, nome: '1 mês' },
+    { dias: 90, nome: '3 meses' },
+  ];
+  private codigoPendente = '';
+  buscaCadeia = '';
+  codigosRecem: { codigo: string; nome: string }[] = [];
   buscaValorDe: number | null = null;
   buscaValorAte: number | null = null;
   buscaForma = '';
@@ -1392,10 +1832,32 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   opcaoJurosVenda: OpcaoParcela | null = null;
   opcaoJurosTroca: OpcaoParcela | null = null;
   fichaId: string | null = null;
+  editandoId = '';
+  aparelhoEmEdicao: AparelhoLojaItem | null = null;
+  salvandoEdicao = false;
+  enviandoFotos = false;
+  fotoAmpliada: { url?: string; tipo?: string } | null = null;
+  edicao: {
+    imei: string;
+    cor: string;
+    configuracao: string;
+    condicao: string;
+    valorVenda: number | null;
+    valorMinimo: number | null;
+    saudeBateria: number | null;
+    bateriaPerfeita: '' | 'sim' | 'nao';
+    observacoes: string;
+    alerta: string;
+    pecas: { nome: string; apareceMensagem: boolean }[];
+  } | null = null;
+  edicaoMarcaId = '';
+  edicaoModelo: ModeloAparelho | null = null;
+  edicaoModelos: ModeloAparelho[] = [];
   imeiInformado: Record<string, string> = {};
   fotosMarcadas = new Set<string>();
   enviandoWhatsapp = false;
   financeiro = false;
+  tela: TelaLoja = 'estoque';
   fotos: File[] = [];
   videos: File[] = [];
   testes = this.testesVazios();
@@ -1406,6 +1868,8 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   fotosSessao: { id: string; url: string; tipo?: string }[] = [];
   private fotosNaSessao = 0;
   private imeisQr: string[] = [];
+  private idsEstoqueAntes = new Set<string>();
+  private abrirQrNoProximo = false;
   osConsulta: OsAbertaConsulta | null = null;
   osBuscando = false;
   private buscaOs?: ReturnType<typeof setTimeout>;
@@ -1419,7 +1883,9 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     private router: Router,
     private appAuth: AppAuthService,
     private impressao: OsImpressaoService,
-  ) {}
+  ) {
+    this.gridTransacoes.pageSize = 100;
+  }
 
   get isAdmin(): boolean {
     return this.appAuth.isAdmin();
@@ -1438,12 +1904,20 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   get estoqueFiltrado(): AparelhoLojaItem[] {
-    const modelo = this.normalizar(this.buscaModelo);
+    const config = this.normalizar(this.buscaConfig);
+    const cor = this.normalizar(this.buscaCor);
     const de = this.numeroBusca(this.buscaValorDe);
     const ate = this.numeroBusca(this.buscaValorAte);
+    const porCodigo = this.buscaCodigo.trim()
+      ? new Set(this.aparelhosPorCodigo(this.buscaCodigo, this.estoque).map(a => a.id))
+      : null;
     return this.estoque.filter(a => {
+      if (porCodigo && !porCodigo.has(a.id)) return false;
       if (this.buscaMarca && !this.igual(a.marca, this.buscaMarca)) return false;
-      if (modelo && !this.normalizar(`${a.modelo} ${a.configuracao} ${a.cor}`).includes(modelo)) return false;
+      if ((this.buscaModeloId || this.buscaModelo) && !this.aparelhoBateModeloFiltro(a)) return false;
+      if (this.buscaVendedor && !this.vendedorBate(a.vendedorEntradaId, a.vendedorEntradaNome)) return false;
+      if (config && !this.normalizar(a.configuracao).includes(config)) return false;
+      if (cor && !this.normalizar(a.cor).includes(cor)) return false;
       if (this.buscaEstado && !this.igual(a.condicao, this.buscaEstado)) return false;
       if (this.buscaForma && this.formaDe(a) !== this.buscaForma) return false;
       const valor = Number(a.valorVenda) || 0;
@@ -1474,7 +1948,16 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   get marcasVenda(): string[] {
-    return this.opcoesDe('marca', () => true);
+    const mapa = new Map<string, string>();
+    const guardar = (nome?: string | null) => {
+      const texto = (nome || '').trim();
+      if (!texto) return;
+      const chave = texto.toLowerCase();
+      if (!mapa.has(chave)) mapa.set(chave, texto);
+    };
+    for (const m of this.marcas) guardar(m.nome);
+    for (const a of this.estoque) guardar(a.marca);
+    return [...mapa.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }
 
   get modelosVenda(): string[] {
@@ -1490,11 +1973,169 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   get aparelhoVendaSelecionado(): AparelhoLojaItem | null {
-    return this.unidadeDaLista(this.venda.aparelhoId, this.unidadesVenda);
+    const daLista = this.unidadeDaLista(this.venda.aparelhoId, this.unidadesVenda);
+    if (daLista) return daLista;
+    if (!this.venda.aparelhoId) return null;
+    return this.disponiveis.find(a => a.id === this.venda.aparelhoId) ?? null;
+  }
+
+  get aparelhoFicha(): AparelhoLojaItem | null {
+    if (!this.fichaId) return null;
+    return this.estoque.find(a => a.id === this.fichaId) ?? null;
+  }
+
+  get movimentos(): AparelhoMovimentoLinha[] {
+    return this.painel?.movimentos ?? [];
+  }
+
+  get tituloTela(): string {
+    if (this.tela === 'compra') return 'Compra';
+    if (this.tela === 'venda') return 'Venda';
+    if (this.tela === 'troca') return 'Troca';
+    if (this.tela === 'estoque') return 'Estoque';
+    if (this.tela === 'transacoes') return 'Transações';
+    return 'Financeiro dos aparelhos';
+  }
+
+  get dicaTela(): string {
+    if (this.tela === 'compra') return 'A loja recebe um aparelho. O código das costas o sistema gera na entrada — não precisa informar.';
+    if (this.tela === 'venda') return 'Busque pelo código que o sistema gerou na entrada, ou escolha marca e modelo.';
+    if (this.tela === 'troca') return 'O aparelho que sai se busca pelo código das costas. O que entra ganha um código novo na hora.';
+    if (this.tela === 'estoque') return 'Clique na linha para ver o cadastro. Editar abre uma janela. Compra, venda e troca ficam nos botões acima.';
+    if (this.tela === 'transacoes') return 'Uma linha por negócio. Filtre por código, data, tipo, vendedor, modelo e valor. A grid mostra 100 por página.';
+    return 'Valor de estoque e o dinheiro que entrou e saiu. Esta parte fica só para administrador.';
+  }
+
+  get transacoesFiltradas(): AparelhoOperacao[] {
+    const tipo = this.filtroTipoTx;
+    const modelo = this.normalizar(this.filtroModeloTx);
+    const de = this.numeroBusca(this.filtroValorDeTx);
+    const ate = this.numeroBusca(this.filtroValorAteTx);
+    return this.operacoes.filter(op => {
+      if (!this.noPeriodo(op.data)) return false;
+      if (!this.vendedorBate(op.vendedorId, op.vendedorNome)) return false;
+      if (tipo && op.tipo !== tipo) return false;
+      if (this.filtroCodigoTx.trim() && !this.transacaoBateCodigo(op, this.filtroCodigoTx)) return false;
+      if (modelo && !this.transacaoBateModelo(op, this.filtroModeloTx)) return false;
+      if (de != null || ate != null) {
+        const valor = this.valorTransacao(op);
+        if (de != null && valor < de) return false;
+        if (ate != null && valor > ate) return false;
+      }
+      return true;
+    });
+  }
+
+  get transacoesPaginadas(): AparelhoOperacao[] {
+    return this.gridTransacoes.paginate(this.transacoesFiltradas);
+  }
+
+  get cadeiasDoPeriodo() {
+    const lista = this.cadeiasVisiveis;
+    const noTempo = this.buscaCadeia.trim()
+      ? lista
+      : lista.filter(c => this.noPeriodo(c.inicio) || c.passos.some(p => this.noPeriodo(p.data)));
+    const comVendedor = this.buscaVendedor
+      ? noTempo.filter(c => c.passos.some(p =>
+        this.vendedorBate(p.vendedorId || this.vendedorIdDaOperacao(p.operacaoId), p.vendedorNome || this.vendedorDaOperacao(p.operacaoId))))
+      : noTempo;
+    if (!this.cadeiaAberta) return comVendedor;
+    const foco = this.cadeias.find(c => c.id === this.cadeiaAberta);
+    if (!foco || comVendedor.some(c => c.id === foco.id)) return comVendedor;
+    return [foco, ...comVendedor];
+  }
+
+  private vendedoresCacheChave = '';
+  private vendedoresCache: AparelhoVendedorCadastro[] = [];
+
+  trackVendedor = (_: number, v: AparelhoVendedorCadastro) => v.id || v.nome;
+
+  get vendedoresCadastrados(): AparelhoVendedorCadastro[] {
+    const chave = [
+      (this.painel?.vendedoresCadastrados ?? []).map(v => `${v.id}:${v.nome}`).join('|'),
+      this.operacoes.map(op => `${op.vendedorId}:${op.vendedorNome}`).join('|'),
+      this.estoque.map(a => `${a.vendedorEntradaId}:${a.vendedorEntradaNome}`).join('|'),
+    ].join('/');
+    if (chave === this.vendedoresCacheChave) return this.vendedoresCache;
+    const mapa = new Map<string, AparelhoVendedorCadastro>();
+    const guardar = (id?: string | null, nome?: string | null) => {
+      const texto = (nome || '').trim();
+      if (!texto) return;
+      const k = this.normalizar(texto);
+      const atual = mapa.get(k);
+      if (!atual) {
+        mapa.set(k, { id: id || undefined, nome: texto });
+        return;
+      }
+      if (!atual.id && id) atual.id = id;
+    };
+    for (const v of this.painel?.vendedoresCadastrados ?? []) guardar(v.id, v.nome);
+    for (const op of this.operacoes) guardar(op.vendedorId, op.vendedorNome);
+    for (const a of this.estoque) guardar(a.vendedorEntradaId, a.vendedorEntradaNome);
+    this.vendedoresCacheChave = chave;
+    this.vendedoresCache = [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    return this.vendedoresCache;
+  }
+
+  get resultadosPorVendedor(): {
+    nome: string;
+    compras: number;
+    vendas: number;
+    trocas: number;
+    entrou: number;
+    saiu: number;
+    resultado: number;
+  }[] {
+    const noPeriodo = this.operacoes.filter(op => this.noPeriodo(op.data) && op.status !== 'estornada');
+    return this.vendedoresCadastrados.map(v => {
+      const ops = noPeriodo.filter(op => this.vendedorBateCadastro(op.vendedorId, op.vendedorNome, v));
+      const entrou = ops.reduce((s, op) => s + (Number(op.dinheiroRecebido) || 0), 0);
+      const saiu = ops.reduce((s, op) => s + (Number(op.dinheiroPago) || 0), 0);
+      return {
+        nome: v.nome,
+        compras: ops.filter(op => op.tipo === 'compra').length,
+        vendas: ops.filter(op => op.tipo === 'venda').length,
+        trocas: ops.filter(op => op.tipo === 'troca').length,
+        entrou,
+        saiu,
+        resultado: Math.round((entrou - saiu) * 100) / 100,
+      };
+    });
+  }
+
+  get resumoVendedor(): {
+    nome: string;
+    compras: number;
+    vendas: number;
+    trocas: number;
+    entrou: number;
+    saiu: number;
+    resultado: number;
+  } | null {
+    if (!this.buscaVendedor) return null;
+    const ops = this.transacoesFiltradas.filter(op => op.status !== 'estornada');
+    const entrou = ops.reduce((s, op) => s + (Number(op.dinheiroRecebido) || 0), 0);
+    const saiu = ops.reduce((s, op) => s + (Number(op.dinheiroPago) || 0), 0);
+    return {
+      nome: this.buscaVendedor,
+      compras: ops.filter(op => op.tipo === 'compra').length,
+      vendas: ops.filter(op => op.tipo === 'venda').length,
+      trocas: ops.filter(op => op.tipo === 'troca').length,
+      entrou,
+      saiu,
+      resultado: Math.round((entrou - saiu) * 100) / 100,
+    };
+  }
+
+  get cadeiasVisiveis() {
+    return this.cadeiasDoTermo(this.buscaCadeia);
   }
 
   get aparelhoTrocaSelecionado(): AparelhoLojaItem | null {
-    return this.unidadeDaLista(this.troca.aparelhoSaidaId, this.unidadesTroca);
+    const daLista = this.unidadeDaLista(this.troca.aparelhoSaidaId, this.unidadesTroca);
+    if (daLista) return daLista;
+    if (!this.troca.aparelhoSaidaId) return null;
+    return this.disponiveis.find(a => a.id === this.troca.aparelhoSaidaId) ?? null;
   }
 
   get modelosTroca(): string[] {
@@ -1635,7 +2276,16 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.financeiro = this.route.snapshot.data['financeiro'] === true;
+    const data = this.route.snapshot.data;
+    this.financeiro = data['financeiro'] === true;
+    const tela = data['tela'] as TelaLoja | undefined;
+    this.tela = this.financeiro ? 'financeiro' : (tela ?? 'estoque');
+    this.codigoPendente = this.route.snapshot.queryParamMap.get('codigo') ?? '';
+    if (this.tela === 'transacoes' && this.codigoPendente) {
+      this.buscaCadeia = this.codigoPendente;
+      this.visaoTransacoes = 'cadeia';
+    }
+    if (this.tela === 'compra' || this.tela === 'venda' || this.tela === 'troca') this.abrir(this.tela);
     this.aparelhos.listarMarcas(undefined, 'Celular').subscribe({
       next: marcas => { this.marcas = marcas ?? []; },
       error: () => { this.marcas = []; },
@@ -1653,6 +2303,11 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   abrir(modo: Modo): void {
     this.fecharQr();
+    this.codigosRecem = [];
+    this.buscaCodigoVenda = '';
+    this.achadosCodigoVenda = [];
+    this.buscaCodigoTroca = '';
+    this.achadosCodigoTroca = [];
     this.modo = modo;
     this.erro = '';
     this.cliente = null;
@@ -1950,12 +2605,254 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   cancelar(): void {
-    this.modo = null;
     this.fecharQr();
+    void this.router.navigate(['/vendas-celulares/estoque']);
+  }
+
+  onBuscaCodigoVenda(termo: string): void {
+    this.buscaCodigoVenda = termo;
+    const achados = this.aparelhosPorCodigo(termo, this.disponiveis);
+    this.achadosCodigoVenda = achados;
+    if (achados.length === 1) this.escolherVendaPorCodigo(achados[0]);
+  }
+
+  escolherVendaPorCodigo(a: AparelhoLojaItem): void {
+    this.venda.marca = a.marca;
+    this.venda.modelo = a.modelo;
+    this.venda.cor = a.cor;
+    this.venda.aparelhoId = a.id || '';
+    this.aplicarPrecoVenda(a);
+  }
+
+  onBuscaCodigoTroca(termo: string): void {
+    this.buscaCodigoTroca = termo;
+    const achados = this.aparelhosPorCodigo(termo, this.disponiveis);
+    this.achadosCodigoTroca = achados;
+    if (achados.length === 1) this.escolherTrocaPorCodigo(achados[0]);
+  }
+
+  escolherTrocaPorCodigo(a: AparelhoLojaItem): void {
+    this.troca.marca = a.marca;
+    this.troca.modelo = a.modelo;
+    this.troca.cor = a.cor;
+    this.troca.aparelhoSaidaId = a.id || '';
+    this.aplicarPrecoTroca(a);
+  }
+
+  aparelhosSaiu(op: AparelhoOperacao): AparelhoCadeiaItem[] {
+    return op.saiu?.length ? op.saiu : [];
+  }
+
+  aparelhosEntrou(op: AparelhoOperacao): AparelhoCadeiaItem[] {
+    return op.entrou?.length ? op.entrou : [];
+  }
+
+  textoAparelhoGrupo(a: AparelhoCadeiaItem): string {
+    const partes = [a.codigo, a.nome, a.imei ? `IMEI ${a.imei}` : ''].filter(s => !!s);
+    return partes.join(' · ') || 'aparelho';
+  }
+
+  abrirVisaoCadeia(): void {
+    this.visaoTransacoes = 'cadeia';
+    this.avisoCadeia = '';
+    if (!this.cadeiaAberta && this.cadeiasDoPeriodo.length === 1) {
+      this.cadeiaAberta = this.cadeiasDoPeriodo[0].id;
+    }
+  }
+
+  abrirCadeiaDaOperacao(op: AparelhoOperacao): void {
+    const ids = new Set([
+      ...(op.saiu ?? []).map(a => a.aparelhoId),
+      ...(op.entrou ?? []).map(a => a.aparelhoId),
+    ].filter((id): id is string => !!id));
+    const cadeia = this.cadeias.find(c =>
+      c.passos.some(p => p.operacaoId === op.id)
+      || c.passos.some(p => [...p.entrou, ...p.saiu].some(a => a.aparelhoId && ids.has(a.aparelhoId))));
+    this.visaoTransacoes = 'cadeia';
+    this.buscaCadeia = '';
+    if (cadeia) {
+      this.avisoCadeia = '';
+      this.cadeiaAberta = cadeia.id;
+      this.rolarAteCadeia(cadeia.id);
+      return;
+    }
+    this.cadeiaAberta = '';
+    this.avisoCadeia = op.tipo === 'compra'
+      ? 'Compra ainda não tem cadeia. A cadeia aparece quando esse aparelho entra numa troca ou numa venda.'
+      : 'Não encontrei a cadeia desta transação. Ela só existe depois de uma troca ou venda.';
+  }
+
+  private noPeriodo(dataIso?: string | null): boolean {
+    if (!dataIso) return false;
+    if (this.filtroDataTx) return this.dataTransacaoBate(dataIso, this.filtroDataTx);
+    const t = Date.parse(dataIso);
+    if (!Number.isFinite(t)) return false;
+    return t >= Date.now() - this.periodoDias * 24 * 60 * 60 * 1000;
+  }
+
+  escolherVendedor(nome: string): void {
+    this.buscaVendedor = this.buscaVendedor === nome ? '' : nome;
+    this.resetPaginaTransacoes();
+  }
+
+  escolherPeriodo(dias: PeriodoDias): void {
+    this.periodoDias = dias;
+    this.resetPaginaTransacoes();
+  }
+
+  resetPaginaTransacoes(): void {
+    this.gridTransacoes.reset();
+  }
+
+  codigosTransacao(op: AparelhoOperacao): string {
+    const itens = [...this.aparelhosEntrou(op), ...this.aparelhosSaiu(op)];
+    const codes = [...new Set(itens.map(a => (a.codigo || '').trim()).filter(c => !!c))];
+    return codes.join(' · ') || '—';
+  }
+
+  valorTransacao(op: AparelhoOperacao): number {
+    const caixa = Math.max(Number(op.dinheiroRecebido) || 0, Number(op.dinheiroPago) || 0);
+    if (caixa > 0) return caixa;
+    const itens = [...this.aparelhosEntrou(op), ...this.aparelhosSaiu(op)];
+    return itens.reduce((m, a) => Math.max(m, Number(a.valor) || 0), 0);
+  }
+
+  private transacaoBateCodigo(op: AparelhoOperacao, termo: string): boolean {
+    const t = termo.trim().toUpperCase().replace(/\s+/g, '');
+    if (!t) return true;
+    const itens = [...this.aparelhosEntrou(op), ...this.aparelhosSaiu(op)];
+    return itens.some(a => {
+      const c = (a.codigo || '').toUpperCase();
+      if (!c) return false;
+      if (/^[NU]\d+$/.test(t)) return c === t;
+      if (/^\d+$/.test(t)) return c.slice(1) === String(Number(t));
+      return c.startsWith(t);
+    });
+  }
+
+  private transacaoBateModelo(op: AparelhoOperacao, termo: string): boolean {
+    const tokens = this.normalizar(termo).split(/\s+/).filter(Boolean);
+    if (!tokens.length) return true;
+    const itens = [...this.aparelhosEntrou(op), ...this.aparelhosSaiu(op)];
+    return itens.some(a => {
+      const hay = this.normalizar(`${a.codigo || ''} ${a.nome || ''}`);
+      return tokens.every(tok => hay.includes(tok));
+    });
+  }
+
+  private dataTransacaoBate(iso: string, ymd: string): boolean {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return false;
+    const chave = [
+      d.getUTCFullYear(),
+      String(d.getUTCMonth() + 1).padStart(2, '0'),
+      String(d.getUTCDate()).padStart(2, '0'),
+    ].join('-');
+    return chave === ymd;
+  }
+
+  private vendedorBate(id?: string | null, nome?: string | null): boolean {
+    if (!this.buscaVendedor) return true;
+    const escolhido = this.vendedoresCadastrados.find(v => this.igual(v.nome, this.buscaVendedor));
+    return this.vendedorBateCadastro(id, nome, escolhido ?? { nome: this.buscaVendedor });
+  }
+
+  private vendedorBateCadastro(id?: string | null, nome?: string | null, escolhido?: AparelhoVendedorCadastro): boolean {
+    if (!escolhido) return true;
+    if (escolhido.id && id && escolhido.id === id) return true;
+    return this.igual(nome || 'Loja', escolhido.nome);
+  }
+
+  private vendedorDaOperacao(operacaoId?: string | null): string {
+    if (!operacaoId) return '';
+    return this.operacoes.find(op => op.id === operacaoId)?.vendedorNome || '';
+  }
+
+  private vendedorIdDaOperacao(operacaoId?: string | null): string {
+    if (!operacaoId) return '';
+    return this.operacoes.find(op => op.id === operacaoId)?.vendedorId || '';
+  }
+
+  onBuscaCadeia(termo: string): void {
+    this.buscaCadeia = termo;
+    this.avisoCadeia = '';
+    const lista = this.cadeiasDoTermo(termo);
+    this.cadeiaAberta = lista.length === 1 ? lista[0].id : '';
+  }
+
+  aparelhosPorCodigo(termo: string, lista: AparelhoLojaItem[]): AparelhoLojaItem[] {
+    const t = termo.trim().toUpperCase().replace(/\s+/g, '');
+    if (!t) return [];
+    const com = lista.filter(a => !!a.codigo);
+    if (/^[NU]\d+$/.test(t)) return com.filter(a => (a.codigo || '').toUpperCase() === t);
+    if (/^\d+$/.test(t)) {
+      const n = String(Number(t));
+      return com.filter(a => (a.codigo || '').toUpperCase().slice(1) === n);
+    }
+    return com.filter(a => (a.codigo || '').toUpperCase().startsWith(t));
   }
 
   onBuscaMarca(marca: string): void {
     this.buscaMarca = marca;
+    if (this.buscaModeloMarca && marca && !this.igual(this.buscaModeloMarca, marca)) {
+      this.limparFiltroModeloEstoque();
+    }
+  }
+
+  buscarModeloEstoqueFn = (termo: string): Observable<AutocompleteItem[]> =>
+    this.aparelhos.listarModelos({
+      termo: termo.trim() || undefined,
+      marcaId: this.marcaIdDaBusca,
+      marcaNome: this.buscaMarca || undefined,
+      tipoDispositivo: 'Celular',
+      limite: MODELO_LIMITE_LISTA,
+    }).pipe(
+      map(lista => (lista ?? [])
+        .filter(modelo => this.modeloEstaNoEstoque(modelo))
+        .map(modeloParaAutocomplete)),
+    );
+
+  onFiltroModeloEstoque(item: AutocompleteItem | null): void {
+    if (!item?.id && !item?.nome?.trim()) {
+      this.buscaModeloId = '';
+      this.buscaModelo = '';
+      this.buscaModeloLabel = '';
+      this.buscaModeloMarca = '';
+      return;
+    }
+    this.buscaModeloId = item.id || '';
+    this.buscaModelo = (item.nome || '').trim();
+    this.buscaModeloMarca = (item.marcaNome || '').trim();
+    this.buscaModeloLabel = this.buscaModeloMarca
+      ? `${this.buscaModeloMarca} · ${this.buscaModelo}`
+      : this.buscaModelo;
+    if (this.buscaModeloMarca && !this.buscaMarca) this.buscaMarca = this.buscaModeloMarca;
+  }
+
+  private limparFiltroModeloEstoque(): void {
+    this.buscaModeloId = '';
+    this.buscaModelo = '';
+    this.buscaModeloLabel = '';
+    this.buscaModeloMarca = '';
+    this.modeloFiltroKey += 1;
+  }
+
+  private get marcaIdDaBusca(): string | undefined {
+    if (!this.buscaMarca) return undefined;
+    return this.marcas.find(m => this.igual(m.nome, this.buscaMarca))?.id;
+  }
+
+  private modeloEstaNoEstoque(modelo: ModeloAparelho): boolean {
+    return this.estoque.some(a =>
+      (!!modelo.id && a.modeloId === modelo.id)
+      || (this.igual(a.marca, modelo.marcaNome) && this.igual(a.modelo, modelo.nome)));
+  }
+
+  private aparelhoBateModeloFiltro(a: AparelhoLojaItem): boolean {
+    if (this.buscaModeloId && a.modeloId === this.buscaModeloId) return true;
+    if (!this.buscaModelo) return !this.buscaModeloId;
+    return this.igual(a.modelo, this.buscaModelo)
+      && (!this.buscaModeloMarca || this.igual(a.marca, this.buscaModeloMarca));
   }
 
   formaDe(a: AparelhoLojaItem): string {
@@ -2003,8 +2900,269 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   alternarFicha(id?: string): void {
     if (!id) return;
-    this.fichaId = this.fichaId === id ? null : id;
+    const fecha = this.fichaId === id;
+    this.fichaId = fecha ? null : id;
     this.fotosMarcadas = new Set();
+    if (fecha) this.fotoAmpliada = null;
+  }
+
+  get aparelhoEdicao(): AparelhoLojaItem | null {
+    if (!this.editandoId) return null;
+    return this.estoque.find(a => a.id === this.editandoId) ?? null;
+  }
+
+  podeEditar(a: AparelhoLojaItem): boolean {
+    return a.status === 'em_estoque' || a.status === 'em_assistencia';
+  }
+
+  ampliarFoto(foto: { url?: string; tipo?: string }): void {
+    this.fotoAmpliada = this.fotoAmpliada?.url === foto.url ? null : foto;
+  }
+
+  async incluirFotos(a: AparelhoLojaItem, evento: Event): Promise<void> {
+    const input = evento.target as HTMLInputElement;
+    const arquivos = Array.from(input.files ?? []);
+    input.value = '';
+    if (!a.id || !arquivos.length || this.enviandoFotos) return;
+    this.enviandoFotos = true;
+    let preparados: File[];
+    try {
+      preparados = await Promise.all(arquivos.map(arquivo => this.prepararFotoComputador(arquivo)));
+    } catch (err) {
+      this.enviandoFotos = false;
+      avisarErroUsuario(err instanceof Error ? err.message : 'Não foi possível ler a foto.');
+      return;
+    }
+    const grande = preparados.find(arquivo => {
+      const video = arquivo.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|3gp)$/i.test(arquivo.name);
+      return arquivo.size > (video ? 40 : 8) * 1024 * 1024;
+    });
+    if (grande) {
+      this.enviandoFotos = false;
+      avisarErroUsuario('Cada foto pode ter no máximo 8 MB e cada vídeo 40 MB.');
+      return;
+    }
+    this.api.fotos(a.id, preparados).subscribe({
+      next: painel => {
+        this.painel = painel;
+        this.enviandoFotos = false;
+        avisarSucessoUsuario('Fotos incluídas neste aparelho.');
+      },
+      error: err => {
+        this.enviandoFotos = false;
+        avisarErroUsuario(err?.error?.erro || 'Não foi possível incluir as fotos.');
+      },
+    });
+  }
+
+  private async prepararFotoComputador(arquivo: File): Promise<File> {
+    const video = arquivo.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|3gp)$/i.test(arquivo.name);
+    if (video) return arquivo;
+    try {
+      const bitmap = await createImageBitmap(arquivo);
+      const maximo = 2000;
+      const escala = Math.min(1, maximo / Math.max(bitmap.width, bitmap.height));
+      const largura = Math.max(1, Math.round(bitmap.width * escala));
+      const altura = Math.max(1, Math.round(bitmap.height * escala));
+      const tela = document.createElement('canvas');
+      tela.width = largura;
+      tela.height = altura;
+      const ctx = tela.getContext('2d');
+      if (!ctx) {
+        bitmap.close();
+        return arquivo;
+      }
+      ctx.drawImage(bitmap, 0, 0, largura, altura);
+      bitmap.close();
+      const blob = await new Promise<Blob | null>(resolve => tela.toBlob(resolve, 'image/jpeg', 0.82));
+      if (!blob?.size) return arquivo;
+      const base = (arquivo.name || 'foto').replace(/\.[^.]+$/, '') || 'foto';
+      return new File([blob], `${base}.jpg`, { type: 'image/jpeg' });
+    } catch {
+      const compativel = /jpe?g|png|webp|gif/i.test(arquivo.type) || /\.(jpe?g|png|webp|gif)$/i.test(arquivo.name);
+      if (compativel) return arquivo;
+      throw new Error('Esta foto não abriu neste computador. Envie JPG ou PNG, ou use o QR no celular.');
+    }
+  }
+
+  get configuracoesEdicao(): string[] {
+    const atual = (this.edicao?.configuracao || '').trim();
+    if (atual && !this.configuracoes.includes(atual)) return [atual, ...this.configuracoes];
+    return this.configuracoes;
+  }
+
+  get edicaoEhIphone(): boolean {
+    const nome = `${this.edicaoModelo?.marcaNome || ''} ${this.edicaoModelo?.nome || ''}`;
+    return this.normalizar(nome).includes('iphone');
+  }
+
+  abrirEdicao(a: AparelhoLojaItem): void {
+    if (!this.podeEditar(a)) return;
+    this.aparelhoEmEdicao = a;
+  }
+
+  aoSalvarEdicao(painel: AparelhoLojaPainel): void {
+    this.painel = painel;
+    this.cancelarEdicao();
+  }
+
+  aoAtualizarEdicao(painel: AparelhoLojaPainel): void {
+    this.painel = painel;
+    const id = this.aparelhoEmEdicao?.id;
+    if (id) {
+      const atual = (painel.estoque || []).find(x => x.id === id);
+      if (atual) this.aparelhoEmEdicao = atual;
+    }
+  }
+
+  aoExcluirAparelho(painel: AparelhoLojaPainel): void {
+    const id = this.aparelhoEmEdicao?.id;
+    this.painel = painel;
+    this.cancelarEdicao();
+    if (id && this.fichaId === id) this.fichaId = null;
+  }
+
+  excluirAparelho(a: AparelhoLojaItem): void {
+    if (!this.isAdmin || !a.id) return;
+    if (!confirm('Excluir este aparelho do estoque? Se ele entrou por compra, a compra some junto. Aparelho de troca precisa excluir a troca nas transações.')) return;
+    const id = a.id;
+    this.enviar(this.api.excluirAparelho(id), 'Aparelho excluído.', undefined, () => {
+      if (this.fichaId === id) this.fichaId = null;
+      if (this.aparelhoEmEdicao?.id === id) this.cancelarEdicao();
+    });
+  }
+
+  comecarEdicao(a: AparelhoLojaItem): void {
+    const marca = this.marcas.find(m => m.id === a.marcaId) || this.marcas.find(m => this.igual(m.nome, a.marca));
+    this.editandoId = a.id || '';
+    this.edicaoMarcaId = marca?.id || '';
+    this.edicaoModelo = {
+      id: a.modeloId || '',
+      nome: a.modelo,
+      marcaId: this.edicaoMarcaId,
+      marcaNome: a.marca,
+    };
+    this.edicaoModelos = this.edicaoModelo.id ? [this.edicaoModelo] : [];
+    this.edicao = {
+      imei: a.imei || '',
+      cor: a.cor || '',
+      configuracao: a.configuracao || '',
+      condicao: a.condicao === 'novo' ? 'novo' : 'usado',
+      valorVenda: a.valorVenda ?? null,
+      valorMinimo: a.valorMinimoVenda ?? null,
+      saudeBateria: a.saudeBateria ?? null,
+      bateriaPerfeita: a.bateriaPerfeita === true ? 'sim' : a.bateriaPerfeita === false ? 'nao' : '',
+      observacoes: a.observacoes || '',
+      alerta: a.alertaPermanente || '',
+      pecas: (a.pecasTrocadas?.length ? a.pecasTrocadas : [{ nome: '', apareceMensagem: false }])
+        .map(p => ({ nome: p.nome, apareceMensagem: !!p.apareceMensagem })),
+    };
+    this.carregarModelosEdicao(this.edicaoMarcaId);
+  }
+
+  cancelarEdicao(): void {
+    this.editandoId = '';
+    this.aparelhoEmEdicao = null;
+    this.edicao = null;
+    this.edicaoModelo = null;
+    this.edicaoMarcaId = '';
+    this.edicaoModelos = [];
+  }
+
+  onMarcaEdicao(id: string): void {
+    this.edicaoMarcaId = id;
+    this.edicaoModelo = null;
+    this.edicaoModelos = [];
+    this.carregarModelosEdicao(id);
+  }
+
+  onModeloEdicaoId(id: string): void {
+    if (!id) {
+      this.edicaoModelo = null;
+      return;
+    }
+    const modelo = this.edicaoModelos.find(m => m.id === id);
+    const marca = this.marcas.find(m => m.id === this.edicaoMarcaId);
+    this.edicaoModelo = {
+      id,
+      nome: modelo?.nome || '',
+      marcaId: this.edicaoMarcaId,
+      marcaNome: marca?.nome || modelo?.marcaNome || '',
+    };
+  }
+
+  salvarCadastro(): void {
+    const a = this.aparelhoEdicao;
+    if (!a?.id || !this.edicao || this.salvandoEdicao) return;
+    if (!this.edicaoModelo?.nome?.trim() || !this.edicaoModelo.marcaNome?.trim()) {
+      avisarErroUsuario('Selecione a marca e o modelo.');
+      return;
+    }
+    const valorVenda = Number(this.edicao.valorVenda);
+    const valorMinimo = Number(this.edicao.valorMinimo);
+    if (!(valorVenda > 0) || !(valorMinimo > 0)) {
+      avisarErroUsuario('Informe o valor de venda e o mínimo.');
+      return;
+    }
+    if (valorMinimo > valorVenda) {
+      avisarErroUsuario('O valor mínimo não pode passar do valor de venda.');
+      return;
+    }
+    if (this.edicaoEhIphone && this.edicao.bateriaPerfeita !== 'sim' && this.edicao.bateriaPerfeita !== 'nao') {
+      avisarErroUsuario('Informe se a saúde da bateria do iPhone está em perfeitas condições.');
+      return;
+    }
+    const imei = this.imeiParaEntrada(this.edicao.imei);
+    const pecas = this.edicaoEhIphone ? this.pecasPreenchidas(this.edicao.pecas) : [];
+    this.salvandoEdicao = true;
+    this.api.editarCadastro(a.id, {
+      imei,
+      marca: this.edicaoModelo.marcaNome,
+      modelo: this.edicaoModelo.nome,
+      marcaId: this.edicaoModelo.marcaId,
+      modeloId: this.edicaoModelo.id,
+      cor: this.edicao.cor,
+      configuracao: this.edicao.configuracao,
+      condicao: this.edicao.condicao,
+      valorVenda,
+      valorMinimoVenda: valorMinimo,
+      observacoes: this.edicao.observacoes,
+      alertaPermanente: this.edicao.alerta,
+      saudeBateria: this.edicao.saudeBateria,
+      bateriaPerfeita: this.edicaoEhIphone ? this.edicao.bateriaPerfeita === 'sim' : null,
+      pecasTrocadas: pecas,
+    }).subscribe({
+      next: painel => {
+        this.painel = painel;
+        this.salvandoEdicao = false;
+        this.cancelarEdicao();
+        avisarSucessoUsuario('Cadastro atualizado.');
+      },
+      error: err => {
+        this.salvandoEdicao = false;
+        avisarErroUsuario(err?.error?.erro || 'Não foi possível salvar o cadastro.');
+      },
+    });
+  }
+
+  private carregarModelosEdicao(marcaId: string): void {
+    if (!marcaId) {
+      this.edicaoModelos = [];
+      return;
+    }
+    this.aparelhos.listarModelos({ marcaId, tipoDispositivo: 'Celular', limite: MODELO_LIMITE_LISTA }).subscribe({
+      next: lista => {
+        if (this.edicaoMarcaId !== marcaId) return;
+        const modelos = lista ?? [];
+        const atual = this.edicaoModelo;
+        this.edicaoModelos = atual?.id && !modelos.some(m => m.id === atual.id)
+          ? [atual, ...modelos]
+          : modelos;
+      },
+      error: () => {
+        if (this.edicaoMarcaId === marcaId && !this.edicaoModelos.length) this.edicaoModelos = [];
+      },
+    });
   }
 
   salvarImei(a: AparelhoLojaItem): void {
@@ -2220,6 +3378,25 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return status || '—';
   }
 
+  dicaAssistencia(a: AparelhoLojaItem): string {
+    const os = (a.osEntradaNumero || a.osEntradaId || '').toString().trim();
+    const justificativa = (a.justificativaAssistencia || a.observacoes || 'Aparelho na assistência.').trim();
+    return os ? `OS ${os}\n${justificativa}` : justificativa;
+  }
+
+  mostrarDicaAssistencia(ev: MouseEvent, a: AparelhoLojaItem): void {
+    const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+    this.dicaAssistenciaAberta = {
+      top: r.bottom + 8,
+      left: Math.max(12, r.left - 140),
+      texto: this.dicaAssistencia(a),
+    };
+  }
+
+  esconderDicaAssistencia(): void {
+    this.dicaAssistenciaAberta = null;
+  }
+
   liberar(item: AparelhoLojaItem): void {
     if (!item.id) return;
     this.enviar(this.api.liberar(item.id), 'Aparelho liberado para venda.');
@@ -2241,6 +3418,29 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   get cadeias() {
     return this.painel?.cadeias ?? [];
+  }
+
+  private cadeiasDoTermo(termo: string) {
+    const compacto = (valor: string) => this.normalizar(valor).replace(/\s+/g, '');
+    const t = compacto(termo);
+    if (!t) return this.cadeias;
+    return this.cadeias.filter(c => {
+      if (compacto(c.titulo).includes(t) || this.normalizar(c.titulo).includes(this.normalizar(termo))) return true;
+      return c.passos.some(p => [...p.entrou, ...p.saiu].some(a => {
+        const codigo = (a.codigo || '').toLowerCase();
+        const imei = (a.imei || '').toLowerCase();
+        const nome = compacto(a.nome);
+        if (/^[nu]\d+$/.test(t)) return codigo === t;
+        if (/^\d+$/.test(t)) return codigo.slice(1) === String(Number(t));
+        return codigo.startsWith(t) || imei.includes(t) || nome.includes(t) || compacto(a.nome).includes(t);
+      }));
+    });
+  }
+
+  private rolarAteCadeia(id: string): void {
+    setTimeout(() => {
+      document.getElementById('cadeia-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   }
 
   get meses() {
@@ -2322,7 +3522,9 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.imeisOsNova = this.entrada.passaPorAssistencia && !this.entrada.osNumero.trim()
       ? [apenasDigitos(this.entrada.imei)]
       : [];
-    this.imeisQr = [apenasDigitos(aparelho.imei)];
+    this.marcarEstoqueAntes();
+    this.abrirQrNoProximo = true;
+    this.imeisQr = aparelho.imei ? [apenasDigitos(aparelho.imei)] : [];
     this.enviar(
       this.api.comprar({
         aparelho,
@@ -2414,7 +3616,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       }
       prontos.push({ ficha, aparelho, avaliado });
     }
-    const imeis = prontos.map(p => p.aparelho.imei);
+    const imeis = prontos.map(p => p.aparelho.imei).filter(imei => apenasDigitos(imei).length === 15);
     if (new Set(imeis).size !== imeis.length) {
       avisarErroUsuario('Não repita o mesmo IMEI na troca.');
       return;
@@ -2445,6 +3647,8 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.imeisOsNova = this.entradasTroca
       .filter(ficha => ficha.dados.passaPorAssistencia && !ficha.dados.osNumero.trim())
       .map(ficha => apenasDigitos(ficha.dados.imei));
+    this.marcarEstoqueAntes();
+    this.abrirQrNoProximo = true;
     this.imeisQr = imeis.map(valor => apenasDigitos(valor));
     this.enviarComMidias(
       this.api.trocar({
@@ -2477,6 +3681,12 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   estornar(op: AparelhoOperacao): void {
     if (!op.id || !confirm('Desfazer esta operação? O estoque e o desconto voltam ao estado anterior.')) return;
     this.enviar(this.api.estornar(op.id), 'Operação desfeita.');
+  }
+
+  excluirOperacao(op: AparelhoOperacao): void {
+    if (!this.isAdmin || !op.id) return;
+    if (!confirm('Excluir esta transação? Compra tira o aparelho do estoque. Venda devolve o aparelho. A linha some da lista.')) return;
+    this.enviar(this.api.excluirOperacao(op.id), 'Transação excluída.');
   }
 
   private validarDiferencaTroca(): boolean {
@@ -3055,10 +4265,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       avisarErroUsuario(`Selecione o modelo${qual}.`);
       return null;
     }
-    if (apenasDigitos(ficha.dados.imei).length !== 15) {
-      avisarErroUsuario(`O IMEI${qual} precisa ter 15 dígitos.`);
-      return null;
-    }
+    const imei = this.imeiParaEntrada(ficha.dados.imei, qual);
     if (!ficha.dados.cor.trim()) {
       avisarErroUsuario(`Informe a cor${qual}.`);
       return null;
@@ -3088,7 +4295,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       return null;
     }
     return {
-      imei: ficha.dados.imei,
+      imei,
       marca: ficha.modelo.marcaNome,
       modelo: ficha.modelo.nome,
       marcaId: ficha.modelo.marcaId,
@@ -3125,6 +4332,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
         this.salvando = false;
         this.imeisOsNova = [];
         this.imeisQr = [];
+        this.abrirQrNoProximo = false;
         limparRascunhoContrato();
         this.erro = err?.error?.erro || 'Não foi possível salvar.';
         avisarErroUsuario(this.erro);
@@ -3164,10 +4372,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       avisarErroUsuario('Selecione o modelo do aparelho.');
       return null;
     }
-    if (apenasDigitos(this.entrada.imei).length !== 15) {
-      avisarErroUsuario('O IMEI precisa ter 15 dígitos.');
-      return null;
-    }
+    const imei = this.imeiParaEntrada(this.entrada.imei);
     if (!this.entrada.cor.trim()) {
       avisarErroUsuario('Informe a cor do aparelho.');
       return null;
@@ -3196,7 +4401,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       return null;
     }
     return {
-      imei: this.entrada.imei,
+      imei,
       marca: this.modelo.marcaNome,
       modelo: this.modelo.nome,
       marcaId: this.modelo.marcaId,
@@ -3253,6 +4458,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
         this.salvando = false;
         this.imeisOsNova = [];
         this.imeisQr = [];
+        this.abrirQrNoProximo = false;
         limparRascunhoContrato();
         this.erro = err?.error?.erro || 'Não foi possível salvar.';
         avisarErroUsuario(this.erro);
@@ -3266,6 +4472,14 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       next: painel => {
         this.painel = painel;
         this.carregando = false;
+        if (this.codigoPendente) {
+          if (this.tela === 'venda') this.onBuscaCodigoVenda(this.codigoPendente);
+          if (this.tela === 'troca') this.onBuscaCodigoTroca(this.codigoPendente);
+          if (this.tela === 'transacoes') this.onBuscaCadeia(this.codigoPendente);
+          this.codigoPendente = '';
+        } else if (this.tela === 'transacoes' && this.buscaCadeia.trim()) {
+          this.onBuscaCadeia(this.buscaCadeia);
+        }
       },
       error: () => {
         this.carregando = false;
@@ -3281,28 +4495,70 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.imeisQr = [];
     this.painel = painel;
     this.salvando = false;
-    this.modo = null;
     this.fotos = [];
     this.videos = [];
     this.fecharQr();
+    const procurarNovo = this.abrirQrNoProximo;
+    this.abrirQrNoProximo = false;
+    const novos = procurarNovo
+      ? painel.estoque.filter(a =>
+        !!a.id
+        && !this.idsEstoqueAntes.has(a.id)
+        && (a.status === 'em_estoque' || a.status === 'em_assistencia'))
+      : [];
+    const tela = this.tela;
+    if (tela === 'compra' || tela === 'venda' || tela === 'troca') {
+      const recem = novos
+        .filter(a => !!a.codigo)
+        .map(a => ({ codigo: a.codigo || '', nome: `${a.marca} ${a.modelo}`.trim() }));
+      this.abrir(tela);
+      this.codigosRecem = recem;
+      const codigos = recem.map(c => c.codigo).join(', ');
+      avisarSucessoUsuario(codigos ? `${sucesso} Código: ${codigos}.` : sucesso);
+      this.imprimirOsGeradas(painel, imeis, novos);
+      return;
+    }
+    this.modo = null;
     avisarSucessoUsuario(sucesso);
-    this.imprimirOsGeradas(painel, imeis);
-    const alvo = qr
+    this.imprimirOsGeradas(painel, imeis, novos);
+    const porImei = qr
+      .filter(imei => imei.length === 15)
       .map(imei => painel.estoque.find(a => apenasDigitos(a.imei) === imei && (a.status === 'em_estoque' || a.status === 'em_assistencia')))
       .find(item => !!item);
+    const alvo = procurarNovo ? (porImei ?? novos[0]) : undefined;
     if (!alvo?.id) return;
     this.fichaId = alvo.id;
     this.abrirQrAparelho(alvo);
     setTimeout(() => document.getElementById(`aparelho-${alvo.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   }
 
-  private imprimirOsGeradas(painel: AparelhoLojaPainel, imeis: string[]): void {
-    for (const imei of imeis) {
-      const item = painel.estoque.find(a => apenasDigitos(a.imei) === imei && !!a.osEntradaId);
-      if (!item?.osEntradaId) continue;
+  private imprimirOsGeradas(painel: AparelhoLojaPainel, imeis: string[], novos: AparelhoLojaItem[]): void {
+    const vistos = new Set<number>();
+    const candidatos = [
+      ...imeis
+        .filter(imei => imei.length === 15)
+        .map(imei => painel.estoque.find(a => apenasDigitos(a.imei) === imei && !!a.osEntradaId)),
+      ...novos.filter(a => !!a.osEntradaId),
+    ];
+    for (const item of candidatos) {
+      if (!item?.osEntradaId || vistos.has(item.osEntradaId)) continue;
+      vistos.add(item.osEntradaId);
       const os = { id: item.osEntradaId, numero: item.osEntradaNumero } as BlingOrdemServico;
       this.impressao.imprimir(OS_IMPRESSAO_PADRAO_POS_CADASTRO, os);
     }
+  }
+
+  private marcarEstoqueAntes(): void {
+    this.idsEstoqueAntes = new Set(this.estoque.map(a => a.id).filter((id): id is string => !!id));
+  }
+
+  private imeiParaEntrada(valor: string, qual = ''): string {
+    const digitos = apenasDigitos(valor);
+    if (digitos.length === 15 && new Set(digitos).size > 1) return digitos;
+    if (digitos.length > 0) {
+      avisarAvisoUsuario(`IMEI${qual} incompleto. O aparelho entra sem IMEI. Informe depois do conserto.`);
+    }
+    return '';
   }
 
   private iniciarPoll(): void {

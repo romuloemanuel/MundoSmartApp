@@ -31,6 +31,8 @@ export {
   osSituacaoReparoAvancadoPlaca,
   osSituacaoCelularDaLoja,
   clienteEhLojaMundoSmart,
+  osEhLojaMundoSmart,
+  NOME_CLIENTE_LOJA_MUNDO_SMART,
   osSituacaoForaFiltroPadrao,
   tecnicoFixoDaSituacao,
   resolverTecnicoFixo,

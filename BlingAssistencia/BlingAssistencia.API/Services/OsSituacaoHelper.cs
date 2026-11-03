@@ -29,12 +29,15 @@ public static class OsSituacaoHelper
     /// <summary>Reparo especializado de placa. Fora do filtro padrão; técnico fixo Rômulo.</summary>
     public const string ReparoAvancadoPlaca = "Reparo avançado em placa";
     public const string TecnicoReparoAvancadoPlaca = "Rômulo";
-    /// <summary>Aparelho da loja Mundo Smart, sem prioridade. Fora do filtro padrão.</summary>
+    /// <summary>Situação legada. Aparelho da loja é o cliente Mundo Smart, não este status.</summary>
     public const string CelularDaLoja = "Celular da loja";
+    public const string NomeClienteLojaMundoSmart = "Mundo Smart";
+    /// <summary>Cadastro local do cliente Mundo Smart. Em produção o nome também identifica.</summary>
+    public const long ContatoIdLojaMundoSmartLocal = 5;
     public const string Cancelado = "Cancelado";
     public const string Concluido = "Concluído";
 
-    /// <summary>Sentinela do filtro de lista: em andamento, sem Concluído, Cancelado, placa e celular da loja.</summary>
+    /// <summary>Sentinela do filtro de lista: em andamento, sem Concluído, Cancelado e placa.</summary>
     public const string FiltroExcetoConcluido = "__exceto_concluido__";
 
     public const string AguardandoAprovacaoCliente = AguardandoAprovacao;
@@ -149,25 +152,29 @@ public static class OsSituacaoHelper
     public static bool EhCelularDaLoja(string? situacao) =>
         string.Equals(Normalizar(situacao), CelularDaLoja, StringComparison.OrdinalIgnoreCase);
 
+    public static readonly long[] ContatoIdsLojaMundoSmart = [ContatoIdLojaMundoSmartLocal];
+
     /// <summary>Cadastro da própria loja, não um cliente externo.</summary>
-    public static bool ClienteEhLojaMundoSmart(string? nome)
+    public static bool ClienteEhLojaMundoSmart(string? nome, long? contatoId = null)
     {
+        if (contatoId is > 0 && ContatoIdsLojaMundoSmart.Contains(contatoId.Value))
+            return true;
         var n = SemAcento(nome).Trim();
         return n.Equals("mundo smart", StringComparison.OrdinalIgnoreCase)
             || n.Equals("mundosmart", StringComparison.OrdinalIgnoreCase)
             || n.StartsWith("mundo smart ", StringComparison.OrdinalIgnoreCase);
     }
 
-    public static void ValidarCelularDaLoja(string? situacao, string? clienteNome)
+    public static void ValidarCelularDaLoja(string? situacao, string? clienteNome, long? contatoId = null)
     {
         if (!EhCelularDaLoja(situacao)) return;
-        if (!ClienteEhLojaMundoSmart(clienteNome))
+        if (!ClienteEhLojaMundoSmart(clienteNome, contatoId))
             throw new ArgumentException("Celular da loja só pode ser usado no aparelho da Mundo Smart.");
     }
 
-    /// <summary>Fora do filtro padrão da lista: Concluído, Cancelado, placa e celular da loja.</summary>
+    /// <summary>Fora do filtro padrão da lista: Concluído, Cancelado e placa.</summary>
     public static bool EhForaFiltroPadrao(string? situacao) =>
-        EhFinalizada(situacao) || EhReparoAvancadoPlaca(situacao) || EhCelularDaLoja(situacao);
+        EhFinalizada(situacao) || EhReparoAvancadoPlaca(situacao);
 
     /// <summary>
     /// Reparo avançado em placa fica com Rômulo.
@@ -229,7 +236,7 @@ public static class OsSituacaoHelper
             .Append("Em andamento")
             .Select(Regex.Escape)
             .Distinct(StringComparer.OrdinalIgnoreCase);
-        // ^...$ com flag i — Cancelado, Concluído, placa e celular da loja não entram.
+        // ^...$ com flag i — Cancelado, Concluído e placa não entram.
         return new BsonRegularExpression($"^\\s*({string.Join("|", ativos)})\\s*$", "i");
     }
 
@@ -244,7 +251,7 @@ public static class OsSituacaoHelper
     public static bool EhFiltroExcetoConcluido(string? situacao) =>
         string.Equals(situacao?.Trim(), FiltroExcetoConcluido, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Filtro padrão da lista: em andamento (exclui Concluído, Cancelado, placa e celular da loja).</summary>
+    /// <summary>Filtro padrão da lista: em andamento (exclui Concluído, Cancelado e placa).</summary>
     public static bool EhFiltroExcetoFinalizadas(string? situacao) =>
         EhFiltroExcetoConcluido(situacao);
 

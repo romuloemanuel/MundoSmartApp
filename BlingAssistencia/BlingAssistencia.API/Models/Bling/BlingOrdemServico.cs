@@ -98,6 +98,9 @@ public class BlingOrdemServico
     /// </summary>
     public bool AlertaPermanenteInformado { get; set; }
     public string? AlertaPermanente { get; set; }
+    /// <summary>Só na conclusão de celular da loja. Mão de obra da assistência, não entra no custo de compra.</summary>
+    public bool ValorAssistenciaInformado { get; set; }
+    public decimal? ValorAssistencia { get; set; }
 }
 
 public class OsFotoAparelhoInfo

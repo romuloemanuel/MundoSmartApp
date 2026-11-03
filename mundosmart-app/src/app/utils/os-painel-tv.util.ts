@@ -13,6 +13,7 @@ import {
   osSituacaoAguardandoPeca,
   osSituacaoPreAssistencia,
   osSituacaoCelularDaLoja,
+  clienteEhLojaMundoSmart,
 } from '../config/os-situacao.config';
 import { equipamentoGridLabel } from './os-grid-display.util';
 
@@ -165,7 +166,11 @@ export function labelUrgenciaNivel(nivel: OsUrgenciaNivel): string {
   return OS_PAINEL_TV_FAIXAS.find(f => f.id === nivel)?.label ?? nivel;
 }
 
-export function osAbertaNoPainel(situacao?: string | null): boolean {
+export function osAbertaNoPainel(
+  situacao?: string | null,
+  contato?: { nome?: string | null; id?: number | null } | null,
+): boolean {
+  if (clienteEhLojaMundoSmart(contato?.nome, contato?.id)) return false;
   return !osSituacaoFinalizada(situacao)
     && !osSituacaoPreAssistencia(situacao)
     && !osSituacaoCelularDaLoja(situacao);
@@ -203,6 +208,7 @@ export function modeloAparelhoOs(os: {
 export function categoriaPainelTvOs(
   os: {
     situacao?: string | null;
+    contato?: { nome?: string | null; id?: number | null } | null;
     justificativasAtraso?: { texto?: string | null }[] | null;
     dataUltimaAlteracaoSituacao?: string | null;
     dataAtualizacao?: string | null;
@@ -212,7 +218,7 @@ export function categoriaPainelTvOs(
   },
   agora: Date = new Date(),
 ): OsPainelTvCategoria | null {
-  if (!osAbertaNoPainel(os.situacao)) return null;
+  if (!osAbertaNoPainel(os.situacao, os.contato)) return null;
 
   if (osAguardandoRetirada(os.situacao)) {
     const baseRetirada =
