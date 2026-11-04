@@ -404,4 +404,8 @@ export class AparelhoLojaService {
     for (const arquivo of arquivos) form.append('arquivos', arquivo, arquivo.name);
     return this.http.post<AparelhoLojaPainel>(`${this.apiUrl}/${id}/fotos`, form);
   }
+
+  excluirFoto(id: string, fotoId: string): Observable<AparelhoLojaPainel> {
+    return this.http.delete<AparelhoLojaPainel>(`${this.apiUrl}/${id}/fotos/${encodeURIComponent(fotoId)}`);
+  }
 }

@@ -104,15 +104,25 @@ type FotoAparelho = { id: string; url: string; tipo?: string };
             <p class="hint">As fotos entram agora, sem precisar salvar o cadastro. Dá para mandar deste computador ou pelo celular.</p>
             <p class="hint" *ngIf="!fotos.length">Nenhuma foto ainda.</p>
             <div class="galeria" *ngIf="fotos.length">
-              <button type="button" class="mini" *ngFor="let f of fotos; trackBy: trackFoto" (click)="ampliar(f)">
-                <video *ngIf="ehVideo(f)" [src]="f.url" muted></video>
-                <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto do aparelho" />
-              </button>
+              <div class="galeria-item" *ngFor="let f of fotos; trackBy: trackFoto">
+                <button type="button" class="mini" (click)="ampliar(f)">
+                  <video *ngIf="ehVideo(f)" [src]="f.url" muted></video>
+                  <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto do aparelho" />
+                </button>
+                <button type="button" class="perigo excluir-foto" [disabled]="excluindoFotoId === f.id" (click)="excluirFoto(f)">
+                  {{ excluindoFotoId === f.id ? 'Excluindo…' : 'Excluir' }}
+                </button>
+              </div>
             </div>
             <figure class="foto-ampliada" *ngIf="fotoAmpliada as grande">
               <video *ngIf="ehVideo(grande)" [src]="grande.url" controls playsinline></video>
               <img *ngIf="!ehVideo(grande)" [src]="grande.url" alt="Foto ampliada" />
-              <button type="button" class="secundario" (click)="fotoAmpliada = null; pintar()">Fechar imagem</button>
+              <div class="acoes-foto">
+                <button type="button" class="perigo" [disabled]="excluindoFotoId === grande.id" (click)="excluirFoto(grande)">
+                  {{ excluindoFotoId === grande.id ? 'Excluindo…' : (ehVideo(grande) ? 'Excluir vídeo' : 'Excluir imagem') }}
+                </button>
+                <button type="button" class="secundario" (click)="fotoAmpliada = null; pintar()">Fechar imagem</button>
+              </div>
             </figure>
             <label class="secundario arquivo">
               {{ enviandoFotos ? 'Enviando fotos…' : 'Incluir fotos deste computador' }}
@@ -164,10 +174,14 @@ type FotoAparelho = { id: string; url: string; tipo?: string };
     .fotos-edicao { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
     .fotos-edicao h4 { margin: 0 0 8px; font-size: 14px; }
     .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; margin: 0 0 10px; }
+    .galeria-item { display: flex; flex-direction: column; gap: 4px; }
     .galeria .mini { width: 100%; padding: 0; border: 0; background: #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; }
     .galeria img, .galeria video { width: 100%; height: 108px; object-fit: cover; display: block; }
+    .excluir-foto { width: 100%; font-size: 12px; padding: 4px 6px; cursor: pointer; }
+    .excluir-foto:disabled, .acoes-foto button:disabled { opacity: 0.6; cursor: default; }
     .foto-ampliada { margin: 8px 0; }
     .foto-ampliada img, .foto-ampliada video { width: 100%; max-height: 320px; object-fit: contain; background: #0f172a; border-radius: 8px; }
+    .acoes-foto { display: flex; gap: 8px; margin-top: 8px; }
     .arquivo { display: inline-block; margin: 8px 8px 8px 0; cursor: pointer; width: auto; }
     .qr-box { margin: 8px 0 0; }
     .qr { width: 200px; height: 200px; display: block; }
@@ -204,6 +218,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
   ehIphone = false;
   salvando = false;
   enviandoFotos = false;
+  excluindoFotoId = '';
   fotos: FotoAparelho[] = [];
   fotoAmpliada: FotoAparelho | null = null;
   qrAberto = false;
@@ -284,6 +299,31 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
   ampliar(foto: FotoAparelho): void {
     this.fotoAmpliada = this.fotoAmpliada?.url === foto.url ? null : foto;
     this.pintar();
+  }
+
+  excluirFoto(foto: FotoAparelho): void {
+    const id = this.aparelho.id;
+    if (!id || !foto.id || this.excluindoFotoId) return;
+    const rotulo = this.ehVideo(foto) ? 'este vídeo' : 'esta imagem';
+    if (!confirm(`Excluir ${rotulo}?`)) return;
+    this.excluindoFotoId = foto.id;
+    this.pintar();
+    this.api.excluirFoto(id, foto.id).subscribe({
+      next: painel => {
+        this.excluindoFotoId = '';
+        if (this.fotoAmpliada?.id === foto.id) this.fotoAmpliada = null;
+        this.fotos = this.fotos.filter(f => f.id !== foto.id);
+        this.aplicarFotosDoPainel(painel);
+        this.pintar();
+        avisarSucessoUsuario(this.ehVideo(foto) ? 'Vídeo excluído.' : 'Imagem excluída.');
+        this.atualizou.emit(painel);
+      },
+      error: err => {
+        this.excluindoFotoId = '';
+        this.pintar();
+        avisarErroUsuario(err?.error?.erro || 'Não foi possível excluir a imagem.');
+      },
+    });
   }
 
   cancelar(): void {

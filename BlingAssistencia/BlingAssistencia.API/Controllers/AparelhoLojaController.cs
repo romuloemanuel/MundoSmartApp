@@ -133,6 +133,10 @@ public class AparelhoLojaController : ControllerBase
         }
     }
 
+    [HttpDelete("{id}/fotos/{fotoId}")]
+    public Task<IActionResult> RemoverFoto(string id, string fotoId, CancellationToken cancellationToken) =>
+        Executar(() => _loja.RemoverFotoAsync(id, fotoId, cancellationToken));
+
     [HttpPost("operacoes/{id}/estornar")]
     public Task<IActionResult> Estornar(string id, CancellationToken cancellationToken) =>
         Executar(() => _loja.EstornarAsync(id, cancellationToken));

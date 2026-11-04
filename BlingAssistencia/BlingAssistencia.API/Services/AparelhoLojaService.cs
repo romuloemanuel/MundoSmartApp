@@ -32,6 +32,10 @@ public interface IAparelhoLojaService
         IReadOnlyList<(string Nome, Stream Conteudo)> arquivos,
         string uploadsRoot,
         CancellationToken cancellationToken = default);
+    Task<AparelhoLojaPainelDto> RemoverFotoAsync(
+        string aparelhoId,
+        string fotoId,
+        CancellationToken cancellationToken = default);
     Task RegistrarCustoOsAsync(BlingOrdemServico os, CancellationToken cancellationToken = default);
     Task RegistrarAlertaAoConcluirAsync(
         long osId,
@@ -2093,6 +2097,27 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         }
     }
 
+    private void ApagarArquivoFoto(string aparelhoId, AparelhoFotoData foto)
+    {
+        var nome = Path.GetFileName(string.IsNullOrWhiteSpace(foto.NomeArquivo) ? foto.Url : foto.NomeArquivo);
+        if (string.IsNullOrWhiteSpace(nome)) return;
+        var pasta = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "uploads", "aparelhos", aparelhoId));
+        var caminho = Path.GetFullPath(Path.Combine(pasta, nome));
+        var prefixo = pasta.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!caminho.StartsWith(prefixo, StringComparison.OrdinalIgnoreCase)) return;
+        try
+        {
+            if (File.Exists(caminho))
+                File.Delete(caminho);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     private static void PreencherFicha(
         AparelhoLojaData aparelho,
         AparelhoEntradaRequest entrada,
@@ -2224,6 +2249,31 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         }
 
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+        return await MontarPainelAsync(cancellationToken);
+    }
+
+    public async Task<AparelhoLojaPainelDto> RemoverFotoAsync(
+        string aparelhoId,
+        string fotoId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(aparelhoId))
+            throw new InvalidOperationException("Aparelho não informado.");
+        if (string.IsNullOrWhiteSpace(fotoId))
+            throw new InvalidOperationException("Foto não informada.");
+
+        var aparelho = await _repo.ObterAparelhoAsync(aparelhoId.Trim(), cancellationToken)
+            ?? throw new InvalidOperationException("Aparelho não encontrado.");
+        if (!EstaNaLoja(aparelho.Status))
+            throw new InvalidOperationException("Esse aparelho já saiu. A foto não pode mais ser excluída.");
+
+        var foto = (aparelho.Fotos ?? []).FirstOrDefault(f =>
+            string.Equals(f.Id, fotoId.Trim(), StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException("Foto não encontrada.");
+
+        aparelho.Fotos!.Remove(foto);
+        await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+        ApagarArquivoFoto(aparelho.Id!, foto);
         return await MontarPainelAsync(cancellationToken);
     }
 
