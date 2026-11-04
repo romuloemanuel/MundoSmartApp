@@ -2,7 +2,7 @@ import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { EMPTY, Observable, Subscription, expand, finalize, reduce } from 'rxjs';
+import { EMPTY, Observable, Subscription, expand, finalize, forkJoin, reduce } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { OrdensServicoService, OsFiltros } from '../../../services/ordens-servico';
 import { BlingOrdemServico } from '../../../models/bling.models';
@@ -30,7 +30,6 @@ import {
   SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
   SITUACAO_OS_REPARO_AVANCADO_PLACA,
   SITUACAO_OS_CELULAR_DA_LOJA,
-  NOME_CLIENTE_LOJA_MUNDO_SMART,
   situacaoPadraoPorLoja,
 } from '../../../config/os-situacao.config';
 import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
@@ -74,11 +73,12 @@ import { abrirJanelaOsGridPdf, montarHtmlOsGridPdf } from '../../../utils/os-gri
 import { avisarErroUsuario } from '../../../services/user-feedback.service';
 import { PendenciaCadastroCliente } from '../../../components/pendencia-cadastro-cliente/pendencia-cadastro-cliente';
 import { AtalhoCobrancaPaymobi } from '../../../components/atalho-cobranca-paymobi/atalho-cobranca-paymobi';
+import { FiltroOrigemAparelho } from '../../../components/filtro-origem-aparelho/filtro-origem-aparelho';
 
 @Component({
   selector: 'app-ordens-servico-lista',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, GridPaginator, GridAcoesOs, JustificativaAtrasoModal, AutocompleteCriavel, PendenciaCadastroCliente, AtalhoCobrancaPaymobi],
+  imports: [CommonModule, FormsModule, RouterLink, GridPaginator, GridAcoesOs, JustificativaAtrasoModal, AutocompleteCriavel, PendenciaCadastroCliente, AtalhoCobrancaPaymobi, FiltroOrigemAparelho],
   templateUrl: './lista.html',
   styles: [`
     :host {
@@ -230,11 +230,6 @@ import { AtalhoCobrancaPaymobi } from '../../../components/atalho-cobranca-paymo
       background: #e0e7ff;
       border-color: #6366f1;
       color: #312e81;
-    }
-    .btn-atalho.ativa-loja {
-      background: #d8b4fe;
-      border-color: #9333ea;
-      color: #4c1d95;
     }
 
     .os-grid tbody tr.os-linha-loja-mundo-smart > td {
@@ -523,6 +518,14 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   private readonly onScrollAviso = () => this.fecharContatoAviso();
   /** Filtro local por bolinha de urgência (baseado na data de entrada). */
   filtroUrgencia: '' | OsPainelTvNivel = '';
+  /** Celular da loja, de cliente, ou os dois. */
+  origemAparelho: 'todos' | 'loja' | 'cliente' = 'todos';
+  contagemOrigem: { todos: number | null; loja: number | null; cliente: number | null } = {
+    todos: null,
+    loja: null,
+    cliente: null,
+  };
+  private contagemSub?: Subscription;
 
   filtros: OsFiltros = {
     situacao: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
@@ -623,6 +626,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.loadSub?.unsubscribe();
+    this.contagemSub?.unsubscribe();
     document.removeEventListener('scroll', this.onScrollAviso, true);
   }
 
@@ -630,54 +634,51 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     return this.filtros.situacao === SITUACAO_OS_REPARO_AVANCADO_PLACA;
   }
 
-  get filtroLojaAtivo(): boolean {
-    return clienteEhLojaMundoSmart(this.filtros.nome);
-  }
-
   onSituacaoFiltroChange(): void {
-    if (!this.filtroPlacaAtivo && !this.filtroLojaAtivo) {
+    if (!this.filtroPlacaAtivo && this.origemAparelho === 'todos') {
       this.restaurarDatasAtalho();
     }
     this.buscarComFiltros();
   }
 
-  /** Atalho da lista: só placa, ou só aparelhos da Mundo Smart. O segundo clique volta ao filtro padrão. */
-  alternarAtalho(qual: 'placa' | 'loja'): void {
-    if (qual === 'loja') {
-      if (this.filtroLojaAtivo) {
-        this.filtros.situacao = SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
-        this.filtros.nome = '';
-        this.restaurarDatasAtalho();
-        this.buscarComFiltros();
-        return;
-      }
-      if (!this.filtroPlacaAtivo) {
-        this.datasAntesAtalho = {
-          inicio: this.filtros.dataCadastroInicio ?? '',
-          fim: this.filtros.dataCadastroFim ?? '',
-        };
-      }
-      this.filtros.situacao = '';
-      this.filtros.nome = NOME_CLIENTE_LOJA_MUNDO_SMART;
-      this.filtros.dataCadastroInicio = '';
-      this.filtros.dataCadastroFim = '';
-      this.buscarComFiltros();
-      return;
-    }
-
-    if (this.filtroPlacaAtivo) {
+  /** Loja, todos ou só cliente. Loja e Cliente mostram qualquer situação, sem recorte de data. */
+  escolherOrigemAparelho(qual: 'todos' | 'loja' | 'cliente'): void {
+    if (qual === this.origemAparelho) return;
+    const estavaRecortado = this.origemAparelho !== 'todos';
+    this.origemAparelho = qual;
+    if (clienteEhLojaMundoSmart(this.filtros.nome)) this.filtros.nome = '';
+    if (qual === 'todos') {
       this.filtros.situacao = SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
       this.restaurarDatasAtalho();
       this.buscarComFiltros();
       return;
     }
-    if (!this.filtroLojaAtivo) {
+    if (!estavaRecortado && !this.filtroPlacaAtivo) {
       this.datasAntesAtalho = {
         inicio: this.filtros.dataCadastroInicio ?? '',
         fim: this.filtros.dataCadastroFim ?? '',
       };
     }
-    if (this.filtroLojaAtivo) this.filtros.nome = '';
+    this.filtros.situacao = '';
+    this.filtros.dataCadastroInicio = '';
+    this.filtros.dataCadastroFim = '';
+    this.buscarComFiltros();
+  }
+
+  /** Atalho da lista: só reparo avançado em placa. O segundo clique volta ao filtro padrão. */
+  alternarAtalho(qual: 'placa'): void {
+    if (this.filtroPlacaAtivo) {
+      this.filtros.situacao = SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
+      if (this.origemAparelho === 'todos') this.restaurarDatasAtalho();
+      this.buscarComFiltros();
+      return;
+    }
+    if (this.origemAparelho === 'todos') {
+      this.datasAntesAtalho = {
+        inicio: this.filtros.dataCadastroInicio ?? '',
+        fim: this.filtros.dataCadastroFim ?? '',
+      };
+    }
     this.filtros.situacao = SITUACAO_OS_REPARO_AVANCADO_PLACA;
     this.filtros.dataCadastroInicio = '';
     this.filtros.dataCadastroFim = '';
@@ -749,6 +750,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       this.carregando = true;
     }
 
+    this.carregarContagensOrigem();
     this.loadSub = this.service.listar(f).pipe(
       finalize(() => { this.carregando = false; }),
     ).subscribe({
@@ -796,11 +798,53 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       tecnicoNome: this.filtros.tecnicoNome || undefined,
       modeloId: this.filtros.modeloId || undefined,
       modeloNome: this.filtros.modeloNome || undefined,
+      origemAparelho: this.origemAparelho === 'todos' ? undefined : this.origemAparelho,
       pagina: filtrandoUrgencia ? 1 : this.grid.page,
       tamanhoPagina: filtrandoUrgencia ? 100 : this.grid.pageSize,
       ordenarPor,
       direcao,
     };
+  }
+
+  /** Contagem de cada atalho, com o recorte que o clique aplica. */
+  private carregarContagensOrigem(): void {
+    this.contagemSub?.unsubscribe();
+    const ativo = this.origemAparelho;
+    const atual = this.totalRegistros;
+    this.contagemOrigem = { todos: null, loja: null, cliente: null };
+    if (!this.carregando) this.contagemOrigem[ativo] = atual;
+    const quais = ['loja', 'todos', 'cliente'] as const;
+    this.contagemSub = forkJoin(
+      quais.map(qual => this.service.listar(this.filtrosDaOrigem(qual)).pipe(
+        map(dados => ({ qual, total: dados.total })),
+      )),
+    ).subscribe({
+      next: lista => {
+        for (const item of lista) {
+          if (item.qual !== this.origemAparelho) this.contagemOrigem[item.qual] = item.total;
+        }
+      },
+    });
+  }
+
+  private filtrosDaOrigem(qual: 'todos' | 'loja' | 'cliente'): OsFiltros {
+    const f = this.montarFiltrosRequest();
+    f.pagina = 1;
+    f.tamanhoPagina = 1;
+    if (qual === 'todos') {
+      f.origemAparelho = undefined;
+      if (this.origemAparelho !== 'todos') {
+        f.situacao = this.filtros.numero?.trim() ? undefined : SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
+        f.dataCadastroInicio = this.datasAntesAtalho?.inicio || undefined;
+        f.dataCadastroFim = this.datasAntesAtalho?.fim || undefined;
+      }
+      return f;
+    }
+    f.origemAparelho = qual;
+    f.situacao = undefined;
+    f.dataCadastroInicio = undefined;
+    f.dataCadastroFim = undefined;
+    return f;
   }
 
   private aplicarResposta(dados: { itens?: BlingOrdemServico[]; total?: number }): void {
@@ -815,11 +859,13 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
       this.totalRegistros = local.itens.length;
       const start = (this.grid.page - 1) * this.grid.pageSize;
       this.ordens = local.itens.slice(start, start + this.grid.pageSize);
+      this.contagemOrigem[this.origemAparelho] = this.totalRegistros;
       return;
     }
 
     this.ordens = local.itens;
     this.totalRegistros = total ?? this.ordens.length;
+    this.contagemOrigem[this.origemAparelho] = this.totalRegistros;
   }
 
   /** Mesmo recorte da grid: situação padrão, urgência e ordenação local. */
@@ -926,6 +972,8 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     if (situacao) partes.push(situacao.label);
     if (this.filtros.numero?.trim()) partes.push(`Nº ${this.filtros.numero.trim()}`);
     if (this.filtros.nome?.trim()) partes.push(`Nome: ${this.filtros.nome.trim()}`);
+    if (this.origemAparelho === 'loja') partes.push('Celular da loja');
+    if (this.origemAparelho === 'cliente') partes.push('Celular de cliente');
     if (this.filtros.telefone?.trim()) partes.push(`Tel: ${this.filtros.telefone.trim()}`);
     if (this.filtroUrgencia) {
       const faixa = this.faixasUrgencia.find(f => f.id === this.filtroUrgencia);
@@ -980,6 +1028,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   limparFiltros(): void {
     this.datasAntesAtalho = null;
+    this.origemAparelho = 'todos';
     this.filtros = {
       situacao: SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO,
       nome: '',

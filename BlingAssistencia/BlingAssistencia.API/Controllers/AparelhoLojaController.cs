@@ -97,6 +97,19 @@ public class AparelhoLojaController : ControllerBase
     public Task<IActionResult> Liberar(string id, CancellationToken cancellationToken) =>
         Executar(() => _loja.LiberarAsync(id, cancellationToken));
 
+    [HttpGet("{id}/fotos")]
+    public async Task<IActionResult> ListarFotos(string id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _loja.ListarFotosAsync(id, cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
     [HttpPost("{id}/fotos")]
     [RequestSizeLimit(130L * 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = 130L * 1024 * 1024)]
@@ -120,7 +133,9 @@ public class AparelhoLojaController : ControllerBase
         try
         {
             var uploads = Path.Combine(_env.ContentRootPath, "uploads");
-            return Ok(ParaQuemPodeVer(await _loja.AdicionarFotosAsync(id, arquivosLidos, uploads, cancellationToken)));
+            var categoria = Request.Form["categoria"].FirstOrDefault();
+            var descricao = Request.Form["descricaoFoco"].FirstOrDefault();
+            return Ok(ParaQuemPodeVer(await _loja.AdicionarFotosAsync(id, arquivosLidos, uploads, categoria, descricao, cancellationToken)));
         }
         catch (InvalidOperationException ex)
         {

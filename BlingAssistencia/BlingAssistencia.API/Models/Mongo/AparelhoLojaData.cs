@@ -358,6 +358,13 @@ public class AparelhoFotoData
     [BsonElement("tipo")]
     public string Tipo { get; set; } = "foto";
 
+    /// <summary>frente, tras, esquerda, direita, cima, baixo ou outra. O mesmo padrão da recepção da OS.</summary>
+    [BsonElement("categoria")]
+    public string Categoria { get; set; } = "";
+
+    [BsonElement("descricaoFoco")]
+    public string DescricaoFoco { get; set; } = "";
+
     [BsonElement("criadoEm")]
     public DateTime CriadoEm { get; set; }
 }

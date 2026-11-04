@@ -86,6 +86,11 @@ public class BlingOrdemServicoService : IBlingOrdemServicoService
                 (o.ModeloNome?.ToLower().Contains(termo) ?? false)).ToList();
         }
 
+        if (string.Equals(f.OrigemAparelho, "loja", StringComparison.OrdinalIgnoreCase))
+            lista = lista.Where(o => OsSituacaoHelper.ClienteEhLojaMundoSmart(o.Contato?.Nome, o.Contato?.Id)).ToList();
+        else if (string.Equals(f.OrigemAparelho, "cliente", StringComparison.OrdinalIgnoreCase))
+            lista = lista.Where(o => !OsSituacaoHelper.ClienteEhLojaMundoSmart(o.Contato?.Nome, o.Contato?.Id)).ToList();
+
         if (!string.IsNullOrWhiteSpace(f.Telefone))
         {
             var digitos = new string(f.Telefone.Where(char.IsDigit).ToArray());
@@ -398,4 +403,6 @@ public class OsListarFiltros
     public string? ModeloId { get; set; }
     /// <summary>Nome do modelo (OS antigas sem modeloId).</summary>
     public string? ModeloNome { get; set; }
+    /// <summary>loja = celular da Mundo Smart; cliente = os demais; vazio = todos.</summary>
+    public string? OrigemAparelho { get; set; }
 }

@@ -7,14 +7,20 @@ import { MarcaAparelho, ModeloAparelho } from '../../../models/bling.models';
 import { MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
 import { avisarAvisoUsuario, avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
 import { apenasDigitos } from '../../../utils/contato-validacao';
-
-type FotoAparelho = { id: string; url: string; tipo?: string };
+import { urlArquivoOs } from '../../../services/os-intake';
+import {
+  FotoAngulo,
+  FotosAngulo,
+  FotosAnguloEnvio,
+  FotosAnguloSubstituir,
+} from '../../../components/fotos-angulo/fotos-angulo';
+import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
 
 @Component({
   selector: 'app-editar-aparelho-loja-modal',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule],
+  imports: [CommonModule, FotosAngulo],
   template: `
     <div class="modal-backdrop" (click)="cancelar()">
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="titulo-edicao-aparelho" (click)="$event.stopPropagation()">
@@ -101,36 +107,48 @@ type FotoAparelho = { id: string; url: string; tipo?: string };
 
           <section class="fotos-edicao">
             <h4>Fotos deste aparelho</h4>
-            <p class="hint">As fotos entram agora, sem precisar salvar o cadastro. Dá para mandar deste computador ou pelo celular.</p>
-            <p class="hint" *ngIf="!fotos.length">Nenhuma foto ainda.</p>
-            <div class="galeria" *ngIf="fotos.length">
-              <div class="galeria-item" *ngFor="let f of fotos; trackBy: trackFoto">
-                <button type="button" class="mini" (click)="ampliar(f)">
-                  <video *ngIf="ehVideo(f)" [src]="f.url" muted></video>
-                  <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto do aparelho" />
+            <p class="hint" *ngIf="carregandoFotos">Carregando fotos…</p>
+            <p class="hint" *ngIf="!carregandoFotos && fotos.length">{{ fotos.length }} foto(s) já neste cadastro.</p>
+
+            <div class="fotos-escolha" *ngIf="!meioFotos">
+              <p class="hint">Escolha como as fotos entram. Os ângulos são os mesmos da ordem de serviço.</p>
+              <div class="fotos-meios">
+                <button type="button" class="meio" (click)="escolherMeio('computador')">
+                  <strong>Neste computador</strong>
+                  <span>Os ângulos aparecem aqui. Em cada um, use Câmera ou Galeria.</span>
                 </button>
-                <button type="button" class="perigo excluir-foto" [disabled]="excluindoFotoId === f.id" (click)="excluirFoto(f)">
-                  {{ excluindoFotoId === f.id ? 'Excluindo…' : 'Excluir' }}
+                <button type="button" class="meio" (click)="escolherMeio('qr')">
+                  <strong>QR code — celular</strong>
+                  <span>O celular abre o site e pede as fotos por ângulo.</span>
                 </button>
               </div>
             </div>
-            <figure class="foto-ampliada" *ngIf="fotoAmpliada as grande">
-              <video *ngIf="ehVideo(grande)" [src]="grande.url" controls playsinline></video>
-              <img *ngIf="!ehVideo(grande)" [src]="grande.url" alt="Foto ampliada" />
-              <div class="acoes-foto">
-                <button type="button" class="perigo" [disabled]="excluindoFotoId === grande.id" (click)="excluirFoto(grande)">
-                  {{ excluindoFotoId === grande.id ? 'Excluindo…' : (ehVideo(grande) ? 'Excluir vídeo' : 'Excluir imagem') }}
-                </button>
-                <button type="button" class="secundario" (click)="fotoAmpliada = null; pintar()">Fechar imagem</button>
+
+            <ng-container *ngIf="meioFotos === 'computador'">
+              <button type="button" class="secundario troca-meio" (click)="escolherMeio('qr')">Usar QR code no celular</button>
+              <div class="fotos-angulo-caixa">
+                <app-fotos-angulo
+                  [fotos]="fotos"
+                  [enviandoCategoria]="enviandoCategoria"
+                  [excluindoId]="excluindoFotoId"
+                  [descricaoOutra]="descricaoOutra"
+                  (descricaoOutraChange)="definirDescricaoOutra($event)"
+                  [pendentes]="pendentesFotos"
+                  [previewUrl]="previewFotoUrl"
+                  [previewCategoria]="previewCategoria"
+                  [resolverUrl]="urlFoto"
+                  (enviar)="enviarAngulo($event)"
+                  (excluir)="excluirFoto($event)"
+                  (substituir)="substituirAngulo($event)"
+                  (vazio)="avisarFotoVazia()"
+                />
               </div>
-            </figure>
-            <label class="secundario arquivo">
-              {{ enviandoFotos ? 'Enviando fotos…' : 'Incluir fotos deste computador' }}
-              <input type="file" accept="image/*,video/*" multiple hidden [disabled]="enviandoFotos" (change)="incluirFotos($event)" />
-            </label>
-            <button type="button" class="secundario" (click)="abrirQr()">QR code — câmera do celular</button>
-            <div class="qr-box" *ngIf="qrAberto">
-              <p class="hint">Escaneie para fotografar este aparelho. A foto entra neste cadastro.</p>
+            </ng-container>
+
+            <div class="qr-box" *ngIf="meioFotos === 'qr'">
+              <button type="button" class="secundario troca-meio" (click)="escolherMeio('computador')">Usar este computador</button>
+              <p class="hint">Escaneie com o celular. Lá estão os ângulos, com Câmera e Galeria.</p>
+              <p class="hint" *ngIf="!qrDataUrl">Gerando o QR…</p>
               <img *ngIf="qrDataUrl" [src]="qrDataUrl" alt="QR code das fotos" class="qr" />
             </div>
           </section>
@@ -173,18 +191,20 @@ type FotoAparelho = { id: string; url: string; tipo?: string };
     .perigo { background: #fff; color: #9a3412; border: 1px solid #fecaca; }
     .fotos-edicao { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
     .fotos-edicao h4 { margin: 0 0 8px; font-size: 14px; }
-    .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; margin: 0 0 10px; }
-    .galeria-item { display: flex; flex-direction: column; gap: 4px; }
-    .galeria .mini { width: 100%; padding: 0; border: 0; background: #e2e8f0; border-radius: 8px; overflow: hidden; cursor: pointer; }
-    .galeria img, .galeria video { width: 100%; height: 108px; object-fit: cover; display: block; }
-    .excluir-foto { width: 100%; font-size: 12px; padding: 4px 6px; cursor: pointer; }
-    .excluir-foto:disabled, .acoes-foto button:disabled { opacity: 0.6; cursor: default; }
-    .foto-ampliada { margin: 8px 0; }
-    .foto-ampliada img, .foto-ampliada video { width: 100%; max-height: 320px; object-fit: contain; background: #0f172a; border-radius: 8px; }
-    .acoes-foto { display: flex; gap: 8px; margin-top: 8px; }
-    .arquivo { display: inline-block; margin: 8px 8px 8px 0; cursor: pointer; width: auto; }
+    .fotos-meios { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .meio {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+      text-align: left; padding: 14px; border-radius: 12px; cursor: pointer;
+      background: #fff; color: #0f172a; border: 1px solid #cbd5e1;
+    }
+    .meio:hover { border-color: #0f172a; }
+    .meio strong { font-size: 14px; }
+    .meio span { font-size: 12px; color: #64748b; line-height: 1.4; font-weight: 400; }
+    .troca-meio { margin: 0 0 10px; }
+    .fotos-angulo-caixa { background: #0b1220; border-radius: 12px; padding: 12px; margin: 8px 0 12px; }
     .qr-box { margin: 8px 0 0; }
-    .qr { width: 200px; height: 200px; display: block; }
+    .qr { width: 200px; height: 200px; display: block; background: #fff; border-radius: 8px; }
+    @media (max-width: 640px) { .fotos-meios { grid-template-columns: 1fr; } }
     .modal-footer {
       display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid #e2e8f0;
     }
@@ -217,10 +237,16 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
   pecas: { nome: string; apareceMensagem: boolean }[] = [{ nome: '', apareceMensagem: false }];
   ehIphone = false;
   salvando = false;
-  enviandoFotos = false;
+  carregandoFotos = false;
   excluindoFotoId = '';
-  fotos: FotoAparelho[] = [];
-  fotoAmpliada: FotoAparelho | null = null;
+  fotos: FotoAngulo[] = [];
+  enviandoCategoria: OsFotoCategoriaId | null = null;
+  pendentesFotos = 0;
+  descricaoOutra = '';
+  previewFotoUrl = '';
+  previewCategoria: OsFotoCategoriaId | null = null;
+  readonly urlFoto = urlArquivoOs;
+  meioFotos: '' | 'computador' | 'qr' = '';
   qrAberto = false;
   qrDataUrl = '';
   private sessaoToken = '';
@@ -250,7 +276,6 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     this.alerta = a.alertaPermanente || '';
     this.pecas = (a.pecasTrocadas?.length ? a.pecasTrocadas : [{ nome: '', apareceMensagem: false }])
       .map(p => ({ nome: p.nome, apareceMensagem: !!p.apareceMensagem }));
-    this.fotos = [...(a.fotos ?? [])];
     if (this.configuracao && !this.configuracoes.includes(this.configuracao)) {
       this.configuracoes = [this.configuracao, ...this.configuracoes];
     }
@@ -264,17 +289,18 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     }
     this.atualizarIphone();
     this.cdr.detach();
+    this.carregarFotos();
     this.carregarModelos(this.marcaId);
     queueMicrotask(() => this.pintar());
   }
 
   ngOnDestroy(): void {
     this.pararPoll();
+    this.limparPreviewFoto();
   }
 
   trackMarca = (_: number, m: MarcaAparelho) => m.id;
   trackModelo = (_: number, m: ModeloAparelho) => m.id;
-  trackFoto = (_: number, f: FotoAparelho) => f.id || f.url;
 
   valor(evento: Event): string {
     return (evento.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
@@ -291,29 +317,31 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     return (evento.target as HTMLInputElement).checked;
   }
 
-  ehVideo(item: FotoAparelho): boolean {
+  ehVideo(item: FotoAngulo): boolean {
     if (item.tipo === 'video') return true;
     return /\.(mp4|mov|webm|m4v|3gp)(\?|$)/i.test(item.url ?? '');
   }
 
-  ampliar(foto: FotoAparelho): void {
-    this.fotoAmpliada = this.fotoAmpliada?.url === foto.url ? null : foto;
-    this.pintar();
+  definirDescricaoOutra(valor: string): void {
+    this.descricaoOutra = valor;
+    this.cdr.detectChanges();
   }
 
-  excluirFoto(foto: FotoAparelho): void {
+  avisarFotoVazia(): void {
+    avisarAvisoUsuario('Nenhuma foto selecionada. Tente novamente (câmera ou galeria).');
+  }
+
+  excluirFoto(foto: FotoAngulo): void {
     const id = this.aparelho.id;
-    if (!id || !foto.id || this.excluindoFotoId) return;
-    const rotulo = this.ehVideo(foto) ? 'este vídeo' : 'esta imagem';
-    if (!confirm(`Excluir ${rotulo}?`)) return;
+    if (!id || !foto.id || this.excluindoFotoId || this.enviandoCategoria) return;
+    if (!confirm('Excluir esta foto?')) return;
     this.excluindoFotoId = foto.id;
     this.pintar();
     this.api.excluirFoto(id, foto.id).subscribe({
       next: painel => {
         this.excluindoFotoId = '';
-        if (this.fotoAmpliada?.id === foto.id) this.fotoAmpliada = null;
         this.fotos = this.fotos.filter(f => f.id !== foto.id);
-        this.aplicarFotosDoPainel(painel);
+        this.carregarFotos();
         this.pintar();
         avisarSucessoUsuario(this.ehVideo(foto) ? 'Vídeo excluído.' : 'Imagem excluída.');
         this.atualizou.emit(painel);
@@ -322,6 +350,28 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
         this.excluindoFotoId = '';
         this.pintar();
         avisarErroUsuario(err?.error?.erro || 'Não foi possível excluir a imagem.');
+      },
+    });
+  }
+
+  substituirAngulo(ev: FotosAnguloSubstituir): void {
+    const id = this.aparelho.id;
+    if (!id || !ev.foto.id || this.excluindoFotoId || this.enviandoCategoria) return;
+    this.excluindoFotoId = ev.foto.id;
+    this.pintar();
+    this.api.excluirFoto(id, ev.foto.id).subscribe({
+      next: painel => {
+        this.excluindoFotoId = '';
+        this.fotos = this.fotos.filter(f => f.id !== ev.foto.id);
+        this.pintar();
+        avisarSucessoUsuario('Foto removida. Escolha a nova imagem.');
+        this.atualizou.emit(painel);
+        ev.abrirCamera();
+      },
+      error: err => {
+        this.excluindoFotoId = '';
+        this.pintar();
+        avisarErroUsuario(err?.error?.erro || 'Não foi possível remover a foto para substituir.');
       },
     });
   }
@@ -358,47 +408,55 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     this.pintar();
   }
 
-  async incluirFotos(evento: Event): Promise<void> {
-    const input = evento.target as HTMLInputElement;
-    const arquivos = Array.from(input.files ?? []);
-    input.value = '';
+  async enviarAngulo(envio: FotosAnguloEnvio): Promise<void> {
     const id = this.aparelho.id;
-    if (!id || !arquivos.length || this.enviandoFotos) return;
-    this.enviandoFotos = true;
+    if (!id || !envio.arquivos.length || this.enviandoCategoria) return;
+    this.enviandoCategoria = envio.categoria;
+    this.pendentesFotos = envio.arquivos.length;
+    this.limparPreviewFoto();
+    const primeiro = envio.arquivos[0];
+    if (primeiro && primeiro.size <= 4 * 1024 * 1024) {
+      this.previewFotoUrl = URL.createObjectURL(primeiro);
+      this.previewCategoria = envio.categoria;
+    }
     this.pintar();
-    let preparados: File[];
     try {
-      preparados = await Promise.all(arquivos.map(arquivo => this.prepararFoto(arquivo)));
-    } catch (err) {
-      this.enviandoFotos = false;
-      this.pintar();
-      avisarErroUsuario(err instanceof Error ? err.message : 'Não foi possível ler a foto.');
-      return;
-    }
-    const grande = preparados.find(arquivo => {
-      const video = arquivo.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|3gp)$/i.test(arquivo.name);
-      return arquivo.size > (video ? 40 : 8) * 1024 * 1024;
-    });
-    if (grande) {
-      this.enviandoFotos = false;
-      this.pintar();
-      avisarErroUsuario('Cada foto pode ter no máximo 8 MB e cada vídeo 40 MB.');
-      return;
-    }
-    this.api.fotos(id, preparados).subscribe({
-      next: painel => {
-        this.enviandoFotos = false;
-        this.aplicarFotosDoPainel(painel);
-        this.pintar();
-        avisarSucessoUsuario('Fotos incluídas neste aparelho.');
+      for (const arquivo of envio.arquivos) {
+        const preparado = await this.prepararFoto(arquivo);
+        const video = preparado.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|3gp)$/i.test(preparado.name);
+        if (preparado.size > (video ? 40 : 8) * 1024 * 1024) {
+          throw new Error('Cada foto pode ter no máximo 8 MB e cada vídeo 40 MB.');
+        }
+        const painel = await new Promise<AparelhoLojaPainel>((resolve, reject) => {
+          this.api.fotos(id, [preparado], envio.categoria, envio.descricao).subscribe({
+            next: resolve,
+            error: reject,
+          });
+        });
+        this.pendentesFotos = Math.max(0, this.pendentesFotos - 1);
         this.atualizou.emit(painel);
-      },
-      error: err => {
-        this.enviandoFotos = false;
         this.pintar();
-        avisarErroUsuario(err?.error?.erro || 'Não foi possível incluir as fotos.');
-      },
-    });
+      }
+      this.carregarFotos();
+      avisarSucessoUsuario('Foto incluída neste aparelho.');
+    } catch (err) {
+      const mensagem = err instanceof Error
+        ? err.message
+        : (err as { error?: { erro?: string } })?.error?.erro || 'Não foi possível incluir as fotos.';
+      avisarErroUsuario(mensagem);
+    } finally {
+      this.enviandoCategoria = null;
+      this.pendentesFotos = 0;
+      this.limparPreviewFoto();
+      this.pintar();
+    }
+  }
+
+  escolherMeio(meio: '' | 'computador' | 'qr'): void {
+    this.meioFotos = meio;
+    if (meio === 'qr') this.abrirQr();
+    if (meio === 'computador') this.carregarFotos();
+    this.pintar();
   }
 
   abrirQr(): void {
@@ -420,6 +478,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
       },
       error: (err: { error?: { erro?: string } }) => {
         this.qrAberto = false;
+        if (this.meioFotos === 'qr') this.meioFotos = '';
         this.pintar();
         avisarErroUsuario(err?.error?.erro || 'Não foi possível gerar o QR.');
       },
@@ -536,10 +595,22 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     });
   }
 
-  private aplicarFotosDoPainel(painel: AparelhoLojaPainel): void {
+  private carregarFotos(): void {
     const id = this.aparelho.id;
-    const atual = (painel.estoque ?? []).find(x => x.id === id);
-    if (atual?.fotos) this.fotos = [...atual.fotos];
+    if (!id) return;
+    this.carregandoFotos = true;
+    this.pintar();
+    this.api.listarFotos(id).subscribe({
+      next: fotos => {
+        this.carregandoFotos = false;
+        this.fotos = fotos ?? [];
+        this.pintar();
+      },
+      error: () => {
+        this.carregandoFotos = false;
+        this.pintar();
+      },
+    });
   }
 
   private iniciarPoll(): void {
@@ -562,13 +633,18 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
         if (recebidas.length <= this.fotos.length) return;
         this.api.painel().subscribe({
           next: painel => {
-            this.aplicarFotosDoPainel(painel);
-            this.pintar();
+            this.carregarFotos();
             this.atualizou.emit(painel);
           },
         });
       },
     });
+  }
+
+  private limparPreviewFoto(): void {
+    if (this.previewFotoUrl) URL.revokeObjectURL(this.previewFotoUrl);
+    this.previewFotoUrl = '';
+    this.previewCategoria = null;
   }
 
   private async prepararFoto(arquivo: File): Promise<File> {

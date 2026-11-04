@@ -15,6 +15,7 @@ import {
   normalizarCategoriaFoto,
   rotuloCategoriaFoto,
 } from '../../../config/os-foto-categoria.config';
+import { FotosAngulo, FotosAnguloEnvio, FotosAnguloSubstituir, FotoAngulo } from '../../../components/fotos-angulo/fotos-angulo';
 import { prepararArquivoParaUpload } from '../../../utils/preparar-arquivo-foto';
 import { avisarErroUsuario } from '../../../services/user-feedback.service';
 
@@ -23,7 +24,7 @@ const UPLOAD_TIMEOUT_MS = 90_000;
 @Component({
   selector: 'app-os-intake-mobile',
   standalone: true,
-  imports: [CommonModule, FormsModule, SenhaDispositivoField],
+  imports: [CommonModule, FormsModule, SenhaDispositivoField, FotosAngulo],
   templateUrl: './intake.html',
   styleUrl: './intake.scss',
 })
@@ -31,7 +32,6 @@ export class OsIntakeMobile implements OnInit, OnDestroy {
   readonly categoriasGuiadas = CATEGORIAS_FOTO_GUIADAS;
   readonly categoriaOutra = CATEGORIA_FOTO_OUTRA;
   readonly rotuloFoto = rotuloCategoriaFoto;
-  readonly tz = 'America/Sao_Paulo';
 
   token = '';
   sessao?: OsIntakeSessao;
@@ -143,29 +143,19 @@ export class OsIntakeMobile implements OnInit, OnDestroy {
     this.senhaValor = '';
   }
 
-  onFotoCategoria(event: Event, categoria: OsFotoCategoriaId): void {
-    const input = event.target as HTMLInputElement;
-    const selecionados = Array.from(input.files ?? []);
-    input.value = '';
-    if (!selecionados.length) {
-      this.erro = 'Nenhuma foto selecionada. Tente novamente (câmera ou galeria).';
-      avisarErroUsuario(this.erro);
-      return;
-    }
+  avisarFotoVazia(): void {
+    this.erro = 'Nenhuma foto selecionada. Tente novamente (câmera ou galeria).';
+    avisarErroUsuario(this.erro);
+  }
 
-    const descricao =
-      categoria === 'outra' ? this.descricaoOutraNova.trim() : undefined;
-    if (categoria === 'outra') this.descricaoOutraNova = '';
-
+  onEnviarAngulo(envio: FotosAnguloEnvio): void {
     this.erro = '';
-    this.enviandoCategoria = categoria;
-    this.fotosPendentes = selecionados.length;
+    this.enviandoCategoria = envio.categoria;
+    this.fotosPendentes = envio.arquivos.length;
     this.sucesso = '';
-
     try {
-      // Clone leve (igual espírito do PC: enviar logo, sem ler MB na memória).
-      const preparados = selecionados.map(f => prepararArquivoParaUpload(f));
-      this.enviarFotosSequencial(preparados, categoria, descricao);
+      const preparados = envio.arquivos.map(f => prepararArquivoParaUpload(f));
+      this.enviarFotosSequencial(preparados, envio.categoria, envio.descricao);
     } catch (e: unknown) {
       this.enviandoCategoria = null;
       this.fotosPendentes = 0;
@@ -176,33 +166,23 @@ export class OsIntakeMobile implements OnInit, OnDestroy {
     }
   }
 
-  abrirLightbox(foto: OsFotoAparelho): void {
-    this.lightboxFoto = foto;
-  }
-
-  fecharLightbox(): void {
-    this.lightboxFoto = undefined;
-  }
-
-  substituirFoto(foto: OsFotoAparelho, categoria: OsFotoCategoriaId, fileInput: HTMLInputElement): void {
+  onSubstituirAngulo(ev: FotosAnguloSubstituir): void {
     if (this.enviandoFoto || this.excluindoId) return;
-    if (!confirm('Substituir esta foto? A anterior será removida.')) return;
-
-    this.excluindoId = foto.id;
+    this.excluindoId = ev.foto.id;
     this.erro = '';
-    this.intakeService.removerFoto(this.token, foto.id).subscribe({
+    this.intakeService.removerFoto(this.token, ev.foto.id).subscribe({
       next: () => {
         if (this.sessao) {
           this.sessao = {
             ...this.sessao,
-            fotos: this.sessao.fotos.filter(f => f.id !== foto.id),
+            fotos: this.sessao.fotos.filter(f => f.id !== ev.foto.id),
             totalFotos: Math.max(0, this.sessao.totalFotos - 1),
           };
         }
-        if (this.lightboxFoto?.id === foto.id) this.fecharLightbox();
+        if (this.lightboxFoto?.id === ev.foto.id) this.fecharLightbox();
         this.excluindoId = '';
         this.mostrarSucesso('Foto removida. Escolha a nova imagem.');
-        setTimeout(() => fileInput.click(), 120);
+        ev.abrirCamera();
       },
       error: (err) => {
         this.erro = err?.error?.erro || 'Não foi possível remover a foto para substituir.';
@@ -211,7 +191,15 @@ export class OsIntakeMobile implements OnInit, OnDestroy {
     });
   }
 
-  excluirFoto(foto: OsFotoAparelho): void {
+  abrirLightbox(foto: OsFotoAparelho): void {
+    this.lightboxFoto = foto;
+  }
+
+  fecharLightbox(): void {
+    this.lightboxFoto = undefined;
+  }
+
+  excluirFoto(foto: FotoAngulo | OsFotoAparelho): void {
     if (this.enviandoFoto || this.excluindoId) return;
     if (!confirm('Excluir esta foto?')) return;
 

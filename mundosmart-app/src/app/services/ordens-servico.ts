@@ -23,6 +23,8 @@ export interface OsFiltros {
   tecnicoNome?: string;
   modeloId?: string;
   modeloNome?: string;
+  /** loja = celular da Mundo Smart; cliente = os demais. Vazio lista todos. */
+  origemAparelho?: '' | 'loja' | 'cliente';
   pagina?: number;
   tamanhoPagina?: number;
   ordenarPor?: OsOrdenacaoCampo;
@@ -327,6 +329,7 @@ export class OrdensServicoService {
     if (filtros.tecnicoNome) params = params.set('tecnicoNome', filtros.tecnicoNome);
     if (filtros.modeloId) params = params.set('modeloId', filtros.modeloId);
     if (filtros.modeloNome) params = params.set('modeloNome', filtros.modeloNome);
+    if (filtros.origemAparelho) params = params.set('origemAparelho', filtros.origemAparelho);
     if (filtros.pagina != null) params = params.set('pagina', String(filtros.pagina));
     if (filtros.tamanhoPagina != null) params = params.set('tamanhoPagina', String(filtros.tamanhoPagina));
     if (filtros.ordenarPor) params = params.set('ordenarPor', filtros.ordenarPor);

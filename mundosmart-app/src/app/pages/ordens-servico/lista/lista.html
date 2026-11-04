@@ -70,13 +70,11 @@
       (click)="alternarAtalho('placa')"
       title="Reparo avançado em placa"
     >Placa</button>
-    <button
-      type="button"
-      class="btn-atalho"
-      [class.ativa-loja]="filtroLojaAtivo"
-      (click)="alternarAtalho('loja')"
-      title="Aparelhos da Mundo Smart"
-    >Loja</button>
+    <app-filtro-origem-aparelho
+      [valor]="origemAparelho"
+      [contagens]="contagemOrigem"
+      (escolheu)="escolherOrigemAparelho($event)"
+    />
     <button (click)="filtrosAbertos = !filtrosAbertos" class="btn-filtros-avancados">
       Filtros avan&ccedil;ados <span *ngIf="filtrosAtivos > 0" class="badge-count">{{ filtrosAtivos }}</span>
     </button>

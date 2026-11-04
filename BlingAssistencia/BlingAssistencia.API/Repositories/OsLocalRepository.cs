@@ -427,6 +427,15 @@ public class OsLocalRepository : IOsLocalRepository
                 Builders<OsLocalData>.Filter.Regex("contatoAviso.nome", regex));
         }
 
+        if (!string.IsNullOrWhiteSpace(filtros.OrigemAparelho))
+        {
+            var daLoja = FiltroClienteLoja();
+            if (string.Equals(filtros.OrigemAparelho, "loja", StringComparison.OrdinalIgnoreCase))
+                filtro &= daLoja;
+            else if (string.Equals(filtros.OrigemAparelho, "cliente", StringComparison.OrdinalIgnoreCase))
+                filtro &= Builders<OsLocalData>.Filter.Not(daLoja);
+        }
+
         if (!string.IsNullOrWhiteSpace(filtros.Telefone))
         {
             var digitos = new string(filtros.Telefone.Where(char.IsDigit).ToArray());
@@ -495,6 +504,16 @@ public class OsLocalRepository : IOsLocalRepository
         }
 
         return filtro;
+    }
+
+    private static FilterDefinition<OsLocalData> FiltroClienteLoja()
+    {
+        var nome = new BsonRegularExpression(@"^mundo\s*smart(\s|$)", "i");
+        var partes = OsSituacaoHelper.ContatoIdsLojaMundoSmart
+            .Select(id => Builders<OsLocalData>.Filter.Eq(x => x.ContatoId, id))
+            .ToList();
+        partes.Add(Builders<OsLocalData>.Filter.Regex(x => x.ContatoNome, nome));
+        return Builders<OsLocalData>.Filter.Or(partes);
     }
 
     public async Task<List<OsLocalData>> ListarEmAndamentoPorModeloAsync(

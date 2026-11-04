@@ -93,7 +93,9 @@ export interface AparelhoLojaItem {
   desagio?: number;
   testesNaOs?: boolean;
   testes?: { nome: string; ok: boolean; observacao?: string }[];
-  fotos?: { id: string; url: string; tipo?: string }[];
+  /** A lista do estoque só diz se existe foto. Os arquivos entram ao abrir a edição. */
+  temFoto?: boolean;
+  fotos?: { id: string; url: string; tipo?: string; categoria?: string; descricaoFoco?: string; criadoEm?: string }[];
   custosOs?: { osId: number; numero: string; pecas: number; maoDeObra: number }[];
   custoPecas?: number;
   custoMaoDeObra?: number;
@@ -361,20 +363,46 @@ export class AparelhoLojaService {
     );
   }
 
-  sessaoFotos(token: string): Observable<{ fotos: { id: string; url: string; tipo?: string }[] }> {
-    return this.http.get<{ fotos: { id: string; url: string; tipo?: string }[] }>(
+  sessaoFotos(token: string): Observable<{
+    fotos: { id: string; url: string; tipo?: string; categoria?: string; descricaoFoco?: string; criadoEm?: string }[];
+    codigo?: string;
+    marca?: string;
+    modelo?: string;
+    expiraEm?: string;
+  }> {
+    return this.http.get<{
+      fotos: { id: string; url: string; tipo?: string; categoria?: string; descricaoFoco?: string; criadoEm?: string }[];
+      codigo?: string;
+      marca?: string;
+      modelo?: string;
+      expiraEm?: string;
+    }>(
       `${environment.apiUrl}/aparelho-fotos/${token}`,
       { context: new HttpContext().set(SKIP_GLOBAL_ERROR_ALERT, true) },
     );
   }
 
-  enviarFotoSessao(token: string, arquivo: File): Observable<{ id: string; url: string; tipo?: string }> {
+  enviarFotoSessao(
+    token: string,
+    arquivo: File,
+    categoria?: string,
+    descricaoFoco?: string,
+  ): Observable<{ id: string; url: string; tipo?: string; categoria?: string; descricaoFoco?: string; criadoEm?: string }> {
     const form = new FormData();
     const video = arquivo.type.startsWith('video/');
     form.append('arquivo', arquivo, arquivo.name?.trim() || (video ? `video-${Date.now()}.mp4` : `foto-${Date.now()}.jpg`));
-    return this.http.post<{ id: string; url: string; tipo?: string }>(
+    if (categoria?.trim()) form.append('categoria', categoria.trim());
+    if (descricaoFoco?.trim()) form.append('descricaoFoco', descricaoFoco.trim());
+    return this.http.post<{ id: string; url: string; tipo?: string; categoria?: string; descricaoFoco?: string; criadoEm?: string }>(
       `${environment.apiUrl}/aparelho-fotos/${token}`,
       form,
+      { context: new HttpContext().set(SKIP_GLOBAL_ERROR_ALERT, true) },
+    );
+  }
+
+  removerFotoSessao(token: string, fotoId: string): Observable<{ fotos: { id: string; url: string; tipo?: string; categoria?: string }[] }> {
+    return this.http.delete<{ fotos: { id: string; url: string; tipo?: string; categoria?: string }[] }>(
+      `${environment.apiUrl}/aparelho-fotos/${token}/${encodeURIComponent(fotoId)}`,
       { context: new HttpContext().set(SKIP_GLOBAL_ERROR_ALERT, true) },
     );
   }
@@ -399,9 +427,15 @@ export class AparelhoLojaService {
     return this.http.put<AparelhoLojaPainel>(`${this.apiUrl}/${id}/cadastro`, body);
   }
 
-  fotos(id: string, arquivos: File[]): Observable<AparelhoLojaPainel> {
+  listarFotos(id: string): Observable<{ id: string; url: string; tipo?: string; categoria?: string; descricaoFoco?: string; criadoEm?: string }[]> {
+    return this.http.get<{ id: string; url: string; tipo?: string; categoria?: string; descricaoFoco?: string; criadoEm?: string }[]>(`${this.apiUrl}/${id}/fotos`);
+  }
+
+  fotos(id: string, arquivos: File[], categoria?: string, descricaoFoco?: string): Observable<AparelhoLojaPainel> {
     const form = new FormData();
     for (const arquivo of arquivos) form.append('arquivos', arquivo, arquivo.name);
+    if (categoria?.trim()) form.append('categoria', categoria.trim());
+    if (descricaoFoco?.trim()) form.append('descricaoFoco', descricaoFoco.trim());
     return this.http.post<AparelhoLojaPainel>(`${this.apiUrl}/${id}/fotos`, form);
   }
 

@@ -124,7 +124,7 @@ interface GrupoFoto {
                 <ng-template #catReadonly>
                   <span class="os-foto-cat">{{ rotuloFoto(f.categoria, f.descricaoFoco) }}</span>
                 </ng-template>
-                <span *ngIf="f.criadoEm">{{ f.criadoEm | date:'dd/MM/yy HH:mm':'America/Sao_Paulo' }}</span>
+                <span *ngIf="f.criadoEm">{{ f.criadoEm | date:'dd/MM/yy HH:mm':'UTC' }}</span>
               </figcaption>
               <div class="os-foto-bar">
                 <a class="os-foto-link" [href]="urlFoto(f.url)" target="_blank" rel="noopener">Abrir</a>

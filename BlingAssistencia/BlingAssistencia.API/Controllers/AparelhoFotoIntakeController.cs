@@ -26,7 +26,12 @@ public class AparelhoFotoIntakeController : ControllerBase
     [HttpPost("{token}")]
     [RequestSizeLimit(50L * 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = 50L * 1024 * 1024)]
-    public async Task<IActionResult> Enviar(string token, [FromForm] IFormFile? arquivo, CancellationToken cancellationToken)
+    public async Task<IActionResult> Enviar(
+        string token,
+        [FromForm] IFormFile? arquivo,
+        [FromForm] string? categoria,
+        [FromForm] string? descricaoFoco,
+        CancellationToken cancellationToken)
     {
         arquivo ??= Request.Form.Files.FirstOrDefault();
         if (arquivo is null || arquivo.Length == 0)
@@ -40,8 +45,24 @@ public class AparelhoFotoIntakeController : ControllerBase
                 token,
                 AparelhoLojaService.NomeMidia(arquivo.FileName, arquivo.ContentType),
                 stream,
+                categoria,
+                descricaoFoco,
                 cancellationToken);
             return Ok(foto);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
+    [HttpDelete("{token}/{fotoId}")]
+    public async Task<IActionResult> Remover(string token, string fotoId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var sessao = await _loja.RemoverFotoSessaoAsync(token, fotoId, cancellationToken);
+            return sessao is null ? NotFound(new { erro = "Este QR expirou. Peça outro no balcão." }) : Ok(sessao);
         }
         catch (InvalidOperationException ex)
         {

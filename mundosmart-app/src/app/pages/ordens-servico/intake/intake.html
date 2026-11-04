@@ -64,174 +64,21 @@
         </ng-container>
       </p>
 
-      <div class="intake-foto-preview-envio" *ngIf="enviandoFoto">
-        <img *ngIf="previewLocalUrl" [src]="previewLocalUrl" alt="Enviando…" />
-        <p>Enviando foto{{ previewCategoria ? ' (' + rotuloFoto(previewCategoria) + ')' : '' }}…</p>
-      </div>
-
-      <div
-        class="intake-foto-slot"
-        *ngFor="let cat of categoriasGuiadas"
-        [attr.data-cat]="cat.id"
-        [class.tem-foto]="fotosDaCategoria(cat.id).length > 0"
-      >
-        <div class="intake-foto-slot-topo">
-          <span class="intake-foto-slot-ico">{{ cat.icone }}</span>
-          <div class="intake-foto-slot-info">
-            <strong>{{ cat.titulo }}</strong>
-            <span>{{ cat.dica }}</span>
-          </div>
-          <span class="intake-foto-slot-badge" *ngIf="fotosDaCategoria(cat.id).length">
-            {{ fotosDaCategoria(cat.id).length }}
-          </span>
-        </div>
-
-        <div class="intake-foto-slot-thumbs" *ngIf="fotosDaCategoria(cat.id).length">
-          <div class="intake-mobile-thumb-wrap" *ngFor="let f of fotosDaCategoria(cat.id)">
-            <button type="button" class="intake-mobile-thumb" (click)="abrirLightbox(f)">
-              <img [src]="urlFoto(f.url)" [alt]="cat.titulo" loading="lazy" />
-              <span class="intake-mobile-thumb-hora" *ngIf="f.criadoEm">
-                {{ f.criadoEm | date:'dd/MM/yy HH:mm':tz }}
-              </span>
-            </button>
-            <div class="intake-mobile-thumb-acoes">
-              <button type="button" (click)="abrirLightbox(f)">Ver</button>
-              <button
-                type="button"
-                [disabled]="enviandoFoto || excluindoId === f.id"
-                (click)="substituirFoto(f, cat.id, inputCam)"
-              >
-                {{ excluindoId === f.id ? '…' : 'Substituir' }}
-              </button>
-              <button
-                type="button"
-                class="danger"
-                [disabled]="enviandoFoto || excluindoId === f.id"
-                (click)="excluirFoto(f)"
-              >
-                Excluir
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div
-          class="intake-foto-slot-btns"
-          [class.enviando]="enviandoCategoria === cat.id"
-        >
-          <label class="intake-foto-slot-btn intake-foto-slot-btn--cam" [class.tem-fotos]="fotosDaCategoria(cat.id).length > 0">
-            <input
-              #inputCam
-              type="file"
-              accept="image/*"
-              capture="environment"
-              (change)="onFotoCategoria($event, cat.id)"
-              [disabled]="enviandoFoto"
-            />
-            {{ enviandoCategoria === cat.id ? 'Enviando…' : 'Câmera' }}
-          </label>
-          <label class="intake-foto-slot-btn intake-foto-slot-btn--gal" [class.tem-fotos]="fotosDaCategoria(cat.id).length > 0">
-            <input
-              #inputGal
-              type="file"
-              accept="image/*"
-              (change)="onFotoCategoria($event, cat.id)"
-              [disabled]="enviandoFoto"
-            />
-            Galeria
-          </label>
-        </div>
-      </div>
-
-      <!-- Outras fotos -->
-      <div
-        class="intake-foto-slot intake-foto-slot--outra"
-        data-cat="outra"
-        [class.tem-foto]="fotosDaCategoria('outra').length > 0"
-      >
-        <div class="intake-foto-slot-topo">
-          <span class="intake-foto-slot-ico">{{ categoriaOutra.icone }}</span>
-          <div class="intake-foto-slot-info">
-            <strong>{{ categoriaOutra.titulo }}</strong>
-            <span>{{ categoriaOutra.dica }}</span>
-          </div>
-          <span class="intake-foto-slot-badge" *ngIf="fotosDaCategoria('outra').length">
-            {{ fotosDaCategoria('outra').length }}
-          </span>
-        </div>
-
-        <input
-          class="intake-foto-outra-desc"
-          type="text"
-          [(ngModel)]="descricaoOutraNova"
-          maxlength="120"
-          placeholder="Ex: rachadura na tela, entrada do carregador…"
-          [disabled]="enviandoFoto"
-        />
-
-        <div class="intake-foto-slot-thumbs" *ngIf="fotosDaCategoria('outra').length">
-          <div class="intake-mobile-thumb-wrap" *ngFor="let f of fotosDaCategoria('outra')">
-            <button type="button" class="intake-mobile-thumb intake-mobile-thumb--outra" (click)="abrirLightbox(f)">
-              <img [src]="urlFoto(f.url)" [alt]="rotuloFoto(f.categoria, f.descricaoFoco)" loading="lazy" />
-              <span class="intake-mobile-thumb-leg" *ngIf="f.descricaoFoco">{{ f.descricaoFoco }}</span>
-              <span class="intake-mobile-thumb-hora" *ngIf="f.criadoEm">
-                {{ f.criadoEm | date:'dd/MM/yy HH:mm':tz }}
-              </span>
-            </button>
-            <div class="intake-mobile-thumb-acoes">
-              <button type="button" (click)="abrirLightbox(f)">Ver</button>
-              <button
-                type="button"
-                [disabled]="enviandoFoto || excluindoId === f.id"
-                (click)="substituirFoto(f, 'outra', inputOutraCam)"
-              >
-                {{ excluindoId === f.id ? '…' : 'Substituir' }}
-              </button>
-              <button
-                type="button"
-                class="danger"
-                [disabled]="enviandoFoto || excluindoId === f.id"
-                (click)="excluirFoto(f)"
-              >
-                Excluir
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div
-          class="intake-foto-slot-btns"
-          [class.enviando]="enviandoCategoria === 'outra'"
-        >
-          <label class="intake-foto-slot-btn intake-foto-slot-btn--cam intake-foto-slot-btn--outra" [class.tem-fotos]="fotosDaCategoria('outra').length > 0">
-            <input
-              #inputOutraCam
-              type="file"
-              accept="image/*"
-              capture="environment"
-              (change)="onFotoCategoria($event, 'outra')"
-              [disabled]="enviandoFoto"
-            />
-            {{ enviandoCategoria === 'outra' ? 'Enviando…' : 'Câmera' }}
-          </label>
-          <label class="intake-foto-slot-btn intake-foto-slot-btn--gal intake-foto-slot-btn--outra" [class.tem-fotos]="fotosDaCategoria('outra').length > 0">
-            <input
-              #inputOutraGal
-              type="file"
-              accept="image/*"
-              (change)="onFotoCategoria($event, 'outra')"
-              [disabled]="enviandoFoto"
-            />
-            Galeria
-          </label>
-        </div>
-      </div>
-
-      <p class="intake-mobile-contador">{{ sessao.totalFotos }} foto(s) enviada(s)</p>
-      <p class="intake-mobile-contador-sub" *ngIf="fotosPendentes > 0">
-        {{ fotosPendentes }} na fila de envio…
-      </p>
-
+      <app-fotos-angulo
+        [fotos]="sessao.fotos"
+        [enviandoCategoria]="enviandoCategoria"
+        [excluindoId]="excluindoId"
+        [descricaoOutra]="descricaoOutraNova"
+        (descricaoOutraChange)="descricaoOutraNova = $event"
+        [pendentes]="fotosPendentes"
+        [previewUrl]="previewLocalUrl"
+        [previewCategoria]="previewCategoria"
+        [resolverUrl]="urlFoto"
+        (enviar)="onEnviarAngulo($event)"
+        (excluir)="excluirFoto($event)"
+        (substituir)="onSubstituirAngulo($event)"
+        (vazio)="avisarFotoVazia()"
+      />
       <button
         type="button"
         class="intake-mobile-btn-prim"
@@ -384,7 +231,7 @@
   <p class="intake-mobile-lightbox-leg">
     {{ rotuloFoto(lightboxFoto.categoria, lightboxFoto.descricaoFoco) }}
     <span *ngIf="lightboxFoto.criadoEm">
-      · {{ lightboxFoto.criadoEm | date:'dd/MM/yyyy HH:mm':'America/Sao_Paulo' }}
+      · {{ lightboxFoto.criadoEm | date:'dd/MM/yyyy HH:mm':'UTC' }}
     </span>
   </p>
   <img

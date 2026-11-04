@@ -56,6 +56,9 @@ public class AparelhoFotoDto
     public string Id { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
     public string Tipo { get; set; } = "foto";
+    public string Categoria { get; set; } = "";
+    public string DescricaoFoco { get; set; } = "";
+    public DateTime? CriadoEm { get; set; }
 }
 
 public class AparelhoOsCustoDto
@@ -139,6 +142,9 @@ public class AparelhoFotoSessaoTokenDto
 public class AparelhoFotoSessaoDto
 {
     public DateTime ExpiraEm { get; set; }
+    public string Codigo { get; set; } = "";
+    public string Marca { get; set; } = "";
+    public string Modelo { get; set; } = "";
     public List<AparelhoFotoDto> Fotos { get; set; } = [];
 }
 
@@ -186,6 +192,8 @@ public class AparelhoLojaDto
     public decimal Desagio { get; set; }
     public bool TestesNaOs { get; set; }
     public List<AparelhoTesteDto> Testes { get; set; } = [];
+    /// <summary>A lista do estoque não traz os arquivos. As fotos e os vídeos entram só na consulta do aparelho.</summary>
+    public bool TemFoto { get; set; }
     public List<AparelhoFotoDto> Fotos { get; set; } = [];
     public List<AparelhoOsCustoDto> CustosOs { get; set; } = [];
     public decimal CustoPecas { get; set; }

@@ -31,11 +31,14 @@ public interface IAparelhoLojaService
         string aparelhoId,
         IReadOnlyList<(string Nome, Stream Conteudo)> arquivos,
         string uploadsRoot,
+        string? categoria = null,
+        string? descricaoFoco = null,
         CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> RemoverFotoAsync(
         string aparelhoId,
         string fotoId,
         CancellationToken cancellationToken = default);
+    Task<List<AparelhoFotoDto>> ListarFotosAsync(string aparelhoId, CancellationToken cancellationToken = default);
     Task RegistrarCustoOsAsync(BlingOrdemServico os, CancellationToken cancellationToken = default);
     Task RegistrarAlertaAoConcluirAsync(
         long osId,
@@ -50,7 +53,14 @@ public interface IAparelhoLojaService
         CancellationToken cancellationToken = default);
     Task<AparelhoFotoSessaoTokenDto> CriarSessaoFotosAsync(string? appBaseUrl, string? aparelhoId, CancellationToken cancellationToken = default);
     Task<AparelhoFotoSessaoDto?> ObterSessaoFotosAsync(string token, CancellationToken cancellationToken = default);
-    Task<AparelhoFotoDto> ReceberFotoSessaoAsync(string token, string nome, Stream conteudo, CancellationToken cancellationToken = default);
+    Task<AparelhoFotoDto> ReceberFotoSessaoAsync(
+        string token,
+        string nome,
+        Stream conteudo,
+        string? categoria = null,
+        string? descricaoFoco = null,
+        CancellationToken cancellationToken = default);
+    Task<AparelhoFotoSessaoDto?> RemoverFotoSessaoAsync(string token, string fotoId, CancellationToken cancellationToken = default);
     Task<BlingVendaCelularDescontoResponse> ConsultarDescontoAsync(string? cpf, string? imei, CancellationToken cancellationToken = default);
     Task<bool> ImeiJaPassouPelaLojaAsync(string? imei, CancellationToken cancellationToken = default);
     Task<BlingVendaCelularPassivelResponse> ConsultarPassivelAsync(
@@ -1498,7 +1508,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             Ok = t.Ok,
             Observacao = t.Observacao,
         }).ToList(),
-        Fotos = (a.Fotos ?? []).Select(ParaFotoDto).ToList(),
+        TemFoto = FotosDe(a.Fotos ?? []) > 0,
+        Fotos = [],
         CustosOs = (a.CustosOs ?? []).Select(c => new AparelhoOsCustoDto
         {
             OsId = c.OsId,
@@ -2216,6 +2227,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         string aparelhoId,
         IReadOnlyList<(string Nome, Stream Conteudo)> arquivos,
         string uploadsRoot,
+        string? categoria = null,
+        string? descricaoFoco = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(aparelhoId))
@@ -2244,6 +2257,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 NomeArquivo = arquivo,
                 Url = $"/uploads/aparelhos/{aparelho.Id}/{arquivo}",
                 Tipo = video ? "video" : "foto",
+                Categoria = CategoriaFoto(categoria),
+                DescricaoFoco = DescricaoFocoFoto(categoria, descricaoFoco),
                 CriadoEm = HorarioBrasil.Agora,
             });
         }
@@ -2275,6 +2290,15 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
         ApagarArquivoFoto(aparelho.Id!, foto);
         return await MontarPainelAsync(cancellationToken);
+    }
+
+    public async Task<List<AparelhoFotoDto>> ListarFotosAsync(string aparelhoId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(aparelhoId))
+            throw new InvalidOperationException("Aparelho não informado.");
+        var aparelho = await _repo.ObterAparelhoAsync(aparelhoId.Trim(), cancellationToken)
+            ?? throw new InvalidOperationException("Aparelho não encontrado.");
+        return (aparelho.Fotos ?? []).Select(ParaFotoDto).ToList();
     }
 
     public async Task RegistrarCustoOsAsync(BlingOrdemServico os, CancellationToken cancellationToken = default)
@@ -2445,9 +2469,15 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     {
         var sessao = await SessaoValidaAsync(token, cancellationToken);
         if (sessao is null) return null;
+        AparelhoLojaData? aparelho = null;
+        if (!string.IsNullOrWhiteSpace(sessao.AparelhoId))
+            aparelho = await _repo.ObterAparelhoAsync(sessao.AparelhoId, cancellationToken);
         return new AparelhoFotoSessaoDto
         {
             ExpiraEm = sessao.ExpiraEm,
+            Codigo = aparelho?.Codigo ?? "",
+            Marca = aparelho?.Marca ?? "",
+            Modelo = aparelho?.Modelo ?? "",
             Fotos = (sessao.Fotos ?? []).Select(ParaFotoDto).ToList(),
         };
     }
@@ -2456,6 +2486,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         string token,
         string nome,
         Stream conteudo,
+        string? categoria = null,
+        string? descricaoFoco = null,
         CancellationToken cancellationToken = default)
     {
         var sessao = await SessaoValidaAsync(token, cancellationToken)
@@ -2487,6 +2519,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 NomeArquivo = arquivo,
                 Url = url,
                 Tipo = video ? "video" : "foto",
+                Categoria = CategoriaFoto(categoria),
+                DescricaoFoco = DescricaoFocoFoto(categoria, descricaoFoco),
                 CriadoEm = HorarioBrasil.Agora,
             });
             await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
@@ -2506,11 +2540,45 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             NomeArquivo = arquivo,
             Url = url,
             Tipo = video ? "video" : "foto",
+            Categoria = CategoriaFoto(categoria),
+            DescricaoFoco = DescricaoFocoFoto(categoria, descricaoFoco),
             CriadoEm = HorarioBrasil.Agora,
         };
         sessao.Fotos.Add(foto);
         await _repo.SalvarSessaoFotosAsync(sessao, cancellationToken);
-        return new AparelhoFotoDto { Id = foto.Id, Url = foto.Url };
+        return ParaFotoDto(foto);
+    }
+
+    public async Task<AparelhoFotoSessaoDto?> RemoverFotoSessaoAsync(string token, string fotoId, CancellationToken cancellationToken = default)
+    {
+        var sessao = await SessaoValidaAsync(token, cancellationToken);
+        if (sessao is null) return null;
+        var foto = (sessao.Fotos ?? []).FirstOrDefault(f =>
+            string.Equals(f.Id, fotoId?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (foto is null)
+            throw new InvalidOperationException("Foto não encontrada.");
+
+        sessao.Fotos!.Remove(foto);
+        await _repo.SalvarSessaoFotosAsync(sessao, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(sessao.AparelhoId))
+        {
+            var aparelho = await _repo.ObterAparelhoAsync(sessao.AparelhoId, cancellationToken);
+            var noAparelho = aparelho?.Fotos?.FirstOrDefault(f =>
+                string.Equals(f.Id, foto.Id, StringComparison.OrdinalIgnoreCase));
+            if (aparelho is not null && noAparelho is not null)
+            {
+                aparelho.Fotos!.Remove(noAparelho);
+                await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+                ApagarArquivoFoto(aparelho.Id!, noAparelho);
+            }
+        }
+        else
+        {
+            ApagarArquivoSessao(sessao.Token, foto);
+        }
+
+        return await ObterSessaoFotosAsync(token, cancellationToken);
     }
 
     private async Task AnexarSessaoFotosAsync(AparelhoLojaData aparelho, string? token, CancellationToken cancellationToken)
@@ -2538,6 +2606,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 NomeArquivo = foto.NomeArquivo,
                 Url = $"/uploads/aparelhos/{aparelho.Id}/{foto.NomeArquivo}",
                 Tipo = string.IsNullOrWhiteSpace(foto.Tipo) ? (EhVideo(Path.GetExtension(foto.NomeArquivo)) ? "video" : "foto") : foto.Tipo,
+                Categoria = foto.Categoria,
+                DescricaoFoco = foto.DescricaoFoco,
                 CriadoEm = foto.CriadoEm,
             });
         }
@@ -2591,6 +2661,40 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return arquivo + ".jpg";
     }
 
+    private static readonly string[] CategoriasFotoAparelho =
+        ["frente", "tras", "esquerda", "direita", "cima", "baixo", "outra"];
+
+    private static string CategoriaFoto(string? categoria)
+    {
+        var cat = (categoria ?? "").Trim().ToLowerInvariant();
+        return CategoriasFotoAparelho.Contains(cat) ? cat : "";
+    }
+
+    private static string DescricaoFocoFoto(string? categoria, string? descricao)
+    {
+        if (!string.Equals(CategoriaFoto(categoria), "outra", StringComparison.Ordinal)) return "";
+        var texto = (descricao ?? "").Trim();
+        return texto.Length <= 120 ? texto : texto[..120];
+    }
+
+    private void ApagarArquivoSessao(string token, AparelhoFotoData foto)
+    {
+        var nome = Path.GetFileName(string.IsNullOrWhiteSpace(foto.NomeArquivo) ? foto.Url : foto.NomeArquivo);
+        if (string.IsNullOrWhiteSpace(nome) || string.IsNullOrWhiteSpace(token)) return;
+        var pasta = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "uploads", "aparelho-sessoes", token));
+        var caminho = Path.GetFullPath(Path.Combine(pasta, nome));
+        var prefixo = pasta.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!caminho.StartsWith(prefixo, StringComparison.OrdinalIgnoreCase)) return;
+        try
+        {
+            if (File.Exists(caminho))
+                File.Delete(caminho);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
     private static AparelhoFotoDto ParaFotoDto(AparelhoFotoData foto) => new()
     {
         Id = foto.Id,
@@ -2599,6 +2703,9 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             || EhVideo(Path.GetExtension(foto.NomeArquivo))
             ? "video"
             : "foto",
+        Categoria = foto.Categoria ?? "",
+        DescricaoFoco = foto.DescricaoFoco ?? "",
+        CriadoEm = foto.CriadoEm == default ? null : foto.CriadoEm,
     };
 
     private static void ExigirVaga(IReadOnlyList<AparelhoFotoData> atuais, bool video)

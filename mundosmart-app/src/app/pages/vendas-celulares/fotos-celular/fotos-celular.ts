@@ -1,175 +1,290 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Title } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
+import { timeout, catchError, throwError, TimeoutError } from 'rxjs';
 import { AparelhoLojaService } from '../../../services/aparelho-loja.service';
+import { urlArquivoOs } from '../../../services/os-intake';
+import {
+  FotoAngulo,
+  FotosAngulo,
+  FotosAnguloEnvio,
+  FotosAnguloSubstituir,
+} from '../../../components/fotos-angulo/fotos-angulo';
+import { OsFotoCategoriaId, rotuloCategoriaFoto } from '../../../config/os-foto-categoria.config';
+import { prepararArquivoParaUpload } from '../../../utils/preparar-arquivo-foto';
 
+const UPLOAD_TIMEOUT_MS = 90_000;
+
+/** Mesmo fluxo de fotos da ordem de serviço, sem pedir senha. */
 @Component({
   selector: 'app-aparelho-fotos-celular',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FotosAngulo],
   template: `
-    <div class="pagina">
-      <header>
-        <span class="marca">MUNDO SMART</span>
-        <strong>Fotos e vídeos do aparelho</strong>
+    <div class="intake-mobile">
+      <header class="intake-mobile-header">
+        <div class="intake-mobile-brand">
+          <span class="intake-mobile-logo">MUNDO SMART</span>
+          <span class="intake-mobile-tag">Fotos do aparelho</span>
+        </div>
+        <div class="intake-mobile-os" *ngIf="!carregando && !erro">
+          <span class="intake-mobile-os-num" *ngIf="codigo">{{ codigo }}</span>
+          <span class="intake-mobile-os-aparelho" *ngIf="marca || modelo">{{ marca }} {{ modelo }}</span>
+        </div>
       </header>
 
-      <p class="aviso" *ngIf="erro">{{ erro }}</p>
-      <p class="ok" *ngIf="sucesso">{{ sucesso }}</p>
+      <div class="intake-mobile-loading" *ngIf="carregando">
+        <div class="intake-mobile-spinner"></div>
+        <p>Carregando fotos...</p>
+      </div>
 
-      <ng-container *ngIf="!erro || fotos.length">
-        <p class="texto">
-          Tire fotos do aparelho ou grave vídeos. Os vídeos vão com o áudio do celular.
-        </p>
-        <button type="button" class="camera" (click)="camera.click()" [disabled]="enviando || !token">
-          {{ enviando ? 'Enviando…' : 'Tirar fotos' }}
-        </button>
-        <button type="button" class="camera video" (click)="filmadora.click()" [disabled]="enviando || !token">
-          Gravar vídeos com áudio
-        </button>
-        <button type="button" class="camera galeria" (click)="galeria.click()" [disabled]="enviando || !token">
-          Escolher da galeria
-        </button>
-        <input #camera type="file" accept="image/*" capture="environment" hidden (change)="enviar($event)" />
-        <input #filmadora type="file" accept="video/*" capture="environment" hidden (change)="enviar($event)" />
-        <input #galeria type="file" accept="image/*,video/*" hidden (change)="enviar($event)" />
-        <p class="contagem" *ngIf="fotos.length">{{ resumo }}</p>
-        <div class="grade">
-          <ng-container *ngFor="let f of fotos">
-            <video *ngIf="ehVideo(f)" [src]="f.url" controls playsinline preload="metadata"></video>
-            <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto enviada" (error)="fotoNaoAbriu()" />
-          </ng-container>
-        </div>
+      <div class="intake-mobile-toast intake-mobile-toast--erro" *ngIf="erro && !carregando" role="alert">
+        <span class="intake-mobile-toast-ico">!</span>
+        <p>{{ erro }}</p>
+        <button type="button" class="intake-mobile-toast-fechar" (click)="erro = ''" aria-label="Fechar">✕</button>
+      </div>
+
+      <div class="intake-mobile-toast intake-mobile-toast--ok" *ngIf="sucesso && !carregando" role="status">
+        <span class="intake-mobile-toast-ico">✓</span>
+        <p>{{ sucesso }}</p>
+        <button type="button" class="intake-mobile-toast-fechar" (click)="sucesso = ''" aria-label="Fechar">✕</button>
+      </div>
+
+      <ng-container *ngIf="!carregando && token && !linkInvalido">
+        <section class="intake-mobile-card" *ngIf="!concluido">
+          <h2>Fotografar o aparelho</h2>
+          <p class="intake-mobile-hint">
+            Em cada ângulo use <strong>Câmera</strong> para fotografar ou <strong>Galeria</strong> para escolher uma imagem. Depois, toque na miniatura para ver ou substituir.
+          </p>
+
+          <div class="intake-foto-preview-envio" *ngIf="enviandoCategoria && !previewLocalUrl">
+            <p>Preparando envio…</p>
+          </div>
+
+          <app-fotos-angulo
+            [fotos]="fotos"
+            [enviandoCategoria]="enviandoCategoria"
+            [excluindoId]="excluindoId"
+            [descricaoOutra]="descricaoOutra"
+            (descricaoOutraChange)="descricaoOutra = $event"
+            [pendentes]="pendentes"
+            [previewUrl]="previewLocalUrl"
+            [previewCategoria]="previewCategoria"
+            [resolverUrl]="urlFoto"
+            (enviar)="onEnviar($event)"
+            (excluir)="excluir($event)"
+            (substituir)="substituir($event)"
+            (vazio)="avisarVazio()"
+          />
+
+          <button
+            type="button"
+            class="intake-mobile-btn-prim"
+            *ngIf="fotos.length"
+            (click)="concluir()"
+          >
+            Concluir ✓
+          </button>
+        </section>
+
+        <section class="intake-mobile-card intake-mobile-sucesso" *ngIf="concluido">
+          <div class="intake-mobile-sucesso-ico">✓</div>
+          <h2>Fotos registradas</h2>
+          <p class="intake-mobile-hint">
+            Pode fechar esta página e devolver o celular ao balcão.
+          </p>
+          <button type="button" class="intake-mobile-btn-sec" (click)="concluido = false">
+            Voltar e editar fotos
+          </button>
+          <p class="intake-mobile-contador">{{ fotos.length }} foto(s)</p>
+        </section>
       </ng-container>
+
+      <footer class="intake-mobile-footer">
+        <span>Mundo Smart</span>
+      </footer>
     </div>
   `,
-  styles: [`
-    .pagina { min-height: 100%; padding: 20px 16px 32px; color: #e2e8f0; font-family: inherit; }
-    header { margin-bottom: 18px; }
-    .marca { display: block; font-size: 11px; letter-spacing: .14em; color: #93c5fd; }
-    header strong { font-size: 22px; }
-    .texto { margin: 0 0 16px; line-height: 1.45; color: #cbd5e1; }
-    .camera {
-      width: 100%;
-      border: 0;
-      border-radius: 12px;
-      background: #2563eb;
-      color: #fff;
-      font-size: 18px;
-      font-weight: 700;
-      padding: 16px;
-    }
-    .camera:disabled { opacity: .6; }
-    .camera.video { background: #0f766e; margin-top: 10px; }
-    .camera.galeria { background: transparent; color: #e2e8f0; border: 1px solid #475569; margin-top: 10px; font-size: 16px; }
-    .contagem { margin: 14px 0 8px; color: #86efac; }
-    .grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    .grade img, .grade video { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #0f172a; }
-    .aviso, .ok { border-radius: 10px; padding: 10px 12px; }
-    .aviso { background: #7f1d1d; }
-    .ok { background: #14532d; }
-  `],
+  styleUrl: '../../ordens-servico/intake/intake.scss',
 })
-export class AparelhoFotosCelularPage implements OnInit {
+export class AparelhoFotosCelularPage implements OnInit, OnDestroy {
+  readonly urlFoto = urlArquivoOs;
+  readonly rotulo = rotuloCategoriaFoto;
+
   token = '';
-  fotos: { id: string; url: string; tipo?: string }[] = [];
-  enviando = false;
+  fotos: FotoAngulo[] = [];
+  codigo = '';
+  marca = '';
+  modelo = '';
+  carregando = true;
+  linkInvalido = false;
   erro = '';
   sucesso = '';
+  concluido = false;
+  enviandoCategoria: OsFotoCategoriaId | null = null;
+  pendentes = 0;
+  excluindoId = '';
+  descricaoOutra = '';
+  previewLocalUrl = '';
+  previewCategoria: OsFotoCategoriaId | null = null;
+
+  private sucessoTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private route: ActivatedRoute,
     private api: AparelhoLojaService,
+    private title: Title,
   ) {}
 
   ngOnInit(): void {
+    this.title.setTitle('Fotos do aparelho — Mundo Smart');
     this.token = this.route.snapshot.paramMap.get('token') ?? '';
     if (!this.token) {
       this.erro = 'Link inválido.';
+      this.linkInvalido = true;
+      this.carregando = false;
       return;
     }
     this.api.sessaoFotos(this.token).subscribe({
-      next: sessao => { this.fotos = sessao.fotos ?? []; },
-      error: () => { this.erro = 'Este QR expirou. Peça outro no balcão.'; },
+      next: sessao => {
+        this.fotos = sessao.fotos ?? [];
+        this.codigo = sessao.codigo ?? '';
+        this.marca = sessao.marca ?? '';
+        this.modelo = sessao.modelo ?? '';
+        this.carregando = false;
+      },
+      error: () => {
+        this.erro = 'Este QR expirou. Peça outro no balcão.';
+        this.linkInvalido = true;
+        this.carregando = false;
+      },
     });
   }
 
-  async enviar(evento: Event): Promise<void> {
-    const input = evento.target as HTMLInputElement;
-    const original = input.files?.[0];
-    if (!original || !this.token) return;
-    this.enviando = true;
+  ngOnDestroy(): void {
+    if (this.sucessoTimer) clearTimeout(this.sucessoTimer);
+    this.limparPreview();
+  }
+
+  avisarVazio(): void {
+    this.erro = 'Nenhuma foto selecionada. Tente novamente (câmera ou galeria).';
+  }
+
+  onEnviar(envio: FotosAnguloEnvio): void {
     this.erro = '';
     this.sucesso = '';
-    const arquivo = await this.preparar(original);
-    const video = arquivo.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|3gp)$/i.test(arquivo.name);
-    const limite = video ? 40 * 1024 * 1024 : 8 * 1024 * 1024;
-    if (arquivo.size > limite) {
-      this.enviando = false;
-      this.erro = video ? 'Cada vídeo pode ter no máximo 40 MB.' : 'Cada foto pode ter no máximo 8 MB.';
-      input.value = '';
-      return;
+    this.enviandoCategoria = envio.categoria;
+    this.pendentes = envio.arquivos.length;
+    try {
+      const preparados = envio.arquivos.map(f => prepararArquivoParaUpload(f));
+      this.enviarSequencial(preparados, envio.categoria, envio.descricao);
+    } catch (e: unknown) {
+      this.enviandoCategoria = null;
+      this.pendentes = 0;
+      this.limparPreview();
+      this.erro = e instanceof Error ? e.message : 'Não foi possível ler a foto. Tente de novo.';
     }
-    this.api.enviarFotoSessao(this.token, arquivo).subscribe({
-      next: foto => {
-        this.fotos = [...this.fotos, foto];
-        this.enviando = false;
-        this.sucesso = this.ehVideo(foto) ? 'Vídeo com áudio enviado.' : 'Foto enviada.';
-        input.value = '';
+  }
+
+  excluir(foto: FotoAngulo): void {
+    if (this.enviandoCategoria || this.excluindoId || !this.token) return;
+    if (!confirm('Excluir esta foto?')) return;
+    this.excluindoId = foto.id;
+    this.api.removerFotoSessao(this.token, foto.id).subscribe({
+      next: sessao => {
+        this.fotos = sessao.fotos ?? this.fotos.filter(f => f.id !== foto.id);
+        this.excluindoId = '';
+        this.mostrarSucesso('Foto excluída.');
       },
       error: (err: { error?: { erro?: string } }) => {
-        this.enviando = false;
-        this.erro = err?.error?.erro || 'Não foi possível enviar.';
-        input.value = '';
+        this.excluindoId = '';
+        this.erro = err?.error?.erro || 'Não foi possível excluir a foto.';
       },
     });
   }
 
-  get resumo(): string {
-    const videos = this.fotos.filter(f => this.ehVideo(f)).length;
-    const fotos = this.fotos.length - videos;
-    const partes: string[] = [];
-    if (fotos === 1) partes.push('1 foto');
-    else if (fotos > 1) partes.push(`${fotos} fotos`);
-    if (videos === 1) partes.push('1 vídeo');
-    else if (videos > 1) partes.push(`${videos} vídeos`);
-    return partes.join(' e ') + ' enviado(s)';
+  substituir(ev: FotosAnguloSubstituir): void {
+    if (this.enviandoCategoria || this.excluindoId || !this.token) return;
+    this.excluindoId = ev.foto.id;
+    this.api.removerFotoSessao(this.token, ev.foto.id).subscribe({
+      next: sessao => {
+        this.fotos = sessao.fotos ?? this.fotos.filter(f => f.id !== ev.foto.id);
+        this.excluindoId = '';
+        this.mostrarSucesso('Foto removida. Escolha a nova imagem.');
+        ev.abrirCamera();
+      },
+      error: (err: { error?: { erro?: string } }) => {
+        this.excluindoId = '';
+        this.erro = err?.error?.erro || 'Não foi possível remover a foto para substituir.';
+      },
+    });
   }
 
-  fotoNaoAbriu(): void {
-    this.erro = 'A foto foi enviada, mas a imagem não abriu. Gere o QR de novo no balcão.';
+  concluir(): void {
+    this.concluido = true;
+    this.sucesso = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  private async preparar(arquivo: File): Promise<File> {
-    const video = arquivo.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|3gp)$/i.test(arquivo.name);
-    if (video) return arquivo;
-    try {
-      const bitmap = await createImageBitmap(arquivo);
-      const maximo = 2000;
-      const escala = Math.min(1, maximo / Math.max(bitmap.width, bitmap.height));
-      const largura = Math.max(1, Math.round(bitmap.width * escala));
-      const altura = Math.max(1, Math.round(bitmap.height * escala));
-      const tela = document.createElement('canvas');
-      tela.width = largura;
-      tela.height = altura;
-      const ctx = tela.getContext('2d');
-      if (!ctx) {
-        bitmap.close();
-        return arquivo;
+  private enviarSequencial(
+    files: File[],
+    categoria: OsFotoCategoriaId,
+    descricao?: string,
+    enviadas = 0,
+  ): void {
+    if (!files.length) {
+      this.enviandoCategoria = null;
+      this.pendentes = 0;
+      this.limparPreview();
+      if (enviadas > 0) {
+        const rotulo = this.rotulo(categoria);
+        this.mostrarSucesso(
+          enviadas === 1
+            ? `Foto de “${rotulo}” anexada. Toque na miniatura para ver ou substituir.`
+            : `${enviadas} fotos de “${rotulo}” anexadas.`,
+        );
       }
-      ctx.drawImage(bitmap, 0, 0, largura, altura);
-      bitmap.close();
-      const blob = await new Promise<Blob | null>(resolve => tela.toBlob(resolve, 'image/jpeg', 0.82));
-      if (!blob?.size) return arquivo;
-      const base = (arquivo.name || 'foto').replace(/\.[^.]+$/, '') || 'foto';
-      return new File([blob], `${base}.jpg`, { type: 'image/jpeg' });
-    } catch {
-      return arquivo;
+      return;
     }
+    const file = files[0];
+    this.limparPreview();
+    if (file.size <= 4 * 1024 * 1024) this.previewLocalUrl = URL.createObjectURL(file);
+    this.previewCategoria = categoria;
+    this.api.enviarFotoSessao(this.token, file, categoria, descricao).pipe(
+      timeout(UPLOAD_TIMEOUT_MS),
+      catchError((err) => {
+        if (err instanceof TimeoutError) {
+          return throwError(() => ({
+            error: { erro: 'Tempo esgotado ao enviar. Verifique o Wi‑Fi e tente de novo.' },
+          }));
+        }
+        return throwError(() => err);
+      }),
+    ).subscribe({
+      next: foto => {
+        this.fotos = [...this.fotos, foto];
+        this.pendentes = Math.max(0, files.length - 1);
+        this.enviarSequencial(files.slice(1), categoria, descricao, enviadas + 1);
+      },
+      error: (err: { error?: { erro?: string } }) => {
+        this.enviandoCategoria = null;
+        this.pendentes = 0;
+        this.limparPreview();
+        this.erro = err?.error?.erro || 'Não foi possível enviar a foto.';
+      },
+    });
   }
 
-  ehVideo(item: { tipo?: string; url?: string }): boolean {
-    if (item.tipo === 'video') return true;
-    return /\.(mp4|mov|webm|m4v|3gp)(\?|$)/i.test(item.url ?? '');
+  private mostrarSucesso(msg: string): void {
+    this.sucesso = msg;
+    if (this.sucessoTimer) clearTimeout(this.sucessoTimer);
+    this.sucessoTimer = setTimeout(() => { this.sucesso = ''; }, 4500);
+  }
+
+  private limparPreview(): void {
+    if (this.previewLocalUrl) URL.revokeObjectURL(this.previewLocalUrl);
+    this.previewLocalUrl = '';
+    this.previewCategoria = null;
   }
 }

@@ -9,6 +9,7 @@ import { ClienteAutocomplete } from '../../../components/cliente-autocomplete/cl
 import { NovoClienteModal } from '../../../components/novo-cliente-modal/novo-cliente-modal';
 import { AutocompleteCriavel, AutocompleteItem } from '../../../components/autocomplete-criavel/autocomplete-criavel';
 import { EditarAparelhoLojaModal } from './editar-aparelho-loja-modal';
+import { GridAcao } from '../../../components/grid-acao/grid-acao';
 import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
 import { GridPaginationState } from '../../../utils/grid-pagination.state';
 import { AparelhosService } from '../../../services/aparelhos';
@@ -51,6 +52,14 @@ type Modo = 'compra' | 'venda' | 'troca';
 type TelaLoja = Modo | 'estoque' | 'transacoes' | 'financeiro';
 type VisaoTransacoes = 'lista' | 'cadeia';
 type PeriodoDias = 7 | 14 | 30 | 90;
+interface LucroVendas {
+  quantidade: number;
+  valor: number;
+  custo: number;
+  lucro: number;
+  percentual: number | null;
+  valorMedio: number | null;
+}
 type FormaNegociacao = 'avista' | 'cartao' | 'avista_cartao' | 'payjoy' | 'paymobi' | 'crefaz' | 'outra';
 
 interface NegociacaoForm {
@@ -111,6 +120,7 @@ interface FichaEntrada {
     NovoClienteModal,
     AutocompleteCriavel,
     EditarAparelhoLojaModal,
+    GridAcao,
     GridPaginator,
   ],
   template: `
@@ -171,6 +181,16 @@ interface FichaEntrada {
           <span>Peças no custo dos aparelhos</span>
           <strong>{{ dinheiro(painel.resumo.custoPecas) }}</strong>
           <small>Soma da assistência técnica ao custo de cada celular</small>
+        </div>
+        <div class="card" *ngIf="lucroVendasAdmin as lucro">
+          <span>Lucro bruto dos vendidos</span>
+          <strong [class.valor-positivo]="lucro.lucro >= 0" [class.valor-negativo]="lucro.lucro < 0">{{ dinheiro(lucro.lucro) }}</strong>
+          <small>{{ lucro.quantidade }} {{ lucro.quantidade === 1 ? 'aparelho vendido' : 'aparelhos vendidos' }} · custo {{ dinheiro(lucro.custo) }}</small>
+        </div>
+        <div class="card" *ngIf="lucroVendasAdmin as lucro">
+          <span>Percentual de lucro bruto</span>
+          <strong [class.valor-positivo]="(lucro.percentual ?? 0) >= 0" [class.valor-negativo]="(lucro.percentual ?? 0) < 0">{{ percentual(lucro.percentual) }}</strong>
+          <small>Custo do celular mais o custo das peças, menos o valor vendido</small>
         </div>
       </div>
 
@@ -386,6 +406,18 @@ interface FichaEntrada {
             <span>Resultado</span>
             <strong [class.valor-positivo]="r.resultado >= 0" [class.valor-negativo]="r.resultado < 0">{{ dinheiro(r.resultado) }}</strong>
             <small>Neste período</small>
+          </div>
+        </div>
+        <div class="cards" *ngIf="isAdmin && lucroVendasPeriodo as lucro">
+          <div class="card">
+            <span>Valor médio por aparelho vendido</span>
+            <strong>{{ lucro.valorMedio == null ? '—' : dinheiro(lucro.valorMedio) }}</strong>
+            <small>{{ lucro.quantidade }} {{ lucro.quantidade === 1 ? 'venda neste recorte' : 'vendas neste recorte' }} · total {{ dinheiro(lucro.valor) }}</small>
+          </div>
+          <div class="card">
+            <span>Percentual médio de lucro bruto</span>
+            <strong [class.valor-positivo]="(lucro.percentual ?? 0) >= 0" [class.valor-negativo]="(lucro.percentual ?? 0) < 0">{{ percentual(lucro.percentual) }}</strong>
+            <small>Custo do celular mais as peças, menos o valor vendido, dividido pelo valor vendido. Resultado {{ dinheiro(lucro.lucro) }}.</small>
           </div>
         </div>
         <div class="modos visoes">
@@ -1197,7 +1229,7 @@ interface FichaEntrada {
       <div class="busca-estoque" *ngIf="estoque.length">
         <div class="form-group">
           <label>Código</label>
-          <input [(ngModel)]="buscaCodigo" name="buscaCodigo" placeholder="N14 ou 14" />
+          <input [(ngModel)]="buscaCodigo" (ngModelChange)="resetPaginaEstoque()" name="buscaCodigo" placeholder="N14 ou 14" />
         </div>
         <div class="form-group">
           <label>Marca</label>
@@ -1222,33 +1254,42 @@ interface FichaEntrada {
         </div>
         <div class="form-group">
           <label>Vendedor</label>
-          <select [(ngModel)]="buscaVendedor" name="buscaVendedorEstoque">
+          <select [(ngModel)]="buscaVendedor" (ngModelChange)="resetPaginaEstoque()" name="buscaVendedorEstoque">
             <option value="">Todos</option>
             <option *ngFor="let v of vendedoresCadastrados; trackBy: trackVendedor" [value]="v.nome">{{ v.nome }}</option>
           </select>
         </div>
         <div class="form-group">
           <label>Configuração</label>
-          <input [(ngModel)]="buscaConfig" name="buscaConfig" placeholder="128 GB" />
+          <input [(ngModel)]="buscaConfig" (ngModelChange)="resetPaginaEstoque()" name="buscaConfig" placeholder="128 GB" />
         </div>
         <div class="form-group">
           <label>Cor</label>
-          <input [(ngModel)]="buscaCor" name="buscaCor" placeholder="Cor" />
+          <input [(ngModel)]="buscaCor" (ngModelChange)="resetPaginaEstoque()" name="buscaCor" placeholder="Cor" />
         </div>
         <div class="form-group">
           <label>Valor de</label>
-          <input type="number" min="0" step="0.01" [(ngModel)]="buscaValorDe" name="buscaValorDe" />
+          <input type="number" min="0" step="0.01" [(ngModel)]="buscaValorDe" (ngModelChange)="resetPaginaEstoque()" name="buscaValorDe" />
         </div>
         <div class="form-group">
           <label>Valor até</label>
-          <input type="number" min="0" step="0.01" [(ngModel)]="buscaValorAte" name="buscaValorAte" />
+          <input type="number" min="0" step="0.01" [(ngModel)]="buscaValorAte" (ngModelChange)="resetPaginaEstoque()" name="buscaValorAte" />
         </div>
       </div>
       <p class="hint" *ngIf="estoque.length && !estoqueFiltrado.length">Nenhum aparelho com esse filtro.</p>
-      <table class="data-grid" *ngIf="estoqueFiltrado.length">
+      <app-grid-paginator
+        *ngIf="estoqueFiltrado.length"
+        [total]="estoqueFiltrado.length"
+        [page]="gridEstoque.page"
+        [pageSize]="gridEstoque.pageSize"
+        (pageChange)="gridEstoque.onPageChange($event)"
+        (pageSizeChange)="gridEstoque.onPageSizeChange($event)"
+      />
+      <table class="data-grid" *ngIf="estoquePaginado.length">
         <thead>
           <tr>
             <th>Código</th>
+            <th>Foto</th>
             <th>Marca</th>
             <th>Modelo</th>
             <th>Valor</th>
@@ -1260,8 +1301,11 @@ interface FichaEntrada {
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let a of estoqueFiltrado" class="clicavel" [class.selecionada]="fichaId === a.id" [class.na-assistencia]="a.status === 'em_assistencia'" (click)="alternarFicha(a.id)">
+          <tr *ngFor="let a of estoquePaginado" class="clicavel" [class.selecionada]="fichaId === a.id" [class.na-assistencia]="a.status === 'em_assistencia'" (click)="alternarFicha(a.id)">
             <td class="codigo-celula">{{ a.codigo || '—' }}</td>
+            <td>
+              <span class="flag-foto" *ngIf="temFoto(a)" title="Este aparelho tem foto">Foto</span>
+            </td>
             <td>{{ a.marca }}</td>
             <td>{{ a.modelo }}</td>
             <td>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</td>
@@ -1279,9 +1323,11 @@ interface FichaEntrada {
               >i</span>
             </td>
             <td>{{ a.vendedorEntradaNome || '—' }}</td>
-            <td class="acoes-celula" (click)="$event.stopPropagation()">
-              <button type="button" class="link" *ngIf="podeEditar(a)" (click)="abrirEdicao(a)">Editar</button>
-              <button type="button" class="link perigo" *ngIf="isAdmin && podeEditar(a)" [disabled]="salvando" (click)="excluirAparelho(a)">Excluir</button>
+            <td class="grid-acoes-cell" (click)="$event.stopPropagation()">
+              <div class="grid-acoes" *ngIf="podeEditar(a)">
+                <app-grid-acao tipo="editar" titulo="Editar" (acao)="abrirEdicao(a)" />
+                <app-grid-acao tipo="excluir" titulo="Excluir" *ngIf="isAdmin" [disabled]="salvando" (acao)="excluirAparelho(a)" />
+              </div>
             </td>
           </tr>
         </tbody>
@@ -1298,40 +1344,8 @@ interface FichaEntrada {
               <p class="hint codigo-faixa" *ngIf="a.codigo">O sistema gerou este código na entrada, para colar nas costas. Ele não muda se você editar o cadastro.</p>
               <div class="ficha-fotos">
                 <h4>Fotos deste aparelho</h4>
-                <p class="hint" *ngIf="!a.fotos?.length">Nenhuma foto ainda. Inclua daqui ou pelo celular.</p>
-                <div class="galeria" *ngIf="a.fotos?.length">
-                  <div class="galeria-item" *ngFor="let f of a.fotos" [class.marcada]="fotoMarcada(f)">
-                    <label class="marca-whats">
-                      <input type="checkbox" [checked]="fotoMarcada(f)" (change)="alternarFoto(f)" [attr.aria-label]="'Selecionar para o WhatsApp'" />
-                    </label>
-                    <button type="button" class="mini" (click)="ampliarFoto(f)">
-                      <video *ngIf="ehVideo(f)" [src]="f.url" muted></video>
-                      <img *ngIf="!ehVideo(f)" [src]="f.url" alt="Foto do aparelho" />
-                    </button>
-                  </div>
-                </div>
-                <figure class="foto-ampliada" *ngIf="fotoAmpliada as grande">
-                  <video *ngIf="ehVideo(grande)" [src]="grande.url" controls playsinline></video>
-                  <img *ngIf="!ehVideo(grande)" [src]="grande.url" alt="Foto ampliada" />
-                  <button type="button" class="secundario" (click)="fotoAmpliada = null">Fechar imagem</button>
-                </figure>
-                <label class="secundario arquivo">
-                  {{ enviandoFotos ? 'Enviando fotos…' : 'Incluir fotos deste computador' }}
-                  <input type="file" accept="image/*,video/*" multiple hidden [disabled]="enviandoFotos" (change)="incluirFotos(a, $event)" />
-                </label>
-                <button type="button" class="secundario" (click)="abrirQrAparelho(a)">QR code — câmera do celular</button>
-                <div class="qr-box" *ngIf="qrAparelhoId === a.id && qrAberto">
-                  <p class="hint">Escaneie para fotografar este aparelho. A foto entra neste cadastro.</p>
-                  <img *ngIf="qrDataUrl" [src]="qrDataUrl" alt="QR code das fotos e vídeos" class="qr" />
-                  <p class="hint" *ngIf="fotosSessao.length">{{ textoMidiaRecebida }}</p>
-                </div>
-                <button
-                  type="button"
-                  class="secundario"
-                  *ngIf="a.fotos?.length"
-                  [disabled]="enviandoWhatsapp || !temFotoMarcada(a)"
-                  (click)="enviarWhatsapp(a)"
-                >{{ enviandoWhatsapp ? 'Enviando…' : 'Enviar fotos marcadas no WhatsApp' }}</button>
+                <p class="hint" *ngIf="temFoto(a)">Este aparelho tem foto. Elas abrem em Editar, junto com os vídeos.</p>
+                <p class="hint" *ngIf="!temFoto(a)">Nenhuma foto ainda. Inclua em Editar.</p>
               </div>
               <div class="ficha-dados">
                 <h4>Cadastro</h4>
@@ -1529,6 +1543,17 @@ interface FichaEntrada {
     .codigo-banner strong { display: block; font-size: 64px; letter-spacing: 2px; line-height: 1; }
     .codigo-banner span { color: #e2e8f0; }
     .codigo-celula { font-size: 18px; font-weight: 800; }
+    .flag-foto {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1e3a8a;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
     .valor-positivo { color: #166534; font-weight: 700; }
     .valor-negativo { color: #9a3412; font-weight: 700; }
     tr.selecionada td { background: #eff6ff; }
@@ -1798,6 +1823,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   filtroValorDeTx: number | null = null;
   filtroValorAteTx: number | null = null;
   gridTransacoes = new GridPaginationState();
+  gridEstoque = new GridPaginationState();
   periodoDias: PeriodoDias = 30;
   readonly periodos: { dias: PeriodoDias; nome: string }[] = [
     { dias: 7, nome: '1 semana' },
@@ -1885,6 +1911,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     private impressao: OsImpressaoService,
   ) {
     this.gridTransacoes.pageSize = 100;
+    this.gridEstoque.pageSize = 100;
   }
 
   get isAdmin(): boolean {
@@ -2179,6 +2206,14 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   get operacoes(): AparelhoOperacao[] {
     return this.painel?.operacoes ?? [];
+  }
+
+  get lucroVendasAdmin(): LucroVendas {
+    return this.lucroDasVendas(this.operacoes);
+  }
+
+  get lucroVendasPeriodo(): LucroVendas {
+    return this.lucroDasVendas(this.transacoesFiltradas);
   }
 
   get vendedores(): AparelhoVendedorResumo[] {
@@ -2794,6 +2829,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   onBuscaMarca(marca: string): void {
     this.buscaMarca = marca;
+    this.resetPaginaEstoque();
     if (this.buscaModeloMarca && marca && !this.igual(this.buscaModeloMarca, marca)) {
       this.limparFiltroModeloEstoque();
     }
@@ -2813,6 +2849,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     );
 
   onFiltroModeloEstoque(item: AutocompleteItem | null): void {
+    this.resetPaginaEstoque();
     if (!item?.id && !item?.nome?.trim()) {
       this.buscaModeloId = '';
       this.buscaModelo = '';
@@ -2896,6 +2933,18 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   capaDe(a: AparelhoLojaItem): string {
     return (a.fotos ?? []).find(f => !this.ehVideo(f))?.url || '';
+  }
+
+  temFoto(a: AparelhoLojaItem): boolean {
+    return !!a.temFoto;
+  }
+
+  resetPaginaEstoque(): void {
+    this.gridEstoque.reset();
+  }
+
+  get estoquePaginado(): AparelhoLojaItem[] {
+    return this.gridEstoque.paginate(this.estoqueFiltrado);
   }
 
   alternarFicha(id?: string): void {
@@ -3504,6 +3553,31 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   dinheiro(valor?: number | null): string {
     return (Number(valor) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  percentual(valor: number | null): string {
+    if (valor == null) return '—';
+    return `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  }
+
+  private lucroDasVendas(ops: AparelhoOperacao[]): LucroVendas {
+    const itens = ops
+      .filter(op => op.tipo === 'venda' && op.status !== 'estornada')
+      .flatMap(op => this.aparelhosSaiu(op))
+      .filter(a => (Number(a.valor) || 0) > 0);
+    const valor = itens.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    const custo = itens.reduce((s, a) => s + (Number(a.custo) || 0), 0);
+    const lucro = custo - valor;
+    const quantidade = itens.length;
+    const arredondar = (n: number) => Math.round(n * 100) / 100;
+    return {
+      quantidade,
+      valor: arredondar(valor),
+      custo: arredondar(custo),
+      lucro: arredondar(lucro),
+      percentual: valor > 0 ? Math.round((lucro / valor) * 1000) / 10 : null,
+      valorMedio: quantidade > 0 ? arredondar(valor / quantidade) : null,
+    };
   }
 
   salvarCompra(): void {
