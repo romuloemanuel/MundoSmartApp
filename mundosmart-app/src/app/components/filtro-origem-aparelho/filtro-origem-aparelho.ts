@@ -15,7 +15,7 @@ interface OpcaoOrigem {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="grupo" role="group" aria-label="Dono do celular">
+    <div class="grupo" role="group" aria-label="De quem é a ordem">
       <button
         type="button"
         *ngFor="let op of opcoes"
@@ -84,9 +84,9 @@ interface OpcaoOrigem {
 })
 export class FiltroOrigemAparelho {
   readonly opcoes: OpcaoOrigem[] = [
-    { id: 'loja', nome: 'Loja', dica: 'Mundo Smart, qualquer situação e data' },
-    { id: 'todos', nome: 'TODOS', dica: 'Loja e cliente, em andamento no período' },
-    { id: 'cliente', nome: 'Cliente', dica: 'Fora da loja, qualquer situação e data' },
+    { id: 'loja', nome: 'Loja', dica: 'Ordem da Mundo Smart' },
+    { id: 'todos', nome: 'TODOS', dica: 'Ordem da loja e do cliente' },
+    { id: 'cliente', nome: 'Cliente', dica: 'Ordem de cliente' },
   ];
 
   @Input() valor: OrigemAparelho = 'todos';

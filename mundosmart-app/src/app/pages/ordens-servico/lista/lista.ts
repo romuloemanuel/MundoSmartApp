@@ -518,7 +518,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   private readonly onScrollAviso = () => this.fecharContatoAviso();
   /** Filtro local por bolinha de urgência (baseado na data de entrada). */
   filtroUrgencia: '' | OsPainelTvNivel = '';
-  /** Celular da loja, de cliente, ou os dois. */
+  /** De quem é a ordem: loja, cliente, ou as duas. */
   origemAparelho: 'todos' | 'loja' | 'cliente' = 'todos';
   contagemOrigem: { todos: number | null; loja: number | null; cliente: number | null } = {
     todos: null,
@@ -635,33 +635,15 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   }
 
   onSituacaoFiltroChange(): void {
-    if (!this.filtroPlacaAtivo && this.origemAparelho === 'todos') {
-      this.restaurarDatasAtalho();
-    }
+    if (!this.filtroPlacaAtivo) this.restaurarDatasAtalho();
     this.buscarComFiltros();
   }
 
-  /** Loja, todos ou só cliente. Loja e Cliente mostram qualquer situação, sem recorte de data. */
+  /** Só de quem é a ordem. Não mexe em situação, data nem nos outros filtros. */
   escolherOrigemAparelho(qual: 'todos' | 'loja' | 'cliente'): void {
     if (qual === this.origemAparelho) return;
-    const estavaRecortado = this.origemAparelho !== 'todos';
     this.origemAparelho = qual;
     if (clienteEhLojaMundoSmart(this.filtros.nome)) this.filtros.nome = '';
-    if (qual === 'todos') {
-      this.filtros.situacao = SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
-      this.restaurarDatasAtalho();
-      this.buscarComFiltros();
-      return;
-    }
-    if (!estavaRecortado && !this.filtroPlacaAtivo) {
-      this.datasAntesAtalho = {
-        inicio: this.filtros.dataCadastroInicio ?? '',
-        fim: this.filtros.dataCadastroFim ?? '',
-      };
-    }
-    this.filtros.situacao = '';
-    this.filtros.dataCadastroInicio = '';
-    this.filtros.dataCadastroFim = '';
     this.buscarComFiltros();
   }
 
@@ -669,16 +651,14 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   alternarAtalho(qual: 'placa'): void {
     if (this.filtroPlacaAtivo) {
       this.filtros.situacao = SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
-      if (this.origemAparelho === 'todos') this.restaurarDatasAtalho();
+      this.restaurarDatasAtalho();
       this.buscarComFiltros();
       return;
     }
-    if (this.origemAparelho === 'todos') {
-      this.datasAntesAtalho = {
-        inicio: this.filtros.dataCadastroInicio ?? '',
-        fim: this.filtros.dataCadastroFim ?? '',
-      };
-    }
+    this.datasAntesAtalho = {
+      inicio: this.filtros.dataCadastroInicio ?? '',
+      fim: this.filtros.dataCadastroFim ?? '',
+    };
     this.filtros.situacao = SITUACAO_OS_REPARO_AVANCADO_PLACA;
     this.filtros.dataCadastroInicio = '';
     this.filtros.dataCadastroFim = '';
@@ -831,19 +811,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     const f = this.montarFiltrosRequest();
     f.pagina = 1;
     f.tamanhoPagina = 1;
-    if (qual === 'todos') {
-      f.origemAparelho = undefined;
-      if (this.origemAparelho !== 'todos') {
-        f.situacao = this.filtros.numero?.trim() ? undefined : SITUACAO_OS_FILTRO_EXCETO_CONCLUIDO;
-        f.dataCadastroInicio = this.datasAntesAtalho?.inicio || undefined;
-        f.dataCadastroFim = this.datasAntesAtalho?.fim || undefined;
-      }
-      return f;
-    }
-    f.origemAparelho = qual;
-    f.situacao = undefined;
-    f.dataCadastroInicio = undefined;
-    f.dataCadastroFim = undefined;
+    f.origemAparelho = qual === 'todos' ? undefined : qual;
     return f;
   }
 
@@ -972,8 +940,8 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
     if (situacao) partes.push(situacao.label);
     if (this.filtros.numero?.trim()) partes.push(`Nº ${this.filtros.numero.trim()}`);
     if (this.filtros.nome?.trim()) partes.push(`Nome: ${this.filtros.nome.trim()}`);
-    if (this.origemAparelho === 'loja') partes.push('Celular da loja');
-    if (this.origemAparelho === 'cliente') partes.push('Celular de cliente');
+    if (this.origemAparelho === 'loja') partes.push('Ordem da loja');
+    if (this.origemAparelho === 'cliente') partes.push('Ordem de cliente');
     if (this.filtros.telefone?.trim()) partes.push(`Tel: ${this.filtros.telefone.trim()}`);
     if (this.filtroUrgencia) {
       const faixa = this.faixasUrgencia.find(f => f.id === this.filtroUrgencia);
