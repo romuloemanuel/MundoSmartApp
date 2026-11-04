@@ -2496,6 +2496,13 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     return !Number.isNaN(d.getTime()) && d.getFullYear() >= 2000;
   }
 
+  /** Zero é uma OS zerada. Vazio ou negativo continua inválido. */
+  private valorInformadoNaoNegativo(valor: number | string | null | undefined): boolean {
+    if (valor == null || valor === '') return false;
+    const n = Number(valor);
+    return Number.isFinite(n) && n >= 0;
+  }
+
   private validarOs(): string | null {
     const faltando: string[] = [];
     if (this.os.contato?.id == null) faltando.push('cliente');
@@ -2506,7 +2513,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
     if (!this.os.defeito?.trim()) faltando.push('defeito relatado pelo cliente');
     if (this.os.temRisco && !this.os.riscoAcordado?.trim()) faltando.push('risco acordado');
     if (!this.os.formaPagamento?.trim()) faltando.push('forma de pagamento combinada');
-    if (!(Number(this.os.valorAVista ?? this.os.valorTotalAcordado) > 0)) {
+    if (!this.valorInformadoNaoNegativo(this.os.valorAVista ?? this.os.valorTotalAcordado)) {
       faltando.push('valor à vista');
     }
     if (!this.senhaDispositivoInformada()) faltando.push('tipo de senha do aparelho');
@@ -2547,7 +2554,7 @@ export class OrdensServicoForm implements OnInit, OnDestroy {
       if (!this.os.parcelasPagamento || this.os.parcelasPagamento < 2) {
         faltando.push('quantidade de parcelas');
       }
-      if (!(Number(this.os.valorAPrazo) > 0)) {
+      if (!this.valorInformadoNaoNegativo(this.os.valorAPrazo)) {
         faltando.push('valor total parcelado');
       }
     }
