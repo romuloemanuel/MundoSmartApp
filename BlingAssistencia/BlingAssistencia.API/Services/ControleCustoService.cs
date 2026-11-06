@@ -74,15 +74,17 @@ public class ControleCustoService : IControleCustoService
     public async Task<ControleCustoComparativo> ComparativoAsync(
         string? ate, int quantidade = 6, CancellationToken cancellationToken = default)
     {
-        var fim = string.IsNullOrWhiteSpace(ate) ? MesAtual() : ExigirCompetencia(ate);
-        if (string.CompareOrdinal(fim, MesAtual()) > 0)
-            throw new ArgumentException("A comparação vai até o mês atual.");
-        if (quantidade < 2) quantidade = 2;
-        if (quantidade > 12) quantidade = 12;
-
-        var meses = new List<string>(quantidade);
-        for (var i = quantidade - 1; i >= 0; i--)
-            meses.Add(RetrocederMes(fim, i));
+        _ = ate;
+        _ = quantidade;
+        var hoje = MesAtual();
+        var fim = ControleCustoRecorrencia.SomarMeses(hoje, 4);
+        var meses = new List<string>(9);
+        for (var i = 4; i >= 1; i--)
+            meses.Add(RetrocederMes(hoje, i));
+        meses.Add(hoje);
+        for (var i = 1; i <= 4; i++)
+            meses.Add(ControleCustoRecorrencia.SomarMeses(hoje, i));
+        quantidade = meses.Count;
 
         var todos = await _repo.ListarTodosAsync(cancellationToken);
         var custos = new decimal[quantidade];
@@ -160,8 +162,16 @@ public class ControleCustoService : IControleCustoService
 
         var somaParcelas = new decimal[quantidade];
         var detalhes = new List<ControleCustoComparativoLinha>();
+        decimal totalAQuitar = 0;
+        string? quitacao = null;
         foreach (var custo in parcelas)
         {
+            var saldo = SaldoAteQuitar(custo, inicio);
+            if (saldo <= 0) continue;
+            totalAQuitar = Dinheiro(totalAQuitar + saldo);
+            var fim = FimDaSerie(custo);
+            if (quitacao is null || string.CompareOrdinal(fim, quitacao) > 0) quitacao = fim;
+
             var valores = new decimal[quantidade];
             for (var i = 0; i < meses.Count; i++)
             {
@@ -169,8 +179,9 @@ public class ControleCustoService : IControleCustoService
                 valores[i] = valor;
                 somaParcelas[i] = Dinheiro(somaParcelas[i] + valor);
             }
-            if (valores.All(v => v == 0)) continue;
-            detalhes.Add(LinhaComparativo(custo.Id ?? custo.Descricao, NomeParcela(custo), "parcela", valores));
+            var detalhe = LinhaComparativo(custo.Id ?? custo.Descricao, NomeParcela(custo), "parcela", valores);
+            detalhe.Saldo = saldo;
+            detalhes.Add(detalhe);
         }
 
         var fixos = new decimal[quantidade];
@@ -201,9 +212,11 @@ public class ControleCustoService : IControleCustoService
                 alvo[i] = Dinheiro(alvo[i] + ControleCustoRecorrencia.ValorNoMes(item, meses[i]));
         }
 
+        var semFixos = LinhaComparativo("sem-fixos", "Sem custos fixos", "total", somaParcelas);
+        semFixos.Saldo = totalAQuitar;
         var linhas = new List<ControleCustoComparativoLinha>
         {
-            LinhaComparativo("sem-fixos", "Sem custos fixos", "total", somaParcelas),
+            semFixos,
             LinhaComparativo("fixos", "Custos fixos", "total", fixos),
             LinhaComparativo("com-fixos", "Com custos fixos", "total", comFixos),
             LinhaComparativo("folha", "Folha salarial", "total", folha),
@@ -211,14 +224,106 @@ public class ControleCustoService : IControleCustoService
             LinhaComparativo("investimento", "Investimento", "total", investimento),
         };
         linhas.AddRange(detalhes);
+        var contas = todos
+            .Select(item => MontarConta(item, inicio))
+            .Where(conta => conta is not null)
+            .Cast<ControleCustoPrevisaoConta>()
+            .OrderBy(conta => conta.Nome, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         return new ControleCustoPrevisao
         {
             Inicio = inicio,
             Meses = meses,
             Limitada = alcance + 1 > maximo,
+            TotalAQuitar = totalAQuitar,
+            Quitacao = quitacao,
             Linhas = linhas,
+            Contas = contas,
         };
+    }
+
+    private static ControleCustoPrevisaoConta? MontarConta(ControleCustoLancamentoData item, string inicio)
+    {
+        if (item.Tipo is not (ControleCustoCatalogo.Custo or ControleCustoCatalogo.Reinvestimento))
+            return null;
+
+        var recorrencia = string.IsNullOrWhiteSpace(item.Recorrencia)
+            ? ControleCustoCatalogo.RecorrenciaUnico
+            : item.Recorrencia;
+        var serie = recorrencia is ControleCustoCatalogo.RecorrenciaParcelado or ControleCustoCatalogo.RecorrenciaMensal;
+        string? fim = serie ? FimDaSerie(item) : null;
+        if (serie)
+        {
+            if (string.CompareOrdinal(fim, inicio) < 0) return null;
+        }
+        else if (!ControleCustoRecorrencia.Vigente(item, inicio))
+        {
+            return null;
+        }
+
+        var topicos = new List<string>();
+        if (item.Tipo == ControleCustoCatalogo.Custo && recorrencia == ControleCustoCatalogo.RecorrenciaFixo)
+            topicos.Add("fixos");
+        if (item.Tipo == ControleCustoCatalogo.Custo && serie)
+            topicos.Add("parcela");
+        var grupo = GrupoDoGasto(item);
+        if (grupo is not null) topicos.Add(grupo);
+        if (topicos.Count == 0) return null;
+
+        var parcelas = new List<ControleCustoPrevisaoParcela>();
+        if (serie)
+        {
+            var total = recorrencia == ControleCustoCatalogo.RecorrenciaParcelado
+                ? Math.Max(2, item.Meses ?? 2)
+                : Math.Max(1, item.Meses ?? 1);
+            for (var i = 0; i < total; i++)
+            {
+                var mes = ControleCustoRecorrencia.SomarMeses(item.Competencia, i);
+                parcelas.Add(new ControleCustoPrevisaoParcela
+                {
+                    Mes = mes,
+                    Numero = i + 1,
+                    Total = total,
+                    Valor = ControleCustoRecorrencia.ValorNoMes(item, mes),
+                });
+            }
+        }
+
+        var referencia = string.CompareOrdinal(item.Competencia, inicio) > 0 ? item.Competencia : inicio;
+        return new ControleCustoPrevisaoConta
+        {
+            Id = item.Id ?? "",
+            Nome = NomeConta(item),
+            Categoria = item.Categoria ?? "",
+            Recorrencia = recorrencia,
+            Topicos = topicos,
+            ValorTotal = item.Valor,
+            ValorMensal = ControleCustoRecorrencia.ValorNoMes(item, referencia),
+            Inicio = item.Competencia,
+            Fim = fim,
+            Saldo = serie ? SaldoAteQuitar(item, inicio) : 0,
+            Parcelas = parcelas,
+        };
+    }
+
+    private static string NomeConta(ControleCustoLancamentoData item)
+    {
+        if (string.IsNullOrWhiteSpace(item.ColaboradorNome) || item.Descricao.Contains(item.ColaboradorNome, StringComparison.OrdinalIgnoreCase))
+            return item.Descricao;
+        return $"{item.ColaboradorNome} — {item.Descricao}";
+    }
+
+    private static decimal SaldoAteQuitar(ControleCustoLancamentoData custo, string inicio)
+    {
+        var fim = FimDaSerie(custo);
+        var comeco = string.CompareOrdinal(custo.Competencia, inicio) > 0 ? custo.Competencia : inicio;
+        if (string.CompareOrdinal(comeco, fim) > 0) return 0;
+        var saldo = 0m;
+        var passos = ControleCustoRecorrencia.IndiceMes(comeco, fim);
+        for (var i = 0; i <= passos; i++)
+            saldo = Dinheiro(saldo + ControleCustoRecorrencia.ValorNoMes(custo, ControleCustoRecorrencia.SomarMeses(comeco, i)));
+        return saldo;
     }
 
     private static string? GrupoDoGasto(ControleCustoLancamentoData item)

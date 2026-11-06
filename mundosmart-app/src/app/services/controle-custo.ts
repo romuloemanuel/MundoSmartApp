@@ -63,6 +63,7 @@ export interface ControleCustoComparativoLinha {
   nome: string;
   grupo: string;
   valores: number[];
+  saldo?: number;
 }
 
 export interface ControleCustoComparativo {
@@ -71,11 +72,35 @@ export interface ControleCustoComparativo {
   linhas: ControleCustoComparativoLinha[];
 }
 
+export interface ControleCustoPrevisaoParcela {
+  mes: string;
+  numero: number;
+  total: number;
+  valor: number;
+}
+
+export interface ControleCustoPrevisaoConta {
+  id: string;
+  nome: string;
+  categoria: string;
+  recorrencia: string;
+  topicos: string[];
+  valorTotal: number;
+  valorMensal: number;
+  inicio: string;
+  fim?: string | null;
+  saldo: number;
+  parcelas: ControleCustoPrevisaoParcela[];
+}
+
 export interface ControleCustoPrevisao {
   inicio: string;
   meses: string[];
   limitada: boolean;
+  totalAQuitar: number;
+  quitacao?: string | null;
   linhas: ControleCustoComparativoLinha[];
+  contas: ControleCustoPrevisaoConta[];
 }
 
 export const SETORES_CUSTO: { id: string; nome: string }[] = [

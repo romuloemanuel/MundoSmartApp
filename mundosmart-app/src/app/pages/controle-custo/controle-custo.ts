@@ -9,7 +9,9 @@ import {
   CATEGORIAS_CUSTO,
   ControleCustoColaborador,
   ControleCustoComparativo,
+  ControleCustoComparativoLinha,
   ControleCustoPrevisao,
+  ControleCustoPrevisaoConta,
   ControleCustoLancamento,
   ControleCustoPainel,
   ControleCustoService,
@@ -34,6 +36,7 @@ import {
     .comparativo th:first-child, .comparativo td:first-child { text-align: left; }
     .comparativo .grupo { font-weight: 700; background: #f8fafc; }
     .comparativo .marcado { background: #eef2ff; }
+    .comparativo .futuro { color: #64748b; }
     .comparativo .mes-btn, .comparativo .celula-mes {
       border: 0; background: transparent; color: inherit; font: inherit; font-weight: 700;
       cursor: pointer; padding: 0; text-align: inherit;
@@ -88,6 +91,14 @@ import {
     .modal-close { background: transparent; color: #334155; border: 0; font-size: 18px; padding: 4px 8px; }
     .modal-dica { margin: 0 0 12px; color: #475569; }
     .modal-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+    .modal-larga { width: min(880px, 100%); }
+    .conta-detalhe { border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 12px; }
+    .conta-detalhe h4 { margin: 0 0 4px; font-size: 15px; }
+    .conta-detalhe .resumo { margin: 0 0 8px; color: #475569; font-size: 13px; }
+    .conta-lista { width: 100%; border-collapse: collapse; }
+    .conta-lista th, .conta-lista td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 13px; }
+    .conta-lista .num { text-align: right; }
+    .passada { color: #94a3b8; }
     .acoes { display: flex; gap: 4px; justify-content: flex-end; }
     @media (max-width: 1100px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
@@ -108,6 +119,9 @@ export class ControleCustoPage implements OnInit {
   erro = '';
 
   modalCusto = false;
+  modalComposicao = false;
+  composicaoTitulo = '';
+  composicaoContas: ControleCustoPrevisaoConta[] = [];
   modalContasFixas = false;
   reabrirContasFixas = false;
   contasFixas: ControleCustoLancamento[] = [];
@@ -244,7 +258,8 @@ export class ControleCustoPage implements OnInit {
 
   @HostListener('document:keydown.escape')
   fecharModalPorTecla(): void {
-    if (this.modalPessoa) this.fecharPessoa();
+    if (this.modalComposicao) this.fecharComposicao();
+    else if (this.modalPessoa) this.fecharPessoa();
     else if (this.modalPlano) this.fecharPlano();
     else if (this.modalCusto) this.fecharCusto();
     else if (this.modalContasFixas) this.fecharContasFixas();
@@ -557,13 +572,57 @@ export class ControleCustoPage implements OnInit {
   }
 
   variacao(valores: number[]): number | null {
-    if (!valores || valores.length < 2) return null;
-    return (Number(valores[valores.length - 1]) || 0) - (Number(valores[valores.length - 2]) || 0);
+    const meses = this.comparativo?.meses ?? [];
+    const indice = meses.indexOf(this.mesAtual);
+    if (indice <= 0 || !valores || valores.length <= indice) return null;
+    return (Number(valores[indice]) || 0) - (Number(valores[indice - 1]) || 0);
   }
 
   private rolarAteCustos(): void {
     this.focarCustos = false;
     setTimeout(() => document.getElementById('custos-do-mes')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  }
+
+  abrirComposicao(linha: ControleCustoComparativoLinha): void {
+    const contas = this.previsao?.contas ?? [];
+    let titulo = linha.nome;
+    let selecionadas: ControleCustoPrevisaoConta[] = [];
+    if (linha.grupo === 'parcela') {
+      selecionadas = contas.filter(conta => conta.id === linha.id);
+    } else if (linha.id === 'fixos') {
+      titulo = 'Custos fixos';
+      selecionadas = contas.filter(conta => conta.topicos.includes('fixos'));
+    } else if (linha.id === 'sem-fixos') {
+      titulo = 'Parcelas';
+      selecionadas = contas.filter(conta => conta.topicos.includes('parcela'));
+    } else if (linha.id === 'com-fixos') {
+      titulo = 'Com custos fixos';
+      selecionadas = contas.filter(conta => conta.topicos.includes('fixos') || conta.topicos.includes('parcela'));
+    } else if (linha.id === 'folha' || linha.id === 'operacional' || linha.id === 'investimento') {
+      selecionadas = contas.filter(conta => conta.topicos.includes(linha.id));
+    } else {
+      return;
+    }
+    this.composicaoTitulo = titulo;
+    this.composicaoContas = selecionadas;
+    this.modalComposicao = true;
+  }
+
+  fecharComposicao(): void {
+    this.modalComposicao = false;
+    this.composicaoContas = [];
+  }
+
+  composicaoTemAgenda(): boolean {
+    return this.composicaoContas.some(conta => (conta.parcelas?.length ?? 0) > 0);
+  }
+
+  somaValorMensal(contas: ControleCustoPrevisaoConta[]): number {
+    return contas.reduce((acc, conta) => acc + (Number(conta.valorMensal) || 0), 0);
+  }
+
+  nomeRecorrencia(id?: string | null): string {
+    return this.recorrencias.find(item => item.id === id)?.nome ?? 'Único';
   }
 
   temParcelaNaPrevisao(): boolean {

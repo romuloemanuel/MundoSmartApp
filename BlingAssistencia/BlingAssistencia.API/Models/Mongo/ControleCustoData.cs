@@ -134,6 +134,8 @@ public class ControleCustoComparativoLinha
     /// <summary>total, categoria, setor ou parcela.</summary>
     public string Grupo { get; set; } = "";
     public List<decimal> Valores { get; set; } = [];
+    /// <summary>Quanto ainda falta nessa linha até a série acabar.</summary>
+    public decimal Saldo { get; set; }
 }
 
 public class ControleCustoPrevisao
@@ -142,5 +144,34 @@ public class ControleCustoPrevisao
     public List<string> Meses { get; set; } = [];
     /// <summary>Alguma parcela termina depois da janela exibida.</summary>
     public bool Limitada { get; set; }
+    /// <summary>Soma do que ainda falta nas parcelas, até a última quitação.</summary>
+    public decimal TotalAQuitar { get; set; }
+    /// <summary>Mês da última parcela ainda em aberto.</summary>
+    public string? Quitacao { get; set; }
     public List<ControleCustoComparativoLinha> Linhas { get; set; } = [];
+    public List<ControleCustoPrevisaoConta> Contas { get; set; } = [];
+}
+
+public class ControleCustoPrevisaoConta
+{
+    public string Id { get; set; } = "";
+    public string Nome { get; set; } = "";
+    public string Categoria { get; set; } = "";
+    public string Recorrencia { get; set; } = "";
+    /// <summary>fixos, parcela, folha, operacional ou investimento.</summary>
+    public List<string> Topicos { get; set; } = [];
+    public decimal ValorTotal { get; set; }
+    public decimal ValorMensal { get; set; }
+    public string Inicio { get; set; } = "";
+    public string? Fim { get; set; }
+    public decimal Saldo { get; set; }
+    public List<ControleCustoPrevisaoParcela> Parcelas { get; set; } = [];
+}
+
+public class ControleCustoPrevisaoParcela
+{
+    public string Mes { get; set; } = "";
+    public int Numero { get; set; }
+    public int Total { get; set; }
+    public decimal Valor { get; set; }
 }
