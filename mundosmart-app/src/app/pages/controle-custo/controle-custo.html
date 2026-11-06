@@ -81,9 +81,9 @@
       <button type="button" (click)="abrirCusto()">Lançar custo</button>
       <button type="button" (click)="abrirContasFixas()">Editar contas fixas</button>
     </div>
-    <p class="campo-hint" *ngIf="painel?.competencia === competencia && !(painel.custos?.length)">Nenhum custo em {{ formatarMes(competencia) }}.</p>
+    <p class="campo-hint" *ngIf="painel?.competencia === competencia && !painel?.custos?.length">Nenhum custo em {{ formatarMes(competencia) }}.</p>
 
-    <table class="data-grid" *ngIf="painel?.competencia === competencia && painel.custos?.length">
+    <table class="data-grid" *ngIf="painel?.competencia === competencia && painel?.custos?.length">
       <thead>
         <tr>
           <th>Descrição</th>
