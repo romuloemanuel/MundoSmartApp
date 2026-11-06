@@ -85,6 +85,8 @@ builder.Services.AddSingleton<IAparelhoLojaRepository, AparelhoLojaRepository>()
 builder.Services.AddSingleton<IAparelhoCodigoEstoque, AparelhoCodigoEstoque>();
 builder.Services.AddSingleton<IAparelhoLojaService, AparelhoLojaService>();
 builder.Services.AddSingleton<IReceitaService, ReceitaService>();
+builder.Services.AddSingleton<IControleCustoRepository, ControleCustoRepository>();
+builder.Services.AddSingleton<IControleCustoService, ControleCustoService>();
 builder.Services.AddSingleton<IBlingComissaoLojaRepository, BlingComissaoLojaRepository>();
 builder.Services.AddSingleton<IComissaoOrigemService, ComissaoOrigemService>();
 builder.Services.AddSingleton<IClienteAparelhoCompradoService, ClienteAparelhoCompradoService>();
@@ -341,6 +343,17 @@ try
     await tecnicosRepo.EnsureIndexesAsync();
     await tecnicosRepo.GarantirSeedAsync(["Rômulo", "Liniker"]);
     Console.WriteLine("[MundoSmart API] Técnicos seed: Rômulo, Liniker.");
+    var controleCustoRepo = app.Services.GetRequiredService<IControleCustoRepository>();
+    await controleCustoRepo.EnsureIndexesAsync();
+    await controleCustoRepo.GarantirColaboradoresAsync(ControleCustoModeloInicial.Colaboradores);
+    var custosIniciais = await controleCustoRepo.GarantirCustosIniciaisAsync(ControleCustoModeloInicial.Custos);
+    Console.WriteLine(custosIniciais > 0
+        ? $"[MundoSmart API] Custos: modelo inicial carregado ({custosIniciais} lançamentos)."
+        : "[MundoSmart API] Custos: modelo inicial já existente.");
+    var controleCusto = app.Services.GetRequiredService<IControleCustoService>();
+    var trafego = await controleCusto.ReclassificarTrafegoPagoAsync();
+    if (trafego > 0)
+        Console.WriteLine($"[MundoSmart API] Custos: {trafego} lançamento(s) marcados como tráfego pago.");
     var appAuth = app.Services.GetRequiredService<IAppAuthService>();
     await appAuth.GarantirSeedAsync();
     var sequences = app.Services.GetRequiredService<IDevSequenceRepository>();

@@ -54,6 +54,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
             </div>
           </div>
           <a *ngIf="appAuth.isAdmin()" routerLink="/receitas" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Receitas</a>
+          <a *ngIf="appAuth.isAdmin()" routerLink="/custos-reinvestimento" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Custos e reinvestimento</a>
           <a routerLink="/painel-tv" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" (click)="fecharMenuSeEstreito()">Painel TV</a>
           <a routerLink="/estoque" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Pe&ccedil;as &amp; Estoque</a>
           <a routerLink="/orcamentos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Or&ccedil;amentos</a>

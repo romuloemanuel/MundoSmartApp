@@ -1,0 +1,342 @@
+<div class="page">
+  <div class="page-header">
+    <h2>Custos e reinvestimento</h2>
+  </div>
+  <p class="intro">
+    Cada mês reúne os custos e o reinvestimento daquele período.
+    Uma conta fixa vale todo mês a partir do início e se altera no botão próprio.
+    O lançamento avulso entra só no mês escolhido, o atual ou um passado.
+  </p>
+
+  <div class="mes-barra">
+    <div class="mes-nav">
+      <button type="button" (click)="mudarMes(-1)" aria-label="Mês anterior">Mês anterior</button>
+      <div>
+        <label for="competencia">Mês</label>
+        <input id="competencia" type="month" [max]="mesAtual" [(ngModel)]="competencia" (ngModelChange)="carregar()" />
+      </div>
+      <button type="button" (click)="mudarMes(1)" [disabled]="competencia >= mesAtual" aria-label="Próximo mês">Próximo mês</button>
+    </div>
+  </div>
+  <p class="mes-aviso" *ngIf="competencia < mesAtual">Mês passado. O que for lançado aqui entra em {{ formatarMes(competencia) }}.</p>
+
+  <p *ngIf="carregando" class="campo-hint">Carregando...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+
+  <div class="totais" *ngIf="painel">
+    <span>Lucro líquido <strong>{{ dinheiro(painel.faturamento) }}</strong></span>
+    <span>Custos <strong>{{ dinheiro(painel.custosTotal) }}</strong></span>
+    <span>Resultado <strong [class.lucro]="painel.lucro >= 0" [class.negativo]="painel.lucro < 0">{{ dinheiro(painel.lucro) }}</strong></span>
+    <span>Reinvestido <strong>{{ dinheiro(painel.reinvestimento) }}</strong></span>
+    <span>Disponível <strong [class.negativo]="painel.disponivel < 0">{{ dinheiro(painel.disponivel) }}</strong></span>
+  </div>
+
+  <div class="cards" *ngIf="painel">
+    <article class="card" *ngFor="let setor of painel.setores">
+      <h3>{{ setor.nome }}</h3>
+      <p class="origem">{{ setor.origem }}</p>
+      <div class="linha"><span>Lucro líquido</span><strong>{{ dinheiro(setor.faturamento) }}</strong></div>
+      <div class="linha"><span>Custos</span><strong>{{ dinheiro(setor.custos) }}</strong></div>
+      <div class="linha"><span>Resultado</span><strong [class.lucro]="setor.lucro >= 0" [class.negativo]="setor.lucro < 0">{{ dinheiro(setor.lucro) }}</strong></div>
+      <div class="linha"><span>Reinvestido</span><strong>{{ dinheiro(setor.reinvestimento) }}</strong></div>
+      <div class="barra" [attr.aria-label]="'Reinvestimento sobre o lucro'">
+        <span [style.width.%]="fatiaReinvestimento(setor.lucro, setor.reinvestimento)"></span>
+      </div>
+      <div class="linha"><span>Disponível</span><strong [class.negativo]="setor.disponivel < 0">{{ dinheiro(setor.disponivel) }}</strong></div>
+    </article>
+  </div>
+
+  <section class="bloco" *ngIf="comparativo?.meses?.length">
+    <h3>Comparar meses</h3>
+    <p class="campo-hint">Clique em um mês para ver os custos lançados nele. A variação é o mês selecionado menos o anterior.</p>
+    <div class="tabela-rolagem">
+      <table class="comparativo">
+        <thead>
+          <tr>
+            <th>Conta</th>
+            <th *ngFor="let mes of comparativo?.meses" [class.marcado]="mes === competencia">
+              <button type="button" class="mes-btn" (click)="verMes(mes)">{{ formatarMes(mes) }}</button>
+            </th>
+            <th>Variação</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let linha of comparativo?.linhas" [class.grupo]="linha.grupo === 'total'">
+            <td>{{ linha.nome }}</td>
+            <td *ngFor="let valor of linha.valores; let i = index" [class.marcado]="mesDoComparativo(i) === competencia">
+              <button type="button" class="celula-mes" (click)="verMes(mesDoComparativo(i))" [attr.aria-label]="'Ver custos de ' + formatarMes(mesDoComparativo(i))">{{ dinheiro(valor) }}</button>
+            </td>
+            <td [class.subiu]="linha.id !== 'reinvestimento' && (variacao(linha.valores) || 0) > 0" [class.caiu]="linha.id !== 'reinvestimento' && (variacao(linha.valores) || 0) < 0">
+              {{ variacao(linha.valores) === null ? '—' : dinheiro(variacao(linha.valores)) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bloco" id="custos-do-mes">
+    <h3>Custos de {{ formatarMes(competencia) }}</h3>
+    <div class="form-linha">
+      <button type="button" (click)="abrirCusto()">Lançar custo</button>
+      <button type="button" (click)="abrirContasFixas()">Editar contas fixas</button>
+    </div>
+    <p class="campo-hint" *ngIf="painel?.competencia === competencia && !(painel.custos?.length)">Nenhum custo em {{ formatarMes(competencia) }}.</p>
+
+    <table class="data-grid" *ngIf="painel?.competencia === competencia && painel.custos?.length">
+      <thead>
+        <tr>
+          <th>Descrição</th>
+          <th>Tipo</th>
+          <th>Repetição</th>
+          <th>Rateio</th>
+          <th>No mês</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of painel?.custos">
+          <td>{{ item.colaboradorNome ? item.colaboradorNome + ' — ' : '' }}{{ item.descricao }}</td>
+          <td>{{ nomeCategoria(item.categoria) }}</td>
+          <td>{{ rotuloRecorrencia(item) }}</td>
+          <td>{{ rateioTexto(item.rateio) }}</td>
+          <td>{{ dinheiro(valorDoMes(item)) }}</td>
+          <td>
+            <div class="acoes">
+              <app-grid-acao tipo="editar" (acao)="editarCusto(item)" />
+              <app-grid-acao tipo="excluir" (acao)="excluirLancamento(item)" />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="modal-backdrop" *ngIf="modalCusto" (click)="fecharCusto()">
+    <form class="modal-box" role="dialog" aria-modal="true" aria-labelledby="custo-titulo" (click)="$event.stopPropagation()" (ngSubmit)="lancarCusto()">
+      <div class="modal-header">
+        <h3 id="custo-titulo">{{ custoEditandoId ? 'Editar custo' : 'Cadastrar custo' }}</h3>
+        <button type="button" class="modal-close" (click)="fecharCusto()" aria-label="Fechar">✕</button>
+      </div>
+      <p class="modal-dica">{{ dicaRecorrencia }}</p>
+      <div class="form-linha">
+        <div class="campo">
+          <label for="custo-recorrencia">Repetição</label>
+          <select id="custo-recorrencia" name="recorrencia" [(ngModel)]="custoRecorrencia">
+            <option *ngFor="let r of recorrencias" [value]="r.id">{{ r.nome }}</option>
+          </select>
+        </div>
+        <div class="campo" *ngIf="pedeQuantidade">
+          <label for="custo-meses">{{ rotuloQuantidade }}</label>
+          <input id="custo-meses" name="meses" type="number" [min]="minimoMeses" max="60" step="1" [(ngModel)]="custoMeses" />
+        </div>
+        <div class="campo">
+          <label for="custo-inicio">{{ custoRecorrencia === 'unico' ? 'Mês do custo' : 'A partir de' }}</label>
+          <input id="custo-inicio" name="inicio" type="month" [max]="mesAtual" [(ngModel)]="custoInicio" />
+        </div>
+        <div class="campo">
+          <label for="custo-categoria">Tipo</label>
+          <select id="custo-categoria" name="categoria" [(ngModel)]="custoCategoria" (ngModelChange)="aoMudarCategoria()">
+            <option *ngFor="let c of categorias" [value]="c.id">{{ c.nome }}</option>
+          </select>
+        </div>
+        <div class="campo" *ngIf="custoCategoria === 'colaborador'">
+          <label for="custo-pessoa">Colaborador</label>
+          <select id="custo-pessoa" name="pessoa" [(ngModel)]="custoColaboradorId" (ngModelChange)="aoMudarColaborador()">
+            <option value="">Selecione...</option>
+            <option *ngFor="let p of painel?.colaboradores ?? []" [value]="p.id">{{ p.nome }}{{ p.cargo ? ' — ' + p.cargo : '' }}</option>
+          </select>
+        </div>
+        <div class="campo largo">
+          <label for="custo-desc">Descrição</label>
+          <input id="custo-desc" name="descricao" [(ngModel)]="custoDescricao" placeholder="Ex.: salário, aluguel, anúncio" />
+        </div>
+        <div class="campo">
+          <label for="custo-valor">{{ rotuloValor }}</label>
+          <input id="custo-valor" name="valor" type="number" min="0" step="0.01" [(ngModel)]="custoValor" />
+        </div>
+      </div>
+      <div class="rateio">
+        <label *ngFor="let setor of setores">
+          {{ setor.nome }}
+          <input type="number" min="0" max="100" step="0.01" [(ngModel)]="rateio[setor.id]" [name]="'rateio-' + setor.id" />
+          %
+        </label>
+        <button type="button" (click)="dividirMarcados()">Dividir igual</button>
+      </div>
+      <p class="soma-rateio" [class.ok]="somaRateio === 100" [class.negativo]="somaRateio !== 100">
+        Rateio {{ somaRateio | number:'1.0-2' }}%
+      </p>
+      <p class="campo-hint" *ngIf="previsaoCusto">{{ previsaoCusto }}</p>
+      <div class="modal-acoes">
+        <button type="submit" [disabled]="salvando">{{ custoEditandoId ? 'Salvar custo' : 'Lançar custo' }}</button>
+        <button type="button" (click)="fecharCusto()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <section class="bloco">
+    <h3>Reinvestimento de {{ formatarMes(competencia) }}</h3>
+    <p class="campo-hint">O lançamento entra em {{ formatarMes(competencia) }}, o mês atual ou um passado. O plano mensal repete o mesmo valor pelos meses seguintes.</p>
+    <div class="form-linha">
+      <button type="button" (click)="abrirPlano()">Plano mensal</button>
+      <div class="campo">
+        <label for="reinv-setor">Setor</label>
+        <select id="reinv-setor" [(ngModel)]="reinvSetor">
+          <option *ngFor="let setor of setores" [value]="setor.id">{{ setor.nome }}</option>
+        </select>
+      </div>
+      <div class="campo largo">
+        <label for="reinv-desc">Em que foi reinvestido</label>
+        <input id="reinv-desc" [(ngModel)]="reinvDescricao" placeholder="Ex.: estoque de brindes, anúncio, ferramenta" />
+      </div>
+      <div class="campo">
+        <label for="reinv-valor">Valor deste mês</label>
+        <input id="reinv-valor" type="number" min="0" step="0.01" [(ngModel)]="reinvValor" />
+      </div>
+      <button type="button" (click)="lancarReinvestimento()" [disabled]="salvando">Lançar em {{ formatarMes(competencia) }}</button>
+    </div>
+    <p class="campo-hint">Disponível em {{ nomeSetor(reinvSetor) }}: {{ dinheiro(disponivelReinvestimento) }}.</p>
+    <table class="data-grid" *ngIf="painel?.reinvestimentos?.length">
+      <thead>
+        <tr>
+          <th>Setor</th>
+          <th>Descrição</th>
+          <th>Plano</th>
+          <th>No mês</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of painel?.reinvestimentos">
+          <td>{{ nomeSetor(item.setor) }}</td>
+          <td>{{ item.descricao }}</td>
+          <td>{{ rotuloRecorrencia(item) }}</td>
+          <td>{{ dinheiro(valorDoMes(item)) }}</td>
+          <td><app-grid-acao tipo="excluir" (acao)="excluirLancamento(item)" /></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="modal-backdrop" *ngIf="modalPlano" (click)="fecharPlano()">
+    <form class="modal-box modal-pessoa" role="dialog" aria-modal="true" aria-labelledby="plano-titulo" (click)="$event.stopPropagation()" (ngSubmit)="lancarPlano()">
+      <div class="modal-header">
+        <h3 id="plano-titulo">Plano de investimento mensal</h3>
+        <button type="button" class="modal-close" (click)="fecharPlano()" aria-label="Fechar">✕</button>
+      </div>
+      <p class="modal-dica">O mesmo valor todo mês, pelo prazo escolhido, em um setor.</p>
+      <div class="form-linha">
+        <div class="campo">
+          <label for="plano-setor">Setor</label>
+          <select id="plano-setor" name="planoSetor" [(ngModel)]="planoSetor">
+            <option *ngFor="let setor of setores" [value]="setor.id">{{ setor.nome }}</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="plano-inicio">Mês de início</label>
+          <input id="plano-inicio" name="planoInicio" type="month" [max]="mesAtual" [(ngModel)]="planoInicio" />
+        </div>
+        <div class="campo">
+          <label for="plano-meses">Quantos meses</label>
+          <input id="plano-meses" name="planoMeses" type="number" min="1" max="60" step="1" [(ngModel)]="planoMeses" />
+        </div>
+        <div class="campo largo">
+          <label for="plano-desc">Em que será reinvestido</label>
+          <input id="plano-desc" name="planoDescricao" [(ngModel)]="planoDescricao" placeholder="Ex.: estoque, anúncio, ferramenta" />
+        </div>
+        <div class="campo">
+          <label for="plano-valor">Valor por mês</label>
+          <input id="plano-valor" name="planoValor" type="number" min="0" step="0.01" [(ngModel)]="planoValor" />
+        </div>
+      </div>
+      <p class="campo-hint" *ngIf="previsaoPlano">{{ previsaoPlano }}</p>
+      <div class="modal-acoes">
+        <button type="submit" [disabled]="salvando">Criar plano</button>
+        <button type="button" (click)="fecharPlano()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop" *ngIf="modalContasFixas" (click)="fecharContasFixas()">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="fixas-titulo" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="fixas-titulo">Contas fixas</h3>
+        <button type="button" class="modal-close" (click)="fecharContasFixas()" aria-label="Fechar">✕</button>
+      </div>
+      <p class="modal-dica">O mesmo valor todo mês, a partir do mês de início. A alteração vale para os meses seguintes.</p>
+      <p class="campo-hint" *ngIf="!contasFixas.length">Nenhuma conta fixa. Lance um custo com repetição Fixa.</p>
+      <table class="data-grid" *ngIf="contasFixas.length">
+        <thead>
+          <tr>
+            <th>Descrição</th>
+            <th>Tipo</th>
+            <th>Desde</th>
+            <th>Por mês</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of contasFixas">
+            <td>{{ item.colaboradorNome ? item.colaboradorNome + ' — ' : '' }}{{ item.descricao }}</td>
+            <td>{{ nomeCategoria(item.categoria) }}</td>
+            <td>{{ formatarMes(item.competencia) }}</td>
+            <td>{{ dinheiro(item.valor) }}</td>
+            <td><app-grid-acao tipo="editar" (acao)="editarContaFixa(item)" /></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="modal-acoes">
+        <button type="button" (click)="fecharContasFixas()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="bloco">
+    <h3>Colaboradores</h3>
+    <div class="form-linha">
+      <button type="button" (click)="abrirPessoa()">Cadastrar colaborador</button>
+      <div class="campo largo">
+        <label for="pessoa-busca">Pesquisar</label>
+        <input id="pessoa-busca" [(ngModel)]="buscaPessoa" placeholder="Nome ou setor" />
+      </div>
+    </div>
+    <p class="campo-hint" *ngIf="painel && !(painel.colaboradores?.length)">Nenhum colaborador cadastrado.</p>
+    <p class="campo-hint" *ngIf="painel?.colaboradores?.length && !colaboradoresFiltrados.length">Nenhum colaborador encontrado.</p>
+    <div class="pessoas">
+      <div class="pessoa" *ngFor="let pessoa of colaboradoresFiltrados">
+        <span><strong>{{ pessoa.nome }}</strong><ng-container *ngIf="pessoa.cargo"> — {{ pessoa.cargo }}</ng-container> — {{ setoresDaPessoa(pessoa) }}</span>
+        <app-grid-acao tipo="editar" (acao)="editarPessoa(pessoa)" />
+        <app-grid-acao tipo="excluir" (acao)="excluirPessoa(pessoa)" />
+      </div>
+    </div>
+  </section>
+
+  <div class="modal-backdrop" *ngIf="modalPessoa" (click)="fecharPessoa()">
+    <form class="modal-box modal-pessoa" role="dialog" aria-modal="true" aria-labelledby="pessoa-titulo" (click)="$event.stopPropagation()" (ngSubmit)="salvarPessoa()">
+      <div class="modal-header">
+        <h3 id="pessoa-titulo">{{ pessoaEditandoId ? 'Editar colaborador' : 'Cadastrar colaborador' }}</h3>
+        <button type="button" class="modal-close" (click)="fecharPessoa()" aria-label="Fechar">✕</button>
+      </div>
+      <div class="campo">
+        <label for="pessoa-nome">Nome</label>
+        <input id="pessoa-nome" name="nome" [(ngModel)]="pessoaNome" />
+      </div>
+      <div class="campo">
+        <label for="pessoa-cargo">Cargo</label>
+        <input id="pessoa-cargo" name="cargo" [(ngModel)]="pessoaCargo" placeholder="Gerente, Diretor…" />
+      </div>
+      <p class="campo-hint">Setores em que essa pessoa gera custo.</p>
+      <div class="checks">
+        <label *ngFor="let setor of setores">
+          <input type="checkbox" [(ngModel)]="pessoaSetores[setor.id]" [name]="'pessoa-setor-' + setor.id" />
+          {{ setor.nome }}
+        </label>
+      </div>
+      <div class="modal-acoes">
+        <button type="submit" [disabled]="salvando">{{ pessoaEditandoId ? 'Salvar colaborador' : 'Cadastrar colaborador' }}</button>
+        <button type="button" (click)="fecharPessoa()">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>

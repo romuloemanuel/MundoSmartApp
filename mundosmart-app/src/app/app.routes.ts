@@ -120,6 +120,13 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/receitas/receitas').then(m => m.ReceitasPage),
         title: 'Receitas',
       },
+      {
+        path: 'custos-reinvestimento',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./pages/controle-custo/controle-custo').then(m => m.ControleCustoPage),
+        title: 'Custos e reinvestimento',
+      },
       { path: 'orcamentos', component: OrcamentosLista },
       { path: 'orcamentos/novo', component: OrcamentosForm },
       { path: 'orcamentos/:id', component: OrcamentosForm },
