@@ -11,6 +11,7 @@ public interface IControleCustoService
 {
     Task<ControleCustoPainel> PainelAsync(string? competencia, CancellationToken cancellationToken = default);
     Task<ControleCustoComparativo> ComparativoAsync(string? ate, int quantidade = 6, CancellationToken cancellationToken = default);
+    Task<ControleCustoPrevisao> PrevisaoAsync(CancellationToken cancellationToken = default);
     Task<List<ControleCustoLancamentoData>> ListarContasFixasAsync(CancellationToken cancellationToken = default);
     Task<ControleCustoPainel> SalvarColaboradorAsync(string? id, string? nome, string? cargo, IEnumerable<string>? setores, string? competencia, CancellationToken cancellationToken = default);
     Task<ControleCustoPainel> ExcluirColaboradorAsync(string id, string? competencia, CancellationToken cancellationToken = default);
@@ -127,6 +128,131 @@ public class ControleCustoService : IControleCustoService
             linhas.Add(LinhaComparativo(id, nome, "setor", porSetor[id]));
 
         return new ControleCustoComparativo { Ate = fim, Meses = meses, Linhas = linhas };
+    }
+
+    public async Task<ControleCustoPrevisao> PrevisaoAsync(CancellationToken cancellationToken = default)
+    {
+        const int minimo = 6;
+        const int maximo = 18;
+        var inicio = MesAtual();
+        var todos = await _repo.ListarTodosAsync(cancellationToken);
+        var custos = todos.Where(x => x.Tipo == ControleCustoCatalogo.Custo).ToList();
+        var parcelas = custos
+            .Where(EhSerieParcelada)
+            .Where(x => string.CompareOrdinal(FimDaSerie(x), inicio) >= 0)
+            .OrderBy(x => x.Competencia)
+            .ThenBy(x => x.Descricao, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var fins = parcelas.Select(FimDaSerie).ToList();
+        foreach (var plano in todos.Where(x => x.Tipo == ControleCustoCatalogo.Reinvestimento
+            && x.Recorrencia == ControleCustoCatalogo.RecorrenciaMensal))
+        {
+            var fim = FimDaSerie(plano);
+            if (string.CompareOrdinal(fim, inicio) >= 0) fins.Add(fim);
+        }
+        var fimNecessario = fins.Count == 0 ? inicio : fins.Max(StringComparer.Ordinal)!;
+        var alcance = Math.Max(0, ControleCustoRecorrencia.IndiceMes(inicio, fimNecessario));
+        var quantidade = Math.Clamp(alcance + 1, minimo, maximo);
+        var meses = Enumerable.Range(0, quantidade)
+            .Select(i => ControleCustoRecorrencia.SomarMeses(inicio, i))
+            .ToList();
+
+        var somaParcelas = new decimal[quantidade];
+        var detalhes = new List<ControleCustoComparativoLinha>();
+        foreach (var custo in parcelas)
+        {
+            var valores = new decimal[quantidade];
+            for (var i = 0; i < meses.Count; i++)
+            {
+                var valor = ControleCustoRecorrencia.ValorNoMes(custo, meses[i]);
+                valores[i] = valor;
+                somaParcelas[i] = Dinheiro(somaParcelas[i] + valor);
+            }
+            if (valores.All(v => v == 0)) continue;
+            detalhes.Add(LinhaComparativo(custo.Id ?? custo.Descricao, NomeParcela(custo), "parcela", valores));
+        }
+
+        var fixos = new decimal[quantidade];
+        foreach (var custo in custos.Where(x => x.Recorrencia == ControleCustoCatalogo.RecorrenciaFixo))
+        {
+            for (var i = 0; i < meses.Count; i++)
+                fixos[i] = Dinheiro(fixos[i] + ControleCustoRecorrencia.ValorNoMes(custo, meses[i]));
+        }
+
+        var comFixos = new decimal[quantidade];
+        for (var i = 0; i < quantidade; i++)
+            comFixos[i] = Dinheiro(somaParcelas[i] + fixos[i]);
+
+        var folha = new decimal[quantidade];
+        var operacional = new decimal[quantidade];
+        var investimento = new decimal[quantidade];
+        foreach (var item in todos)
+        {
+            var destino = GrupoDoGasto(item);
+            if (destino is null) continue;
+            var alvo = destino switch
+            {
+                "folha" => folha,
+                "investimento" => investimento,
+                _ => operacional,
+            };
+            for (var i = 0; i < meses.Count; i++)
+                alvo[i] = Dinheiro(alvo[i] + ControleCustoRecorrencia.ValorNoMes(item, meses[i]));
+        }
+
+        var linhas = new List<ControleCustoComparativoLinha>
+        {
+            LinhaComparativo("sem-fixos", "Sem custos fixos", "total", somaParcelas),
+            LinhaComparativo("fixos", "Custos fixos", "total", fixos),
+            LinhaComparativo("com-fixos", "Com custos fixos", "total", comFixos),
+            LinhaComparativo("folha", "Folha salarial", "total", folha),
+            LinhaComparativo("operacional", "Custo operacional", "total", operacional),
+            LinhaComparativo("investimento", "Investimento", "total", investimento),
+        };
+        linhas.AddRange(detalhes);
+
+        return new ControleCustoPrevisao
+        {
+            Inicio = inicio,
+            Meses = meses,
+            Limitada = alcance + 1 > maximo,
+            Linhas = linhas,
+        };
+    }
+
+    private static string? GrupoDoGasto(ControleCustoLancamentoData item)
+    {
+        if (item.Tipo == ControleCustoCatalogo.Reinvestimento) return "investimento";
+        if (item.Tipo != ControleCustoCatalogo.Custo) return null;
+        return item.Categoria switch
+        {
+            ControleCustoCatalogo.CategoriaColaborador => "folha",
+            ControleCustoCatalogo.CategoriaOutro => "investimento",
+            _ => "operacional",
+        };
+    }
+
+    private static bool EhSerieParcelada(ControleCustoLancamentoData custo) =>
+        custo.Recorrencia is ControleCustoCatalogo.RecorrenciaParcelado or ControleCustoCatalogo.RecorrenciaMensal;
+
+    private static string FimDaSerie(ControleCustoLancamentoData custo)
+    {
+        var n = custo.Recorrencia == ControleCustoCatalogo.RecorrenciaParcelado
+            ? Math.Max(2, custo.Meses ?? 2)
+            : Math.Max(1, custo.Meses ?? 1);
+        return ControleCustoRecorrencia.SomarMeses(custo.Competencia, n - 1);
+    }
+
+    private static string NomeParcela(ControleCustoLancamentoData custo)
+    {
+        var nome = string.IsNullOrWhiteSpace(custo.ColaboradorNome)
+            ? custo.Descricao
+            : $"{custo.ColaboradorNome} — {custo.Descricao}";
+        var n = custo.Recorrencia == ControleCustoCatalogo.RecorrenciaParcelado
+            ? Math.Max(2, custo.Meses ?? 2)
+            : Math.Max(1, custo.Meses ?? 1);
+        return $"{nome} ({n}x)";
     }
 
     public async Task<List<ControleCustoLancamentoData>> ListarContasFixasAsync(CancellationToken cancellationToken = default)

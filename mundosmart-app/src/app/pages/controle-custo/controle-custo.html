@@ -75,6 +75,35 @@
     </div>
   </section>
 
+  <section class="bloco" *ngIf="previsao?.meses?.length">
+    <h3>Parcelas nos próximos meses</h3>
+    <p class="campo-hint">
+      O que já está cadastrado a partir de {{ formatarMes(previsao?.inicio || '') }}.
+      Sem custos fixos é só a soma das parcelas. Com custos fixos soma as contas que se repetem todo mês.
+      Folha salarial reúne os colaboradores. Custo operacional reúne aluguel, energia, água, tráfego pago e infraestrutura.
+      Investimento junta a categoria Outros e o reinvestimento já lançado na loja.
+      O mês atual inclui o lançamento único. Nos seguintes ficam as contas fixas, as parcelas e os planos que ainda valem.
+    </p>
+    <p class="campo-hint" *ngIf="!temParcelaNaPrevisao()">Nenhuma parcela cadastrada para os próximos meses. O total sem custos fixos fica zerado até lançar um custo parcelado.</p>
+    <p class="campo-hint" *ngIf="previsao?.limitada">Há parcelas depois desta janela. A tabela mostra os próximos {{ previsao?.meses?.length }} meses.</p>
+    <div class="tabela-rolagem">
+      <table class="comparativo">
+        <thead>
+          <tr>
+            <th>Conta</th>
+            <th *ngFor="let mes of previsao?.meses">{{ formatarMes(mes) }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let linha of previsao?.linhas" [class.grupo]="linha.grupo === 'total'">
+            <td>{{ linha.nome }}</td>
+            <td *ngFor="let valor of linha.valores">{{ linha.grupo === 'total' || valor ? dinheiro(valor) : '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="bloco" id="custos-do-mes">
     <h3>Custos de {{ formatarMes(competencia) }}</h3>
     <div class="form-linha">

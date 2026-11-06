@@ -71,6 +71,13 @@ export interface ControleCustoComparativo {
   linhas: ControleCustoComparativoLinha[];
 }
 
+export interface ControleCustoPrevisao {
+  inicio: string;
+  meses: string[];
+  limitada: boolean;
+  linhas: ControleCustoComparativoLinha[];
+}
+
 export const SETORES_CUSTO: { id: string; nome: string }[] = [
   { id: 'brindes-online', nome: 'Brindes/Online' },
   { id: 'loja', nome: 'Loja' },
@@ -109,6 +116,10 @@ export class ControleCustoService {
   comparativo(ate: string, quantidade = 6): Observable<ControleCustoComparativo> {
     const params = new HttpParams().set('ate', ate).set('quantidade', quantidade);
     return this.http.get<ControleCustoComparativo>(`${this.apiUrl}/comparativo`, { params });
+  }
+
+  previsao(): Observable<ControleCustoPrevisao> {
+    return this.http.get<ControleCustoPrevisao>(`${this.apiUrl}/previsao`);
   }
 
   contasFixas(): Observable<ControleCustoLancamento[]> {

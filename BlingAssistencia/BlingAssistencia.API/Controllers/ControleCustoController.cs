@@ -28,6 +28,10 @@ public class ControleCustoController : ControllerBase
         catch (ArgumentException ex) { return BadRequest(new { erro = ex.Message }); }
     }
 
+    [HttpGet("previsao")]
+    public async Task<IActionResult> Previsao() =>
+        Ok(await _service.PrevisaoAsync());
+
     [HttpGet("contas-fixas")]
     public async Task<IActionResult> ContasFixas() =>
         Ok(await _service.ListarContasFixasAsync());

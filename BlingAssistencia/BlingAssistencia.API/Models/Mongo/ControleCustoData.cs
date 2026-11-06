@@ -131,7 +131,16 @@ public class ControleCustoComparativoLinha
 {
     public string Id { get; set; } = "";
     public string Nome { get; set; } = "";
-    /// <summary>total, categoria ou setor.</summary>
+    /// <summary>total, categoria, setor ou parcela.</summary>
     public string Grupo { get; set; } = "";
     public List<decimal> Valores { get; set; } = [];
+}
+
+public class ControleCustoPrevisao
+{
+    public string Inicio { get; set; } = "";
+    public List<string> Meses { get; set; } = [];
+    /// <summary>Alguma parcela termina depois da janela exibida.</summary>
+    public bool Limitada { get; set; }
+    public List<ControleCustoComparativoLinha> Linhas { get; set; } = [];
 }

@@ -9,6 +9,7 @@ import {
   CATEGORIAS_CUSTO,
   ControleCustoColaborador,
   ControleCustoComparativo,
+  ControleCustoPrevisao,
   ControleCustoLancamento,
   ControleCustoPainel,
   ControleCustoService,
@@ -101,6 +102,7 @@ export class ControleCustoPage implements OnInit {
   private focarCustos = false;
   painel: ControleCustoPainel | null = null;
   comparativo: ControleCustoComparativo | null = null;
+  previsao: ControleCustoPrevisao | null = null;
   carregando = false;
   salvando = false;
   erro = '';
@@ -564,10 +566,21 @@ export class ControleCustoPage implements OnInit {
     setTimeout(() => document.getElementById('custos-do-mes')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
   }
 
+  temParcelaNaPrevisao(): boolean {
+    return !!this.previsao?.linhas.some(linha => linha.grupo === 'parcela' && linha.valores.some(valor => valor > 0));
+  }
+
   private carregarComparativo(): void {
     this.api.comparativo(this.competencia, 6).subscribe({
       next: comparativo => { this.comparativo = comparativo; },
       error: () => { this.comparativo = null; },
+    });
+  }
+
+  private carregarPrevisao(): void {
+    this.api.previsao().subscribe({
+      next: previsao => { this.previsao = previsao; },
+      error: () => { this.previsao = null; },
     });
   }
 
@@ -581,6 +594,7 @@ export class ControleCustoPage implements OnInit {
     this.painel = painel;
     this.competencia = painel.competencia || this.competencia;
     this.carregarComparativo();
+    this.carregarPrevisao();
   }
 
   private executar(req: Observable<ControleCustoPainel>, depois?: () => void): void {
