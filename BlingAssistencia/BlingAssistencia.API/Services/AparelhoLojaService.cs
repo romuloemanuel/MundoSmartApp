@@ -917,8 +917,54 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             .ToList();
         aparelho.PecaTrocada = ResumoPecas(entrada.PecasTrocadas ?? []);
         aparelho.MensagemPecaTrocada = aparelho.PecasTrocadas.Any(p => p.ApareceMensagem);
+        if (pedido.ValorPago is not null)
+            await AplicarValorPagoAsync(aparelho, pedido.ValorPago.Value, cancellationToken);
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
         return await MontarPainelAsync(cancellationToken);
+    }
+
+    private async Task AplicarValorPagoAsync(
+        AparelhoLojaData aparelho,
+        decimal informado,
+        CancellationToken cancellationToken)
+    {
+        var pago = Dinheiro(informado);
+        if (pago <= 0)
+            throw new InvalidOperationException("Informe o valor pago pela loja.");
+
+        aparelho.Custo = pago;
+        if (string.IsNullOrWhiteSpace(aparelho.OperacaoEntradaId))
+            return;
+
+        var operacao = await _repo.ObterOperacaoAsync(aparelho.OperacaoEntradaId, cancellationToken);
+        if (operacao is null || operacao.Status != AparelhoOperacaoStatus.Ativa)
+            return;
+
+        if (operacao.Tipo == AparelhoOperacaoTipo.Compra)
+        {
+            operacao.DinheiroPago = pago;
+            operacao.ValorAvaliado = pago;
+            if (operacao.Entrada is not null)
+            {
+                operacao.Entrada.Preco = pago;
+                operacao.Entrada.Custo = pago;
+            }
+
+            await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
+            return;
+        }
+
+        if (operacao.Tipo != AparelhoOperacaoTipo.Troca)
+            return;
+
+        var movimento = MovimentosDaEntrada(operacao).FirstOrDefault(m => m.AparelhoId == aparelho.Id);
+        if (movimento is null)
+            return;
+
+        movimento.Preco = pago;
+        movimento.Custo = pago;
+        operacao.ValorAvaliado = Dinheiro(MovimentosDaEntrada(operacao).Sum(m => m.Preco));
+        await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
     }
 
     private static void ExigirImeiParaSair(AparelhoLojaData aparelho)
@@ -1454,6 +1500,9 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         {
             dto.FormaNegociacao = string.IsNullOrWhiteSpace(entrada.FormaNegociacao) ? "avista" : entrada.FormaNegociacao;
             dto.FinanciadoraNome = entrada.FinanciadoraNome ?? "";
+            var movimento = MovimentosDaEntrada(entrada).FirstOrDefault(m => m.AparelhoId == aparelho.Id);
+            if (movimento is { Preco: > 0 })
+                dto.ValorPago = movimento.Preco;
             return dto;
         }
 
@@ -1476,6 +1525,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         Condicao = a.Condicao,
         ValorVenda = a.ValorVenda,
         ValorMinimoVenda = a.ValorMinimoVenda,
+        ValorPago = a.Custo,
         Custo = a.Custo,
         Status = a.Status,
         Origem = a.Origem,

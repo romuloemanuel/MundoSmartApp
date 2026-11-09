@@ -126,6 +126,68 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Cadastro_altera_o_valor_pago_da_compra()
+    {
+        var imei = NovoImei();
+        var painel = await Comprar(imei, 1000);
+        var item = ExigirEstoque(painel, imei);
+        var editado = await Put($"/api/aparelhos-loja/{item["id"]!.GetValue<string>()}/cadastro", new
+        {
+            imei,
+            marca = "Apple",
+            modelo = "iPhone 13",
+            cor = "Preto",
+            configuracao = "128GB",
+            condicao = "usado",
+            valorVenda = 2000m,
+            valorMinimoVenda = 1500m,
+            valorPago = 800m,
+            bateriaPerfeita = true,
+        });
+        var depois = ExigirEstoque(editado, imei);
+        Assert.Equal(800m, Num(depois["custo"]));
+        Assert.Equal(800m, Num(depois["valorPago"]));
+        var op = ExigirOperacao(editado, imei, "compra");
+        Assert.Equal(800m, Num(op["dinheiroPago"]));
+        Assert.Equal(800m, Num(op["valorAvaliado"]));
+    }
+
+    [Fact]
+    public async Task Cadastro_altera_o_valor_pago_da_troca_sem_mexer_no_caixa()
+    {
+        var saida = NovoImei();
+        var entrada = NovoImei();
+        var cliente = await ClienteComDocumento();
+        var id = await IdComprado(saida, 2000);
+        var painel = await Trocar(id, cliente, 2000, entrada, 1100);
+        var item = ExigirEstoque(painel, entrada);
+        var editado = await Put($"/api/aparelhos-loja/{item["id"]!.GetValue<string>()}/cadastro", new
+        {
+            imei = entrada,
+            marca = "Apple",
+            modelo = "iPhone 13",
+            cor = "Preto",
+            configuracao = "128GB",
+            condicao = "usado",
+            valorVenda = 2000m,
+            valorMinimoVenda = 1500m,
+            valorPago = 900m,
+            bateriaPerfeita = true,
+        });
+        var depois = ExigirEstoque(editado, entrada);
+        Assert.Equal(900m, Num(depois["custo"]));
+        Assert.Equal(900m, Num(depois["valorPago"]));
+        var op = ExigirOperacao(editado, entrada, "troca");
+        Assert.Equal(900m, Num(op["dinheiroRecebido"]));
+        Assert.Equal(0m, Num(op["dinheiroPago"]));
+        Assert.Equal(900m, Num(op["valorAvaliado"]));
+        var movimento = op["entrou"]!.AsArray()
+            .Select(n => n!.AsObject())
+            .First(n => n["imei"]!.GetValue<string>() == entrada);
+        Assert.Equal(900m, Num(movimento["valor"]));
+    }
+
+    [Fact]
     public async Task Compra_entra_no_estoque_sem_desconto_e_o_caixa_sai_o_valor_pago()
     {
         var imei = NovoImei();

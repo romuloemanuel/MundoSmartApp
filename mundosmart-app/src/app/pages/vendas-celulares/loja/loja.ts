@@ -1293,6 +1293,9 @@ interface FichaEntrada {
             <th>Marca</th>
             <th>Modelo</th>
             <th>Valor</th>
+            <th>Pago</th>
+            <th>Margem</th>
+            <th>No desconto</th>
             <th>Configuração</th>
             <th>Cor</th>
             <th>Situação</th>
@@ -1309,6 +1312,9 @@ interface FichaEntrada {
             <td>{{ a.marca }}</td>
             <td>{{ a.modelo }}</td>
             <td>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</td>
+            <td>{{ pagoDe(a) ? dinheiro(pagoDe(a)) : '—' }}</td>
+            <td class="margem" [class.valor-positivo]="(lucroDe(a.valorVenda, pagoDe(a)) ?? 0) > 0" [class.valor-negativo]="(lucroDe(a.valorVenda, pagoDe(a)) ?? 0) < 0">{{ textoLucro(a.valorVenda, pagoDe(a)) }}</td>
+            <td class="margem" [class.valor-positivo]="(lucroDe(a.valorMinimoVenda, pagoDe(a)) ?? 0) > 0" [class.valor-negativo]="(lucroDe(a.valorMinimoVenda, pagoDe(a)) ?? 0) < 0">{{ textoLucro(a.valorMinimoVenda, pagoDe(a)) }}</td>
             <td>{{ a.configuracao || '—' }}</td>
             <td>{{ a.cor || '—' }}</td>
             <td class="celula-situacao">
@@ -1361,8 +1367,17 @@ interface FichaEntrada {
                   <div *ngIf="a.clienteOrigemNome"><dt>Veio de</dt><dd>{{ a.clienteOrigemNome }}</dd></div>
                   <div *ngIf="a.vendedorEntradaNome"><dt>Vendedor</dt><dd>{{ a.vendedorEntradaNome }}</dd></div>
                   <div><dt>Pagamento</dt><dd>{{ rotuloFormaAparelho(a) }}</dd></div>
+                  <div><dt>Pago</dt><dd>{{ pagoDe(a) ? dinheiro(pagoDe(a)) : '—' }}</dd></div>
                   <div><dt>Venda</dt><dd>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</dd></div>
                   <div *ngIf="a.valorMinimoVenda"><dt>Mínimo</dt><dd>{{ dinheiro(a.valorMinimoVenda) }}</dd></div>
+                  <div *ngIf="pagoDe(a) && a.valorVenda">
+                    <dt>Margem no preço real</dt>
+                    <dd [class.valor-positivo]="(lucroDe(a.valorVenda, pagoDe(a)) ?? 0) > 0" [class.valor-negativo]="(lucroDe(a.valorVenda, pagoDe(a)) ?? 0) < 0">{{ textoLucro(a.valorVenda, pagoDe(a)) }}</dd>
+                  </div>
+                  <div *ngIf="pagoDe(a) && a.valorMinimoVenda">
+                    <dt>Margem no preço com desconto</dt>
+                    <dd [class.valor-positivo]="(lucroDe(a.valorMinimoVenda, pagoDe(a)) ?? 0) > 0" [class.valor-negativo]="(lucroDe(a.valorMinimoVenda, pagoDe(a)) ?? 0) < 0">{{ textoLucro(a.valorMinimoVenda, pagoDe(a)) }}</dd>
+                  </div>
                   <div *ngIf="financeiro"><dt>Custo</dt><dd>{{ dinheiro(custoTotalDe(a)) }}</dd></div>
                   <div *ngIf="a.saudeBateria != null"><dt>Saúde da bateria</dt><dd>{{ a.saudeBateria }}%</dd></div>
                   <div *ngIf="a.bateriaPerfeita === true"><dt>Bateria</dt><dd>Em perfeitas condições</dd></div>
@@ -1556,6 +1571,7 @@ interface FichaEntrada {
     }
     .valor-positivo { color: #166534; font-weight: 700; }
     .valor-negativo { color: #9a3412; font-weight: 700; }
+    td.margem { white-space: nowrap; }
     tr.selecionada td { background: #eff6ff; }
     tr.na-assistencia td { background: #fee2e2; }
     tr.na-assistencia.selecionada td, tr.na-assistencia:hover td { background: #fecaca; }
@@ -3553,6 +3569,26 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   dinheiro(valor?: number | null): string {
     return (Number(valor) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  pagoDe(a: { valorPago?: number; custo?: number }): number {
+    const pago = Number(a.valorPago);
+    if (pago > 0) return pago;
+    return Number(a.custo) || 0;
+  }
+
+  lucroDe(preco?: number | null, pago?: number | null): number | null {
+    const venda = Number(preco);
+    const custo = Number(pago);
+    if (!(venda > 0) || !(custo > 0)) return null;
+    return Math.round((venda - custo) * 100) / 100;
+  }
+
+  textoLucro(preco?: number | null, pago?: number | null): string {
+    const lucro = this.lucroDe(preco, pago);
+    if (lucro == null) return '—';
+    const pct = Math.round((lucro / Number(preco)) * 1000) / 10;
+    return `${this.dinheiro(lucro)} (${this.percentual(pct)})`;
   }
 
   percentual(valor: number | null): string {

@@ -74,17 +74,30 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
           </div>
           <div class="form-row">
             <div class="form-group">
+              <label>Valor pago</label>
+              <input data-campo="valorPago" type="number" min="0" step="0.01" (input)="definirPago($event)" />
+            </div>
+            <div class="form-group">
               <label>Valor de venda</label>
-              <input data-campo="valorVenda" type="number" min="0" step="0.01" (input)="valorVenda = numero($event)" />
+              <input data-campo="valorVenda" type="number" min="0" step="0.01" (input)="definirVenda($event)" />
             </div>
             <div class="form-group">
               <label>Valor mínimo</label>
-              <input data-campo="valorMinimo" type="number" min="0" step="0.01" (input)="valorMinimo = numero($event)" />
+              <input data-campo="valorMinimo" type="number" min="0" step="0.01" (input)="definirMinimo($event)" />
             </div>
             <div class="form-group">
               <label>Saúde da bateria (%)</label>
               <input data-campo="saudeBateria" type="number" min="0" max="100" (input)="saudeBateria = numero($event)" />
             </div>
+          </div>
+          <div class="margens" *ngIf="lucroDe(valorVenda) != null || lucroDe(valorMinimo) != null">
+            <p class="margem" [class.positiva]="(lucroDe(valorVenda) ?? 0) > 0" [class.negativa]="(lucroDe(valorVenda) ?? 0) < 0">
+              Margem no preço real: {{ textoMargem(valorVenda) }}
+            </p>
+            <p class="margem" [class.positiva]="(lucroDe(valorMinimo) ?? 0) > 0" [class.negativa]="(lucroDe(valorMinimo) ?? 0) < 0">
+              Margem no preço com desconto: {{ textoMargem(valorMinimo) }}
+            </p>
+            <p class="hint">A margem é o preço menos o valor pago.</p>
           </div>
           <div class="form-group" *ngIf="ehIphone">
             <label>Bateria em perfeitas condições</label>
@@ -187,6 +200,10 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
     .form-group { flex: 1 1 160px; min-width: 140px; }
     .form-group.grow { flex: 1 1 220px; min-width: 220px; }
     .peca-linha { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin-bottom: 8px; }
+    .margens { margin: 0 0 8px; }
+    .margem { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+    .margem.positiva { color: #166534; }
+    .margem.negativa { color: #9a3412; }
     .secundario { background: #fff; color: #0d0d0d; border: 1px solid #cbd5e1; }
     .perigo { background: #fff; color: #9a3412; border: 1px solid #fecaca; }
     .fotos-edicao { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
@@ -228,6 +245,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
   cor = '';
   configuracao = '';
   condicao = 'usado';
+  valorPago: number | null = null;
   valorVenda: number | null = null;
   valorMinimo: number | null = null;
   saudeBateria: number | null = null;
@@ -268,6 +286,8 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     this.cor = a.cor || '';
     this.configuracao = a.configuracao || '';
     this.condicao = a.condicao === 'novo' ? 'novo' : 'usado';
+    const pago = Number(a.valorPago) > 0 ? Number(a.valorPago) : Number(a.custo);
+    this.valorPago = pago > 0 ? pago : null;
     this.valorVenda = a.valorVenda ?? null;
     this.valorMinimo = a.valorMinimoVenda ?? null;
     this.saudeBateria = a.saudeBateria ?? null;
@@ -311,6 +331,40 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     if (texto === '') return null;
     const n = Number(texto);
     return Number.isFinite(n) ? n : null;
+  }
+
+  definirPago(evento: Event): void {
+    this.valorPago = this.numero(evento);
+    this.cdr.detectChanges();
+  }
+
+  definirVenda(evento: Event): void {
+    this.valorVenda = this.numero(evento);
+    this.cdr.detectChanges();
+  }
+
+  definirMinimo(evento: Event): void {
+    this.valorMinimo = this.numero(evento);
+    this.cdr.detectChanges();
+  }
+
+  lucroDe(preco: number | null): number | null {
+    const venda = Number(preco);
+    const pago = Number(this.valorPago);
+    if (!(venda > 0) || !(pago > 0)) return null;
+    return Math.round((venda - pago) * 100) / 100;
+  }
+
+  textoMargem(preco: number | null): string {
+    const lucro = this.lucroDe(preco);
+    if (lucro == null) return '—';
+    const pct = Math.round((lucro / Number(preco)) * 1000) / 10;
+    const percentual = pct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    return `${this.dinheiro(lucro)} (${percentual}%)`;
+  }
+
+  dinheiro(valor: number): string {
+    return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
   marcado(evento: Event): boolean {
@@ -517,8 +571,13 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
       avisarErroUsuario('Selecione a marca e o modelo.');
       return;
     }
+    const valorPago = Number(this.valorPago);
     const valorVenda = Number(this.valorVenda);
     const valorMinimo = Number(this.valorMinimo);
+    if (!(valorPago > 0)) {
+      avisarErroUsuario('Informe o valor pago pela loja.');
+      return;
+    }
     if (!(valorVenda > 0) || !(valorMinimo > 0)) {
       avisarErroUsuario('Informe o valor de venda e o mínimo.');
       return;
@@ -544,6 +603,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
       condicao: this.condicao,
       valorVenda,
       valorMinimoVenda: valorMinimo,
+      valorPago,
       observacoes: this.observacoes,
       alertaPermanente: this.alerta,
       saudeBateria: this.saudeBateria,
@@ -581,6 +641,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     setar('cor', this.cor);
     setar('configuracao', this.configuracao);
     setar('condicao', this.condicao);
+    setar('valorPago', this.valorPago == null ? '' : String(this.valorPago));
     setar('valorVenda', this.valorVenda == null ? '' : String(this.valorVenda));
     setar('valorMinimo', this.valorMinimo == null ? '' : String(this.valorMinimo));
     setar('saudeBateria', this.saudeBateria == null ? '' : String(this.saudeBateria));

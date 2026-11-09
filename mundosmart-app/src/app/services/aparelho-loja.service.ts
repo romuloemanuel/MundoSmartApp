@@ -65,6 +65,7 @@ export interface AparelhoLojaItem {
   condicao: string;
   valorVenda?: number;
   valorMinimoVenda?: number;
+  valorPago?: number;
   formaNegociacao?: string;
   financiadoraNome?: string;
   custo: number;
@@ -418,6 +419,7 @@ export class AparelhoLojaService {
     condicao?: string;
     valorVenda?: number;
     valorMinimoVenda?: number;
+    valorPago?: number;
     observacoes?: string;
     alertaPermanente?: string;
     saudeBateria?: number | null;
