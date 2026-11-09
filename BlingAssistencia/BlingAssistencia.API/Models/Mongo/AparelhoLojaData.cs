@@ -70,6 +70,11 @@ public class AparelhoLojaData
     [BsonElement("custo")]
     public decimal Custo { get; set; }
 
+    /// <summary>Preço atual do fornecedor para comprar outro aparelho igual. Zero usa a lista do modelo.</summary>
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("valorParaCompra")]
+    public decimal ValorParaCompra { get; set; }
+
     /// <summary>Preço de tabela informado no cadastro. A venda começa neste valor.</summary>
     [BsonRepresentation(BsonType.Decimal128)]
     [BsonElement("valorVenda")]

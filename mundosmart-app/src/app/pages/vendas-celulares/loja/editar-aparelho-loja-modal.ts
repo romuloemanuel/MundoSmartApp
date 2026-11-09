@@ -78,6 +78,11 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
               <input data-campo="valorPago" type="number" min="0" step="0.01" (input)="definirPago($event)" />
             </div>
             <div class="form-group">
+              <label>Valor p/ compra</label>
+              <input data-campo="valorParaCompra" type="number" min="0" step="0.01" (input)="definirParaCompra($event)" />
+              <p class="hint">Preço do fornecedor para comprar outro igual.</p>
+            </div>
+            <div class="form-group">
               <label>Valor de venda</label>
               <input data-campo="valorVenda" type="number" min="0" step="0.01" (input)="definirVenda($event)" />
             </div>
@@ -246,6 +251,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
   configuracao = '';
   condicao = 'usado';
   valorPago: number | null = null;
+  valorParaCompra: number | null = null;
   valorVenda: number | null = null;
   valorMinimo: number | null = null;
   saudeBateria: number | null = null;
@@ -288,6 +294,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     this.condicao = a.condicao === 'novo' ? 'novo' : 'usado';
     const pago = Number(a.valorPago) > 0 ? Number(a.valorPago) : Number(a.custo);
     this.valorPago = pago > 0 ? pago : null;
+    this.valorParaCompra = Number(a.valorParaCompra) > 0 ? Number(a.valorParaCompra) : null;
     this.valorVenda = a.valorVenda ?? null;
     this.valorMinimo = a.valorMinimoVenda ?? null;
     this.saudeBateria = a.saudeBateria ?? null;
@@ -335,6 +342,11 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
 
   definirPago(evento: Event): void {
     this.valorPago = this.numero(evento);
+    this.cdr.detectChanges();
+  }
+
+  definirParaCompra(evento: Event): void {
+    this.valorParaCompra = this.numero(evento);
     this.cdr.detectChanges();
   }
 
@@ -575,7 +587,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     const valorVenda = Number(this.valorVenda);
     const valorMinimo = Number(this.valorMinimo);
     if (!(valorPago > 0)) {
-      avisarErroUsuario('Informe o valor pago pela loja.');
+      avisarErroUsuario('Informe o valor pago.');
       return;
     }
     if (!(valorVenda > 0) || !(valorMinimo > 0)) {
@@ -604,6 +616,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
       valorVenda,
       valorMinimoVenda: valorMinimo,
       valorPago,
+      valorParaCompra: Number(this.valorParaCompra) > 0 ? Number(this.valorParaCompra) : 0,
       observacoes: this.observacoes,
       alertaPermanente: this.alerta,
       saudeBateria: this.saudeBateria,
@@ -642,6 +655,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     setar('configuracao', this.configuracao);
     setar('condicao', this.condicao);
     setar('valorPago', this.valorPago == null ? '' : String(this.valorPago));
+    setar('valorParaCompra', this.valorParaCompra == null ? '' : String(this.valorParaCompra));
     setar('valorVenda', this.valorVenda == null ? '' : String(this.valorVenda));
     setar('valorMinimo', this.valorMinimo == null ? '' : String(this.valorMinimo));
     setar('saudeBateria', this.saudeBateria == null ? '' : String(this.saudeBateria));

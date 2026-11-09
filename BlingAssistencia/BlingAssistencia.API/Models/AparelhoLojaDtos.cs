@@ -14,6 +14,8 @@ public class AparelhoEntradaRequest
     public decimal ValorMinimoVenda { get; set; }
     /// <summary>Quanto a loja pagou ou avaliou neste aparelho. Ausente mantém o valor já gravado.</summary>
     public decimal? ValorPago { get; set; }
+    /// <summary>Preço do fornecedor para comprar outro igual. Ausente mantém o valor já gravado.</summary>
+    public decimal? ValorParaCompra { get; set; }
     public string? Observacoes { get; set; }
     /// <summary>Defeito que pode não ter conserto, como Face ID de iPhone.</summary>
     public string? AlertaPermanente { get; set; }
@@ -166,6 +168,8 @@ public class AparelhoLojaDto
     public decimal ValorMinimoVenda { get; set; }
     /// <summary>Quanto a loja pagou ou avaliou nesta unidade.</summary>
     public decimal ValorPago { get; set; }
+    /// <summary>Preço do fornecedor para comprar outro aparelho igual.</summary>
+    public decimal ValorParaCompra { get; set; }
     public string FormaNegociacao { get; set; } = string.Empty;
     public string FinanciadoraNome { get; set; } = string.Empty;
     public decimal Custo { get; set; }

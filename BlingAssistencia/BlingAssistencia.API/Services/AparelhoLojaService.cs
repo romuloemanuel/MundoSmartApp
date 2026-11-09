@@ -919,6 +919,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         aparelho.MensagemPecaTrocada = aparelho.PecasTrocadas.Any(p => p.ApareceMensagem);
         if (pedido.ValorPago is not null)
             await AplicarValorPagoAsync(aparelho, pedido.ValorPago.Value, cancellationToken);
+        if (pedido.ValorParaCompra is not null)
+            aparelho.ValorParaCompra = pedido.ValorParaCompra.Value > 0 ? Dinheiro(pedido.ValorParaCompra.Value) : 0;
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
         return await MontarPainelAsync(cancellationToken);
     }
@@ -1099,7 +1101,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 CustoMaoDeObra = comCusto.Sum(a => a.CustoMaoDeObra),
                 PorVendedor = AgruparVendedores(ativas, comCusto, cadastro),
             },
-            Estoque = estoque.Select(a => ComForma(ParaDto(a, cadastro), a, ativas)).ToList(),
+            Estoque = estoque.Select(a => ComPrecoFornecedor(ComForma(ParaDto(a, cadastro), a, ativas), a, lista)).ToList(),
             CustosAssistencia = comCusto.Select(a => ParaDto(a, cadastro)).ToList(),
             Operacoes = operacoes.Select(op => ParaOperacaoDto(op, porId, cadastro)).ToList(),
             Movimentos = MontarMovimentos(ativas, porAparelho),
@@ -1511,6 +1513,17 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return dto;
     }
 
+    private static AparelhoLojaDto ComPrecoFornecedor(
+        AparelhoLojaDto dto,
+        AparelhoLojaData aparelho,
+        IReadOnlyList<AparelhoListaPrecoData> lista)
+    {
+        var daLista = AcharPreco(aparelho, lista);
+        if (daLista is > 0)
+            dto.ValorParaCompra = daLista.Value;
+        return dto;
+    }
+
     private static AparelhoLojaDto ParaDto(AparelhoLojaData a, MapaVendedores cadastro) => new()
     {
         Id = a.Id,
@@ -1526,6 +1539,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         ValorVenda = a.ValorVenda,
         ValorMinimoVenda = a.ValorMinimoVenda,
         ValorPago = a.Custo,
+        ValorParaCompra = a.ValorParaCompra,
         Custo = a.Custo,
         Status = a.Status,
         Origem = a.Origem,

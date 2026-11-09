@@ -1294,6 +1294,7 @@ interface FichaEntrada {
             <th>Modelo</th>
             <th>Valor</th>
             <th>Pago</th>
+            <th>P/ compra</th>
             <th>Margem</th>
             <th>No desconto</th>
             <th>Configuração</th>
@@ -1313,6 +1314,7 @@ interface FichaEntrada {
             <td>{{ a.modelo }}</td>
             <td>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</td>
             <td>{{ pagoDe(a) ? dinheiro(pagoDe(a)) : '—' }}</td>
+            <td [class.valor-negativo]="acimaDaVenda(a.valorParaCompra, a.valorVenda)">{{ a.valorParaCompra ? dinheiro(a.valorParaCompra) : '—' }}</td>
             <td class="margem" [class.valor-positivo]="(lucroDe(a.valorVenda, pagoDe(a)) ?? 0) > 0" [class.valor-negativo]="(lucroDe(a.valorVenda, pagoDe(a)) ?? 0) < 0">{{ textoLucro(a.valorVenda, pagoDe(a)) }}</td>
             <td class="margem" [class.valor-positivo]="(lucroDe(a.valorMinimoVenda, pagoDe(a)) ?? 0) > 0" [class.valor-negativo]="(lucroDe(a.valorMinimoVenda, pagoDe(a)) ?? 0) < 0">{{ textoLucro(a.valorMinimoVenda, pagoDe(a)) }}</td>
             <td>{{ a.configuracao || '—' }}</td>
@@ -1368,6 +1370,10 @@ interface FichaEntrada {
                   <div *ngIf="a.vendedorEntradaNome"><dt>Vendedor</dt><dd>{{ a.vendedorEntradaNome }}</dd></div>
                   <div><dt>Pagamento</dt><dd>{{ rotuloFormaAparelho(a) }}</dd></div>
                   <div><dt>Pago</dt><dd>{{ pagoDe(a) ? dinheiro(pagoDe(a)) : '—' }}</dd></div>
+                  <div>
+                    <dt>P/ compra</dt>
+                    <dd [class.valor-negativo]="acimaDaVenda(a.valorParaCompra, a.valorVenda)">{{ a.valorParaCompra ? dinheiro(a.valorParaCompra) : '—' }}</dd>
+                  </div>
                   <div><dt>Venda</dt><dd>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</dd></div>
                   <div *ngIf="a.valorMinimoVenda"><dt>Mínimo</dt><dd>{{ dinheiro(a.valorMinimoVenda) }}</dd></div>
                   <div *ngIf="pagoDe(a) && a.valorVenda">
@@ -3575,6 +3581,12 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     const pago = Number(a.valorPago);
     if (pago > 0) return pago;
     return Number(a.custo) || 0;
+  }
+
+  acimaDaVenda(paraCompra?: number | null, venda?: number | null): boolean {
+    const compra = Number(paraCompra);
+    const preco = Number(venda);
+    return compra > 0 && preco > 0 && compra > preco;
   }
 
   lucroDe(preco?: number | null, pago?: number | null): number | null {

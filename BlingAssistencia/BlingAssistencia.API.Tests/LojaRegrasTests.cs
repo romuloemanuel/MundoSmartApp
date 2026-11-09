@@ -142,11 +142,13 @@ public class LojaRegrasTests
             valorVenda = 2000m,
             valorMinimoVenda = 1500m,
             valorPago = 800m,
+            valorParaCompra = 2100m,
             bateriaPerfeita = true,
         });
         var depois = ExigirEstoque(editado, imei);
         Assert.Equal(800m, Num(depois["custo"]));
         Assert.Equal(800m, Num(depois["valorPago"]));
+        Assert.Equal(2100m, Num(depois["valorParaCompra"]));
         var op = ExigirOperacao(editado, imei, "compra");
         Assert.Equal(800m, Num(op["dinheiroPago"]));
         Assert.Equal(800m, Num(op["valorAvaliado"]));
