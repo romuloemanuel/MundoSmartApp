@@ -97,12 +97,12 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
           </div>
           <div class="margens" *ngIf="lucroDe(valorVenda) != null || lucroDe(valorMinimo) != null">
             <p class="margem" [class.positiva]="(lucroDe(valorVenda) ?? 0) > 0" [class.negativa]="(lucroDe(valorVenda) ?? 0) < 0">
-              Margem no preço real: {{ textoMargem(valorVenda) }}
+              Lucro bruto inicial: {{ textoMargem(valorVenda) }}
             </p>
             <p class="margem" [class.positiva]="(lucroDe(valorMinimo) ?? 0) > 0" [class.negativa]="(lucroDe(valorMinimo) ?? 0) < 0">
-              Margem no preço com desconto: {{ textoMargem(valorMinimo) }}
+              Lucro bruto no desconto: {{ textoMargem(valorMinimo) }}
             </p>
-            <p class="hint">A margem é o preço menos o valor pago.</p>
+            <p class="hint">Lucro bruto inicial é o preço menos o valor pago. O percentual é sobre o que foi pago.</p>
           </div>
           <div class="form-group" *ngIf="ehIphone">
             <label>Bateria em perfeitas condições</label>
@@ -370,7 +370,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
   textoMargem(preco: number | null): string {
     const lucro = this.lucroDe(preco);
     if (lucro == null) return '—';
-    const pct = Math.round((lucro / Number(preco)) * 1000) / 10;
+    const pct = Math.round((lucro / Number(this.valorPago)) * 1000) / 10;
     const percentual = pct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     return `${this.dinheiro(lucro)} (${percentual}%)`;
   }

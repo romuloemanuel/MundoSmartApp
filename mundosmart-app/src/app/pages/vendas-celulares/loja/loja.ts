@@ -1295,7 +1295,7 @@ interface FichaEntrada {
             <th>Valor</th>
             <th>Pago</th>
             <th>P/ compra</th>
-            <th>Margem</th>
+            <th>Lucro bruto</th>
             <th>No desconto</th>
             <th>Configuração</th>
             <th>Cor</th>
@@ -1377,11 +1377,11 @@ interface FichaEntrada {
                   <div><dt>Venda</dt><dd>{{ a.valorVenda ? dinheiro(a.valorVenda) : '—' }}</dd></div>
                   <div *ngIf="a.valorMinimoVenda"><dt>Mínimo</dt><dd>{{ dinheiro(a.valorMinimoVenda) }}</dd></div>
                   <div *ngIf="pagoDe(a) && a.valorVenda">
-                    <dt>Margem no preço real</dt>
+                    <dt>Lucro bruto inicial</dt>
                     <dd [class.valor-positivo]="(lucroDe(a.valorVenda, pagoDe(a)) ?? 0) > 0" [class.valor-negativo]="(lucroDe(a.valorVenda, pagoDe(a)) ?? 0) < 0">{{ textoLucro(a.valorVenda, pagoDe(a)) }}</dd>
                   </div>
                   <div *ngIf="pagoDe(a) && a.valorMinimoVenda">
-                    <dt>Margem no preço com desconto</dt>
+                    <dt>Lucro bruto no desconto</dt>
                     <dd [class.valor-positivo]="(lucroDe(a.valorMinimoVenda, pagoDe(a)) ?? 0) > 0" [class.valor-negativo]="(lucroDe(a.valorMinimoVenda, pagoDe(a)) ?? 0) < 0">{{ textoLucro(a.valorMinimoVenda, pagoDe(a)) }}</dd>
                   </div>
                   <div *ngIf="financeiro"><dt>Custo</dt><dd>{{ dinheiro(custoTotalDe(a)) }}</dd></div>
@@ -3599,7 +3599,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   textoLucro(preco?: number | null, pago?: number | null): string {
     const lucro = this.lucroDe(preco, pago);
     if (lucro == null) return '—';
-    const pct = Math.round((lucro / Number(preco)) * 1000) / 10;
+    const pct = Math.round((lucro / Number(pago)) * 1000) / 10;
     return `${this.dinheiro(lucro)} (${this.percentual(pct)})`;
   }
 
