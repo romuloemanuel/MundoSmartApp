@@ -13,7 +13,7 @@ export type EstoqueAbaInterna =
   | 'financeiro'
   | 'garantia';
 
-export type EstoqueAbaRota = 'lotes-retorno' | 'analise-retorno' | 'lotes-vencendo';
+export type EstoqueAbaRota = 'lotes-retorno' | 'analise-retorno' | 'relatorios' | 'lotes-vencendo';
 
 @Component({
   selector: 'app-estoque-page-nav',
@@ -87,6 +87,9 @@ export type EstoqueAbaRota = 'lotes-retorno' | 'analise-retorno' | 'lotes-vencen
       </a>
       <a class="estoque-aba-link" routerLink="/estoque/analise-retorno" [class.ativa]="abaRotaAtiva('analise-retorno')">
         An&aacute;lise
+      </a>
+      <a class="estoque-aba-link" routerLink="/estoque/relatorios" [class.ativa]="abaRotaAtiva('relatorios')">
+        Relat&oacute;rios
       </a>
       <a class="estoque-aba-link" routerLink="/estoque/lotes-vencendo" [class.ativa]="abaRotaAtiva('lotes-vencendo')">
         A vencer

@@ -431,3 +431,34 @@ export interface RelatorioFinanceiroEstoque {
 }
 
 export type PecaCatalogo = PecaEstoque;
+
+export interface RelatorioContagemModeloItem {
+  modeloId?: string;
+  modeloNome?: string;
+  marcaNome?: string;
+}
+
+export interface RelatorioContagemPecaItem {
+  id: string;
+  nome: string;
+  categoria?: string;
+  quantidadeEstoque: number;
+  modelos: RelatorioContagemModeloItem[];
+}
+
+export interface RelatorioContagemLoteItem {
+  pecaId: string;
+  pecaNome: string;
+  numeroPedido: string;
+  modeloId?: string;
+  modeloNome?: string;
+  quantidadeRestante: number;
+  custoUnitario: number;
+  dataEntrada: string;
+}
+
+export interface RelatorioContagemEstoqueBase {
+  geradoEm: string;
+  pecas: RelatorioContagemPecaItem[];
+  lotes: RelatorioContagemLoteItem[];
+}

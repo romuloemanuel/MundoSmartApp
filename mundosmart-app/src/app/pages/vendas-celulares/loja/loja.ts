@@ -808,8 +808,7 @@ interface FichaEntrada {
           <div class="form-group">
             <label>Desconto</label>
             <input type="number" min="0" step="0.01" [(ngModel)]="venda.desconto" name="descontoVenda" />
-            <p class="hint">Máximo {{ dinheiro(teto(venda.preco, descontoMaxPct)) }} ({{ descontoMaxPct }}%).</p>
-            <p class="campo-aviso" *ngIf="descontoEstoura(venda.preco, venda.desconto)">O desconto passa do limite.</p>
+            <p class="campo-aviso" *ngIf="descontoEstoura(venda.preco, venda.desconto)">Alerta: o desconto passa de {{ descontoMaxPct }}%.</p>
           </div>
         </div>
         <p class="diferenca" *ngIf="precoCobradoVenda !== null">Valor do contrato: {{ dinheiro(precoCobradoVenda) }}.</p>
@@ -915,7 +914,7 @@ interface FichaEntrada {
 
       <form class="painel" *ngIf="tela === 'troca'" (ngSubmit)="salvarTroca()" (keydown.enter)="bloquearEnterDaBusca($event)">
         <h3>Troca</h3>
-        <p class="hint">O caixa registra só a diferença. O aparelho que entra fica no estoque pelo valor avaliado.</p>
+        <p class="hint">A conta é o preço do nosso aparelho contra a soma dos aparelhos do cliente. Se o dele valer mais, a diferença volta para ele. Se valer menos, volta para a loja. Cada aparelho que entra fica no estoque pelo próprio valor avaliado.</p>
         <p class="etapa">1. Aparelho que sai</p>
         <div class="form-group">
           <label>Buscar código</label>
@@ -984,58 +983,40 @@ interface FichaEntrada {
             <p class="campo-aviso" *ngIf="descontoEstoura(troca.precoSaida, troca.desconto)">O desconto passa do limite.</p>
           </div>
         </div>
-        <p class="hint" *ngIf="somaAvaliados !== null">Os aparelhos que entram somam {{ dinheiro(somaAvaliados) }}. Cada um fica no estoque pelo próprio valor avaliado.</p>
-        <p class="diferenca" *ngIf="precoCobradoTroca !== null">Valor do contrato: {{ dinheiro(precoCobradoTroca) }}.</p>
-        <p class="hint" *ngIf="diferencaTroca !== null">
-          Pelos valores dos aparelhos, a conta dá
-          <ng-container *ngIf="diferencaTroca > 0">{{ dinheiro(diferencaTroca) }} a favor da loja.</ng-container>
-          <ng-container *ngIf="diferencaTroca < 0">{{ dinheiro(-diferencaTroca) }} a favor do cliente.</ng-container>
-          <ng-container *ngIf="diferencaTroca === 0">zero.</ng-container>
-          O caixa usa a diferença que você informar.
-        </p>
-        <p class="etapa">2. Diferença</p>
-        <div class="form-group">
-          <label>Volta da diferença</label>
-          <select [ngModel]="troca.sentido" (ngModelChange)="onSentidoTroca($event)" name="sentidoTroca">
-            <option value="">Selecione…</option>
-            <option value="loja">Volta para a loja</option>
-            <option value="cliente">Volta para o cliente</option>
-            <option value="nenhuma">Sem diferença</option>
-          </select>
-        </div>
-        <div class="form-group" *ngIf="troca.sentido === 'loja' || troca.sentido === 'cliente'">
-          <label>Diferença</label>
-          <input type="number" min="0.01" step="0.01" [(ngModel)]="troca.diferenca" name="diferencaTroca" />
-        </div>
-        <div class="form-group" *ngIf="troca.sentido === 'loja'">
-          <label>Pagamento da diferença</label>
-          <select [(ngModel)]="troca.pagamento" name="pagamentoTrocaLoja">
+        <p class="hint" *ngIf="somaAvaliados !== null">Os aparelhos que entram somam {{ dinheiro(somaAvaliados) }}.</p>
+        <p class="diferenca" *ngIf="baseCartaoTroca > 0">Nosso aparelho: {{ dinheiro(baseCartaoTroca) }}.</p>
+        <p class="diferenca" *ngIf="diferencaTroca !== null && diferencaTroca > 0">Volta para a loja: {{ dinheiro(diferencaTroca) }}.</p>
+        <p class="diferenca" *ngIf="diferencaTroca !== null && diferencaTroca < 0">Volta para o cliente: {{ dinheiro(-diferencaTroca) }}.</p>
+        <p class="hint" *ngIf="diferencaTroca === 0">Os valores se equivalem. Não há dinheiro nesta troca.</p>
+        <div class="form-group" *ngIf="sentidoTrocaCalculado === 'loja'">
+          <label>Como o cliente paga</label>
+          <select [ngModel]="pagamentoTrocaCompativel" (ngModelChange)="troca.pagamento = $event" name="pagamentoTrocaLoja">
             <option value="">Selecione…</option>
             <option value="dinheiro">Dinheiro</option>
             <option value="cartao">Cartão</option>
             <option value="financiadora">Financiadora</option>
           </select>
         </div>
-        <div class="form-group" *ngIf="troca.sentido === 'loja' && troca.pagamento === 'financiadora'">
+        <div class="form-group" *ngIf="sentidoTrocaCalculado === 'loja' && pagamentoTrocaCompativel === 'financiadora'">
           <label>Qual financiadora</label>
           <input [(ngModel)]="troca.financiadoraNome" name="nomeFinTroca" />
         </div>
-        <div class="form-group" *ngIf="troca.sentido === 'cliente'">
+        <div class="form-group" *ngIf="sentidoTrocaCalculado === 'cliente'">
           <label>Como a loja devolve</label>
-          <select [(ngModel)]="troca.pagamento" name="pagamentoTrocaCliente">
+          <select [ngModel]="pagamentoTrocaCompativel" (ngModelChange)="troca.pagamento = $event" name="pagamentoTrocaCliente">
             <option value="">Selecione…</option>
             <option value="pix">PIX</option>
             <option value="dinheiro">Dinheiro</option>
           </select>
         </div>
-        <div class="juros" *ngIf="troca.pagamento === 'cartao' && diferencaDigitada > 0">
+        <div class="juros" *ngIf="sentidoTrocaCalculado === 'loja' && pagamentoTrocaCompativel === 'cartao' && valorVoltaTroca > 0">
           <button type="button" class="secundario" (click)="jurosTrocaAberto = !jurosTrocaAberto">
             {{ jurosTrocaAberto ? 'Ocultar parcelas' : 'Calcular parcelas no cartão' }}
           </button>
           <ng-container *ngIf="jurosTrocaAberto">
-            <p class="hint">Para a loja receber {{ dinheiro(diferencaDigitada) }} no cartão, passar para o cliente:</p>
+            <p class="hint">Para a loja receber {{ dinheiro(valorVoltaTroca) }} no cartão, passar para o cliente:</p>
             <div class="grade-juros">
-              <button type="button" *ngFor="let op of opcoesJuros(diferencaDigitada)" (click)="opcaoJurosTroca = op" [class.ativo]="opcaoJurosTroca?.parcelas === op.parcelas">
+              <button type="button" *ngFor="let op of opcoesJuros(valorVoltaTroca)" (click)="opcaoJurosTroca = op" [class.ativo]="opcaoJurosTroca?.parcelas === op.parcelas">
                 <strong>{{ op.parcelas }}x</strong>
                 <span>{{ dinheiro(op.parcelas === 1 ? op.total : op.valorParcela) }}</span>
                 <small *ngIf="op.parcelas > 1">total {{ dinheiro(op.total) }}</small>
@@ -1044,11 +1025,11 @@ interface FichaEntrada {
             <p class="hint" *ngIf="opcaoJurosTroca as op">
               {{ op.parcelas === 1 ? dinheiro(op.total) : op.parcelas + 'x de ' + dinheiro(op.valorParcela) }}.
               Acréscimo {{ dinheiro(op.juros) }}. Taxa {{ taxa(op.taxaExibidaPct) }}.
-              A loja recebe {{ dinheiro(diferencaDigitada) }}. O cálculo não altera a diferença informada.
+              A loja recebe {{ dinheiro(valorVoltaTroca) }}.
             </p>
           </ng-container>
         </div>
-        <p class="etapa">3. Cliente</p>
+        <p class="etapa">2. Cliente</p>
         <div class="form-group">
           <label>Cliente</label>
           <app-cliente-autocomplete
@@ -1068,7 +1049,7 @@ interface FichaEntrada {
         </div>
         <div class="entrada-troca" *ngFor="let f of entradasTroca; let i = index">
           <div class="entrada-troca-topo">
-            <h4>4. Aparelho que entra<span *ngIf="entradasTroca.length > 1"> {{ i + 1 }}</span></h4>
+            <h4>3. Aparelho que entra<span *ngIf="entradasTroca.length > 1"> {{ i + 1 }}</span></h4>
             <button type="button" class="secundario" *ngIf="entradasTroca.length > 1" (click)="removerEntradaTroca(f)">Remover</button>
           </div>
           <p class="hint">O código das costas deste aparelho o sistema gera quando ele entrar. Não precisa informar.</p>
@@ -2320,8 +2301,24 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return Math.round((this.baseCartaoTroca - this.somaAvaliados) * 100) / 100;
   }
 
-  get diferencaDigitada(): number {
-    return this.centavos(this.troca.diferenca);
+  get sentidoTrocaCalculado(): '' | 'loja' | 'cliente' | 'nenhuma' {
+    const conta = this.diferencaTroca;
+    if (conta == null) return '';
+    if (conta > 0) return 'loja';
+    if (conta < 0) return 'cliente';
+    return 'nenhuma';
+  }
+
+  get valorVoltaTroca(): number {
+    const conta = this.diferencaTroca;
+    return conta == null ? 0 : Math.abs(conta);
+  }
+
+  get pagamentoTrocaCompativel(): '' | 'dinheiro' | 'cartao' | 'financiadora' | 'pix' {
+    const pag = this.troca.pagamento;
+    if (this.sentidoTrocaCalculado === 'loja' && (pag === 'dinheiro' || pag === 'cartao' || pag === 'financiadora')) return pag;
+    if (this.sentidoTrocaCalculado === 'cliente' && (pag === 'pix' || pag === 'dinheiro')) return pag;
+    return '';
   }
 
   get caixaVenda(): number {
@@ -2938,13 +2935,6 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return achada?.nome || '—';
   }
 
-  onSentidoTroca(sentido: '' | 'loja' | 'cliente' | 'nenhuma'): void {
-    this.troca.sentido = sentido;
-    this.troca.pagamento = '';
-    this.troca.financiadoraNome = '';
-    if (sentido === 'nenhuma') this.troca.diferenca = null;
-  }
-
   private diferencaTrocaVazia() {
     return {
       sentido: '' as '' | 'loja' | 'cliente' | 'nenhuma',
@@ -3409,13 +3399,14 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     acrescimo: number | null,
     forma: FormaNegociacao,
     minimo?: number | null,
+    bloquearDesconto = true,
   ): string {
     const preco = this.centavos(tabela);
     if (!(preco > 0)) return 'Informe o preço do aparelho.';
     const desc = this.centavos(desconto);
     const acr = this.centavos(acrescimo);
     if (desc < 0 || acr < 0) return 'Desconto e acréscimo não podem ser negativos.';
-    if (this.descontoEstoura(preco, desc)) return `O desconto passa do limite de ${this.descontoMaxPct}%.`;
+    if (bloquearDesconto && this.descontoEstoura(preco, desc)) return `O desconto passa do limite de ${this.descontoMaxPct}%.`;
     if (this.abaixoDoMinimo(preco, desc, minimo)) return 'O valor fica abaixo do mínimo para venda.';
     if (this.ehFinanciada(forma) && this.acrescimoEstoura(preco, acr)) return `O acréscimo passa do limite de ${this.acrescimoMaxPct}%.`;
     if (this.precoCobrado(preco, desc, acr, forma) == null) return 'O valor cobrado precisa ser maior que zero.';
@@ -3683,7 +3674,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       avisarErroUsuario('Cadastre o CPF ou CNPJ do cliente para liberar o desconto.');
       return;
     }
-    const ajuste = this.avisoAjuste(this.venda.preco, this.venda.desconto, this.venda.acrescimo, this.venda.forma, this.aparelhoVendaSelecionado?.valorMinimoVenda);
+    const ajuste = this.avisoAjuste(this.venda.preco, this.venda.desconto, this.venda.acrescimo, this.venda.forma, this.aparelhoVendaSelecionado?.valorMinimoVenda, false);
     if (ajuste) {
       avisarErroUsuario(ajuste);
       return;
@@ -3812,20 +3803,18 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   private validarDiferencaTroca(): boolean {
-    if (this.troca.sentido !== 'loja' && this.troca.sentido !== 'cliente' && this.troca.sentido !== 'nenhuma') {
-      avisarErroUsuario('Informe se a diferença volta para a loja, para o cliente ou se não há diferença.');
+    const sentido = this.sentidoTrocaCalculado;
+    if (!sentido) {
+      avisarErroUsuario('Informe o preço do nosso aparelho e o valor de cada aparelho do cliente.');
       return false;
     }
+    this.troca.sentido = sentido;
+    this.troca.diferenca = sentido === 'nenhuma' ? null : this.valorVoltaTroca;
+    this.troca.pagamento = this.pagamentoTrocaCompativel;
+    if (sentido === 'nenhuma') return true;
     const diferenca = this.centavos(this.troca.diferenca);
-    if (this.troca.sentido === 'nenhuma') {
-      if (diferenca > 0) {
-        avisarErroUsuario('Se há diferença, informe se ela volta para a loja ou para o cliente.');
-        return false;
-      }
-      return true;
-    }
     if (!(diferenca > 0)) {
-      avisarErroUsuario('Informe a diferença.');
+      avisarErroUsuario('Informe o preço do nosso aparelho e o valor de cada aparelho do cliente.');
       return false;
     }
     if (this.troca.sentido === 'loja' && this.troca.pagamento !== 'dinheiro' && this.troca.pagamento !== 'cartao' && this.troca.pagamento !== 'financiadora') {

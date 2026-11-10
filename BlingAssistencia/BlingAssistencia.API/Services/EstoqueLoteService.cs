@@ -36,6 +36,8 @@ public interface IEstoqueLoteService
     Task<Dictionary<string, decimal>> ObterCustosReferenciaPecasAsync(IEnumerable<string> pecaIds);
     /// <summary>Valor em estoque, investimento mensal e giro (saídas a custo).</summary>
     Task<RelatorioFinanceiroEstoqueResponse> RelatorioFinanceiroAsync(int meses = 12);
+    /// <summary>Peças da loja e lotes com saldo, sem limite, para o relatório de contagem.</summary>
+    Task<RelatorioContagemEstoqueBaseResponse> ObterBaseRelatorioContagemAsync();
     /// <summary>Cria lote a partir do estoque informado no cadastro da peça, se ainda não houver saldo em lotes.</summary>
     Task GarantirLoteCatalogoAsync(string pecaId);
     /// <summary>
@@ -338,7 +340,10 @@ public class EstoqueLoteService : IEstoqueLoteService
     {
         var filtro = Builders<LoteEstoque>.Filter.Empty;
         if (!string.IsNullOrWhiteSpace(pecaId))
+        {
+            await GarantirLoteCatalogoAsync(pecaId);
             filtro &= Builders<LoteEstoque>.Filter.Eq(x => x.PecaId, pecaId);
+        }
         if (somenteComSaldo)
             filtro &= Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
 
@@ -347,6 +352,51 @@ public class EstoqueLoteService : IEstoqueLoteService
             .ThenBy(x => x.CriadoEm)
             .Limit(500)
             .ToListAsync();
+    }
+
+    public async Task<RelatorioContagemEstoqueBaseResponse> ObterBaseRelatorioContagemAsync()
+    {
+        await SincronizarLotesDeCadastroAsync();
+
+        var filtroPeca = Builders<PecaEstoque>.Filter.Ne(x => x.EstoqueNaLoja, false);
+        var pecas = await _pecas.Find(filtroPeca).ToListAsync();
+
+        var filtroLote = Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0);
+        var lotes = await _lotes.Find(filtroLote)
+            .SortBy(x => x.DataEntrada)
+            .ThenBy(x => x.CriadoEm)
+            .ToListAsync();
+
+        return new RelatorioContagemEstoqueBaseResponse
+        {
+            GeradoEm = DateTime.UtcNow,
+            Pecas = pecas.Select(p => new RelatorioContagemPecaItem
+            {
+                Id = p.Id ?? string.Empty,
+                Nome = p.Nome ?? string.Empty,
+                Categoria = p.Categoria,
+                QuantidadeEstoque = p.QuantidadeEstoque,
+                Modelos = (p.ModelosCompativeis ?? [])
+                    .Select(m => new RelatorioContagemModeloItem
+                    {
+                        ModeloId = m.ModeloId,
+                        ModeloNome = m.ModeloNome,
+                        MarcaNome = m.MarcaNome,
+                    })
+                    .ToList(),
+            }).ToList(),
+            Lotes = lotes.Select(l => new RelatorioContagemLoteItem
+            {
+                PecaId = l.PecaId ?? string.Empty,
+                PecaNome = l.PecaNome ?? string.Empty,
+                NumeroPedido = l.NumeroPedido ?? string.Empty,
+                ModeloId = l.ModeloId,
+                ModeloNome = l.ModeloNome,
+                QuantidadeRestante = l.QuantidadeRestante,
+                CustoUnitario = l.CustoUnitario,
+                DataEntrada = l.DataEntrada,
+            }).ToList(),
+        };
     }
 
     public async Task<LoteEstoque> AtualizarLoteAsync(string id, AtualizarLoteEstoqueRequest request)
@@ -1548,6 +1598,11 @@ public class EstoqueLoteService : IEstoqueLoteService
         if (faltante <= 0) return;
 
         var agora = DateTime.UtcNow;
+        var modeloUnico = (peca.ModelosCompativeis ?? [])
+            .Where(m => !string.IsNullOrWhiteSpace(m.ModeloId))
+            .GroupBy(m => m.ModeloId)
+            .Select(g => g.First())
+            .ToList();
         var lote = new LoteEstoque
         {
             PedidoCompraId = "estoque-inicial",
@@ -1556,6 +1611,8 @@ public class EstoqueLoteService : IEstoqueLoteService
             PecaId = peca.Id!,
             PecaNome = peca.Nome,
             MarcaPeca = peca.MarcaPeca,
+            ModeloId = modeloUnico.Count == 1 ? modeloUnico[0].ModeloId : null,
+            ModeloNome = modeloUnico.Count == 1 ? modeloUnico[0].ModeloNome : null,
             QuantidadeInicial = faltante,
             QuantidadeRestante = faltante,
             CustoUnitario = 0,
@@ -1571,6 +1628,8 @@ public class EstoqueLoteService : IEstoqueLoteService
             PecaId = peca.Id!,
             PecaNome = peca.Nome,
             MarcaPeca = peca.MarcaPeca,
+            ModeloId = lote.ModeloId,
+            ModeloNome = lote.ModeloNome,
             LoteId = lote.Id,
             NumeroPedido = lote.NumeroPedido,
             Quantidade = faltante,
@@ -1579,6 +1638,37 @@ public class EstoqueLoteService : IEstoqueLoteService
             Data = agora,
             CriadoEm = agora,
         });
+    }
+
+    /// <summary>
+    /// Peça com quantidade no cadastro e sem lote correspondente não aparece na contagem.
+    /// Cria só a diferença, o mesmo caminho do salvamento da peça.
+    /// </summary>
+    private async Task SincronizarLotesDeCadastroAsync()
+    {
+        var pecas = await _pecas.Find(Builders<PecaEstoque>.Filter.Gt(x => x.QuantidadeEstoque, 0)).ToListAsync();
+        var ids = pecas
+            .Select(p => p.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .ToList();
+        if (ids.Count == 0) return;
+
+        var lotes = await _lotes.Find(
+                Builders<LoteEstoque>.Filter.In(x => x.PecaId, ids)
+                & Builders<LoteEstoque>.Filter.Gt(x => x.QuantidadeRestante, 0))
+            .ToListAsync();
+        var saldo = lotes
+            .GroupBy(l => l.PecaId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.QuantidadeRestante));
+
+        foreach (var peca in pecas)
+        {
+            if (string.IsNullOrWhiteSpace(peca.Id)) continue;
+            saldo.TryGetValue(peca.Id, out var qtd);
+            if (qtd >= peca.QuantidadeEstoque) continue;
+            await GarantirLoteCatalogoAsync(peca.Id);
+        }
     }
 
     public async Task RecalcularSaldosPorCorAsync()

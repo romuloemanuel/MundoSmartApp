@@ -448,12 +448,12 @@ public class LojaRegrasTests
     }
 
     [Fact]
-    public async Task Desconto_acima_de_cinco_por_cento_e_recusado()
+    public async Task Desconto_acima_de_cinco_por_cento_entra_no_caixa()
     {
         var imei = NovoImei();
         var cliente = await ClienteComDocumento();
         var id = await IdComprado(imei, 2000);
-        var res = await PostBruto("/api/aparelhos-loja/venda", new
+        var painel = await Post("/api/aparelhos-loja/venda", new
         {
             aparelhoId = id,
             clienteId = cliente.Id,
@@ -463,8 +463,9 @@ public class LojaRegrasTests
             preco = 1899,
             forma = "avista",
         });
-        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
-        Assert.Contains("limite", await res.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        var op = ExigirOperacao(painel, imei, "venda");
+        Assert.Equal(1899m, Num(op["precoSaida"]));
+        Assert.Equal(1899m, Num(op["dinheiroRecebido"]));
     }
 
     [Fact]
@@ -820,7 +821,7 @@ public class LojaRegrasTests
     }
 
     [Fact]
-    public async Task Troca_usa_a_diferenca_informada_e_nao_a_conta_dos_aparelhos()
+    public async Task Troca_calcula_a_diferenca_pelos_aparelhos_e_ignora_o_valor_digitado()
     {
         var saida = NovoImei();
         var entrada = NovoImei();
@@ -842,7 +843,7 @@ public class LojaRegrasTests
             entrada = Aparelho(entrada),
         });
         var op = ExigirOperacao(painel, saida, "troca");
-        Assert.Equal(400m, Num(op["dinheiroRecebido"]));
+        Assert.Equal(900m, Num(op["dinheiroRecebido"]));
         Assert.Equal(0m, Num(op["dinheiroPago"]));
         Assert.Equal("financiadora", op["formaNegociacao"]!.GetValue<string>());
         Assert.Equal("Crediário da praça", op["financiadoraNome"]!.GetValue<string>());
@@ -857,8 +858,8 @@ public class LojaRegrasTests
             desconto = 0,
             acrescimo = 0,
             precoSaida = 1300,
-            valorAvaliado = 900,
-            sentidoDiferenca = "cliente",
+            valorAvaliado = 1600,
+            sentidoDiferenca = "loja",
             diferencaInformada = 150,
             forma = "pix",
             clienteId = cliente.Id,
@@ -866,7 +867,7 @@ public class LojaRegrasTests
         });
         var volta = ExigirOperacao(painelCliente, devolve, "troca");
         Assert.Equal(0m, Num(volta["dinheiroRecebido"]));
-        Assert.Equal(150m, Num(volta["dinheiroPago"]));
+        Assert.Equal(300m, Num(volta["dinheiroPago"]));
         Assert.Equal("pix", volta["formaNegociacao"]!.GetValue<string>());
 
         var semNome = await PostBruto("/api/aparelhos-loja/troca", new
@@ -892,7 +893,7 @@ public class LojaRegrasTests
             desconto = 0,
             acrescimo = 0,
             precoSaida = 1000,
-            valorAvaliado = 400,
+            valorAvaliado = 1400,
             sentidoDiferenca = "cliente",
             diferencaInformada = 200,
             forma = "cartao",

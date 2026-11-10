@@ -184,6 +184,11 @@ public class EstoqueController : ControllerBase
     public async Task<IActionResult> ListarPecas([FromQuery] string? termo) =>
         Ok(await _pecas.BuscarAsync(termo));
 
+    /// <summary>Base completa para o relatório de contagem (sem o limite das grades).</summary>
+    [HttpGet("relatorios/contagem")]
+    public async Task<IActionResult> RelatorioContagem() =>
+        Ok(await _estoque.ObterBaseRelatorioContagemAsync());
+
     [HttpPost("relatorios/reposicao/historico")]
     public async Task<IActionResult> SalvarRelatorioReposicao([FromBody] SalvarRelatorioReposicaoRequest request)
     {

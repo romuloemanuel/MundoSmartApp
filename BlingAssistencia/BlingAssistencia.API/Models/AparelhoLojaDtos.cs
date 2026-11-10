@@ -123,7 +123,7 @@ public class AparelhoTrocaRequest
     public AparelhoEntradaRequest? Entrada { get; set; }
     public List<AparelhoTrocaEntradaRequest>? Entradas { get; set; }
     public decimal ValorAvaliado { get; set; }
-    /// <summary>loja, cliente ou nenhuma. Vazio mantém a conta antiga pela diferença dos aparelhos.</summary>
+    /// <summary>Forma de pagamento da diferença. O valor e o sentido saem da conta dos aparelhos.</summary>
     public string? SentidoDiferenca { get; set; }
     public decimal DiferencaInformada { get; set; }
     public string? Forma { get; set; }

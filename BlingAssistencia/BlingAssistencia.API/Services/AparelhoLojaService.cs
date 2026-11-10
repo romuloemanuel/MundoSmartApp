@@ -273,14 +273,25 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         var operacaoId = NovoId();
         var avaliado = Dinheiro(prontas.Sum(p => p.Avaliado));
         var diferenca = Dinheiro(baseCaixa - avaliado);
+        var sentidoCalculado = diferenca > 0 ? "loja" : diferenca < 0 ? "cliente" : "nenhuma";
         var forma = NormalizarForma(pedido.Forma);
+        var formaBruta = (pedido.Forma ?? "").Trim().ToLowerInvariant();
+        var pagamentoExplicito = formaBruta is "dinheiro" or "cartao" or "financiadora" or "pix";
         decimal recebido;
         decimal pago;
         decimal entradaCaixa = 0;
         decimal repasse = 0;
         var nomeFinanciadora = "";
-        if (TemSentidoInformado(pedido.SentidoDiferenca))
+        if (sentidoCalculado == "nenhuma")
         {
+            forma = "avista";
+            recebido = 0;
+            pago = 0;
+        }
+        else if (pagamentoExplicito)
+        {
+            pedido.SentidoDiferenca = sentidoCalculado;
+            pedido.DiferencaInformada = Math.Abs(diferenca);
             (forma, nomeFinanciadora, recebido, pago) = CaixaDaDiferencaInformada(pedido);
         }
         else if (forma is "avista" or "cartao")
@@ -1916,10 +1927,6 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         var acr = Dinheiro(acrescimo);
         if (desc < 0 || acr < 0)
             throw new InvalidOperationException("Desconto e acréscimo não podem ser negativos.");
-
-        var tetoDesconto = Dinheiro(basePreco * PercentualLimite(_blingEff.Current.VendasCelularesDescontoVendaMaxPercentual) / 100m);
-        if (desc > tetoDesconto)
-            throw new InvalidOperationException($"O desconto passa do limite de {PercentualLimite(_blingEff.Current.VendasCelularesDescontoVendaMaxPercentual):0.##}% sobre o preço do aparelho.");
 
         var financiada = EhFinanciada(forma);
         if (!financiada && acr > 0)

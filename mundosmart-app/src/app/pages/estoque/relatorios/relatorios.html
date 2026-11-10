@@ -1,0 +1,111 @@
+<div class="page">
+  <app-estoque-page-nav
+    crumbAtual="Relatórios"
+    abaRota="relatorios"
+  ></app-estoque-page-nav>
+
+  <div class="page-header">
+    <div>
+      <h2>Contagem de estoque</h2>
+      <p class="campo-hint intro">
+        Lê o estoque inteiro da loja, não a lista da aba Estoque.
+        Serve para conferir a prateleira.
+        <strong>VLR Uni</strong> é o custo do lote mais recente.
+        <strong>VLR Médio</strong> é a média ponderada pelo que ainda resta.
+        Os lotes saem assim: Lote 26-79 QTD 3 / Lote 26-80 QTD 1.
+      </p>
+    </div>
+    <button
+      type="button"
+      (click)="baixar()"
+      [disabled]="carregando || baixando || !relatorio?.linhas?.length"
+    >{{ baixando ? 'Gerando Excel…' : 'Baixar Excel' }}</button>
+  </div>
+
+  <div class="filtros">
+    <div class="form-group">
+      <label>Estoque</label>
+      <select [(ngModel)]="filtroSaldo" name="filtroSaldo" (ngModelChange)="atualizar()">
+        <option value="com-saldo">Com saldo</option>
+        <option value="todas">Todas as peças</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Marca do aparelho</label>
+      <select [(ngModel)]="filtroMarca" name="filtroMarca" (ngModelChange)="atualizar()">
+        <option value="">Todas</option>
+        <option *ngFor="let marca of opcoesMarcas" [value]="marca">{{ marca }}</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Tipo de peça</label>
+      <select [(ngModel)]="filtroTipo" name="filtroTipo" (ngModelChange)="atualizar()">
+        <option value="">Todos</option>
+        <option *ngFor="let tipo of opcoesTipos" [value]="tipo">{{ tipo }}</option>
+      </select>
+    </div>
+  </div>
+
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="carregando">Carregando o estoque...</p>
+
+  <ng-container *ngIf="!carregando && relatorio">
+    <div class="resumo" *ngIf="relatorio.linhas.length">
+      <span><strong>{{ relatorio.totalLinhas }}</strong> linha(s)</span>
+      <span><strong>{{ relatorio.totalUnidades }}</strong> unidade(s)</span>
+      <span *ngIf="relatorio.agruparMarca"><strong>{{ relatorio.grupos.length }}</strong> marcas</span>
+    </div>
+
+    <p class="campo-hint" *ngIf="temSemLote">
+      “Sem lote” é saldo que está no cadastro da peça e não tem pedido de compra com quantidade restante.
+    </p>
+
+    <div class="tabela-scroll" *ngIf="relatorio.linhas.length">
+      <table>
+        <thead>
+          <tr>
+            <th>Marca</th>
+            <th>Modelo</th>
+            <th>Tipo de peça</th>
+            <th>Peça</th>
+            <th class="num">VLR Uni</th>
+            <th class="num">VLR Médio</th>
+            <th class="num">Qtd</th>
+            <th>Lotes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let grupo of relatorio.grupos">
+            <tr *ngIf="relatorio.agruparMarca" class="grupo-marca">
+              <td colspan="8">{{ grupo.marca }} · {{ grupo.totalQtd }} un.</td>
+            </tr>
+            <ng-container *ngFor="let tipo of grupo.tipos">
+              <tr *ngIf="relatorio.agruparTipo" class="grupo-tipo">
+                <td colspan="8">{{ tipo.tipo }} · {{ tipo.totalQtd }} un.</td>
+              </tr>
+              <tr *ngFor="let linha of tipo.linhas">
+                <td>{{ linha.marca }}</td>
+                <td>{{ linha.modelo }}</td>
+                <td>{{ linha.tipo }}</td>
+                <td>{{ linha.peca }}</td>
+                <td class="num">{{ textoMoeda(linha.vlrUni) }}</td>
+                <td class="num">{{ textoMoeda(linha.vlrMedio) }}</td>
+                <td class="num">{{ linha.qtd }}</td>
+                <td class="lotes" [class.sem-lote]="linha.semLote">{{ linha.lotes || '—' }}</td>
+              </tr>
+            </ng-container>
+          </ng-container>
+          <tr class="total">
+            <td colspan="6">Total</td>
+            <td class="num">{{ relatorio.totalUnidades }}</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p *ngIf="relatorio.linhas.length === 0" class="vazio">
+      Nenhuma peça encontrada com esses filtros.
+    </p>
+  </ng-container>
+</div>

@@ -701,3 +701,39 @@ public class FinanceiroEstoquePecaItem
     public int Unidades { get; set; }
     public decimal Valor { get; set; }
 }
+
+/// <summary>Base do relatório de contagem: peças da loja e lotes com saldo, sem o limite das listagens.</summary>
+public class RelatorioContagemEstoqueBaseResponse
+{
+    public DateTime GeradoEm { get; set; }
+    public List<RelatorioContagemPecaItem> Pecas { get; set; } = [];
+    public List<RelatorioContagemLoteItem> Lotes { get; set; } = [];
+}
+
+public class RelatorioContagemPecaItem
+{
+    public string Id { get; set; } = string.Empty;
+    public string Nome { get; set; } = string.Empty;
+    public string? Categoria { get; set; }
+    public int QuantidadeEstoque { get; set; }
+    public List<RelatorioContagemModeloItem> Modelos { get; set; } = [];
+}
+
+public class RelatorioContagemModeloItem
+{
+    public string? ModeloId { get; set; }
+    public string? ModeloNome { get; set; }
+    public string? MarcaNome { get; set; }
+}
+
+public class RelatorioContagemLoteItem
+{
+    public string PecaId { get; set; } = string.Empty;
+    public string PecaNome { get; set; } = string.Empty;
+    public string NumeroPedido { get; set; } = string.Empty;
+    public string? ModeloId { get; set; }
+    public string? ModeloNome { get; set; }
+    public int QuantidadeRestante { get; set; }
+    public decimal CustoUnitario { get; set; }
+    public DateTime DataEntrada { get; set; }
+}

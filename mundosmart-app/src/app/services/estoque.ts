@@ -28,6 +28,7 @@ import {
   AnaliseRetornoGarantiaResponse,
   CustoPecaReferencia,
   RelatorioFinanceiroEstoque,
+  RelatorioContagemEstoqueBase,
   PecaCatalogo,
 } from '../models/estoque.models';
 
@@ -113,6 +114,10 @@ export class EstoqueService {
     if (Number.isNaN(d.getTime())) return valor;
     const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
     return local.toISOString().slice(0, 10);
+  }
+
+  obterBaseRelatorioContagem(): Observable<RelatorioContagemEstoqueBase> {
+    return this.http.get<RelatorioContagemEstoqueBase>(`${this.base}/relatorios/contagem`);
   }
 
   listarPecas(termo?: string): Observable<PecaCatalogo[]> {
