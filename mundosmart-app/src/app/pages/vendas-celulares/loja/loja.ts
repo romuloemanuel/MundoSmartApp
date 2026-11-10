@@ -772,6 +772,10 @@ interface FichaEntrada {
                 [buscarFn]="buscarModeloVendaFn"
                 [permitirCriar]="false"
                 [limiteConsulta]="500"
+                [valorInicial]="venda.modelo"
+                [valorInicialId]="aparelhoVendaSelecionado?.modeloId"
+                [valorInicialMarcaId]="aparelhoVendaSelecionado?.marcaId"
+                [valorInicialMarcaNome]="venda.marca"
                 (itemSelecionadoChange)="onVendaModeloItem($event)"
               />
             </ng-container>
@@ -945,6 +949,10 @@ interface FichaEntrada {
                 [buscarFn]="buscarModeloTrocaFn"
                 [permitirCriar]="false"
                 [limiteConsulta]="500"
+                [valorInicial]="troca.modelo"
+                [valorInicialId]="aparelhoTrocaSelecionado?.modeloId"
+                [valorInicialMarcaId]="aparelhoTrocaSelecionado?.marcaId"
+                [valorInicialMarcaNome]="troca.marca"
                 (itemSelecionadoChange)="onTrocaModeloItem($event)"
               />
             </ng-container>
