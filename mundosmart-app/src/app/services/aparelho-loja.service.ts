@@ -169,6 +169,8 @@ export interface AparelhoCadeiaItem {
   configuracao?: string;
   condicao?: string;
   custo?: number;
+  custoPecas?: number;
+  custoTotal?: number;
   valor: number;
 }
 

@@ -1268,8 +1268,10 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         Imei = m.Imei,
         Cor = m.Cor,
         Configuracao = m.Configuracao,
-        Condicao = m.Condicao,
+            Condicao = m.Condicao,
             Custo = m.Custo,
+            CustoPecas = aparelho?.CustoPecas ?? 0,
+            CustoTotal = aparelho is null ? m.Custo : Dinheiro(aparelho.Custo + aparelho.CustoPecas),
             Valor = m.Preco,
         };
     }

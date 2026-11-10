@@ -400,7 +400,7 @@ interface FichaEntrada {
           <div class="card" *ngIf="isAdmin">
             <span>Dinheiro que saiu</span>
             <strong class="valor-negativo">{{ dinheiro(r.saiu) }}</strong>
-            <small>Compras e diferenças pagas ao cliente</small>
+            <small>Compras, custo do aparelho vendido e peças da assistência</small>
           </div>
           <div class="card" *ngIf="isAdmin">
             <span>Resultado</span>
@@ -521,8 +521,10 @@ interface FichaEntrada {
                 <td>{{ valorTransacao(op) ? dinheiro(valorTransacao(op)) : '—' }}</td>
                 <td *ngIf="isAdmin">
                   <div class="valor-positivo" *ngIf="op.dinheiroRecebido">+ {{ dinheiro(op.dinheiroRecebido) }}</div>
-                  <div class="valor-negativo" *ngIf="op.dinheiroPago">− {{ dinheiro(op.dinheiroPago) }}</div>
-                  <div class="sub" *ngIf="!op.dinheiroRecebido && !op.dinheiroPago">Sem dinheiro</div>
+                  <div class="valor-negativo" *ngIf="saiuDaOperacao(op)">− {{ dinheiro(saiuDaOperacao(op)) }}</div>
+                  <div class="sub" *ngIf="custoDaVenda(op)">Custo do aparelho {{ dinheiro(custoDaVenda(op)) }}</div>
+                  <div class="sub" *ngIf="custoPecasDaEntrada(op)">Peças {{ dinheiro(custoPecasDaEntrada(op)) }}</div>
+                  <div class="sub" *ngIf="!op.dinheiroRecebido && !saiuDaOperacao(op)">Sem dinheiro</div>
                 </td>
                 <td>
                   <button type="button" class="link" (click)="abrirCadeiaDaOperacao(op)">Ver cadeia</button>
@@ -2128,7 +2130,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return this.vendedoresCadastrados.map(v => {
       const ops = noPeriodo.filter(op => this.vendedorBateCadastro(op.vendedorId, op.vendedorNome, v));
       const entrou = ops.reduce((s, op) => s + (Number(op.dinheiroRecebido) || 0), 0);
-      const saiu = ops.reduce((s, op) => s + (Number(op.dinheiroPago) || 0), 0);
+      const saiu = ops.reduce((s, op) => s + this.saiuDaOperacao(op), 0);
       return {
         nome: v.nome,
         compras: ops.filter(op => op.tipo === 'compra').length,
@@ -2153,7 +2155,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     if (!this.buscaVendedor) return null;
     const ops = this.transacoesFiltradas.filter(op => op.status !== 'estornada');
     const entrou = ops.reduce((s, op) => s + (Number(op.dinheiroRecebido) || 0), 0);
-    const saiu = ops.reduce((s, op) => s + (Number(op.dinheiroPago) || 0), 0);
+    const saiu = ops.reduce((s, op) => s + this.saiuDaOperacao(op), 0);
     return {
       nome: this.buscaVendedor,
       compras: ops.filter(op => op.tipo === 'compra').length,
@@ -2770,6 +2772,22 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     const itens = [...this.aparelhosEntrou(op), ...this.aparelhosSaiu(op)];
     const codes = [...new Set(itens.map(a => (a.codigo || '').trim()).filter(c => !!c))];
     return codes.join(' · ') || '—';
+  }
+
+  custoPecasDaEntrada(op: AparelhoOperacao): number {
+    const pecas = (op.entrou ?? []).reduce((s, a) => s + (Number(a.custoPecas) || 0), 0);
+    return Math.round(pecas * 100) / 100;
+  }
+
+  custoDaVenda(op: AparelhoOperacao): number {
+    if (op.tipo !== 'venda') return 0;
+    const custo = (op.saiu ?? []).reduce((s, a) => s + (Number(a.custoTotal ?? a.custo) || 0), 0);
+    return Math.round(custo * 100) / 100;
+  }
+
+  saiuDaOperacao(op: AparelhoOperacao): number {
+    const total = (Number(op.dinheiroPago) || 0) + this.custoPecasDaEntrada(op) + this.custoDaVenda(op);
+    return Math.round(total * 100) / 100;
   }
 
   valorTransacao(op: AparelhoOperacao): number {

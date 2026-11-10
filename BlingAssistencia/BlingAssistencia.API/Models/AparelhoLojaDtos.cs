@@ -310,6 +310,8 @@ public class AparelhoCadeiaItemDto
     public string Configuracao { get; set; } = string.Empty;
     public string Condicao { get; set; } = string.Empty;
     public decimal Custo { get; set; }
+    public decimal CustoPecas { get; set; }
+    public decimal CustoTotal { get; set; }
     public decimal Valor { get; set; }
 }
 
