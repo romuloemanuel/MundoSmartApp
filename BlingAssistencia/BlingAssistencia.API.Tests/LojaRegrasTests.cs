@@ -221,6 +221,55 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Admin_troca_o_vendedor_da_transacao()
+    {
+        var imei = NovoImei();
+        var painel = await Comprar(imei, 900);
+        var op = ExigirOperacao(painel, imei, "compra");
+        var login = "vend." + imei[..8];
+        var criado = await Post("/api/usuarios", new
+        {
+            usuario = login,
+            nome = "Vendedor da loja " + login,
+            senha = "Operador@4552",
+            role = "Operador",
+        });
+        var depois = await Put($"/api/aparelhos-loja/operacoes/{op["id"]!.GetValue<string>()}/vendedor", new
+        {
+            id = criado["id"]!.GetValue<string>(),
+        });
+        var atual = ExigirOperacao(depois, imei, "compra");
+        Assert.Equal(criado["id"]!.GetValue<string>(), atual["vendedorId"]!.GetValue<string>());
+        Assert.Equal(criado["nome"]!.GetValue<string>(), atual["vendedorNome"]!.GetValue<string>());
+        Assert.Equal(criado["nome"]!.GetValue<string>(), ExigirEstoque(depois, imei)["vendedorEntradaNome"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Operador_nao_troca_o_vendedor_da_transacao()
+    {
+        var imei = NovoImei();
+        var painel = await Comprar(imei, 800);
+        var op = ExigirOperacao(painel, imei, "compra");
+        var operador = _factory.CreateClient();
+        var login = "op.vend." + imei[..8];
+        await Post("/api/usuarios", new
+        {
+            usuario = login,
+            nome = "Operador " + login,
+            senha = "Operador@4552",
+            role = "Operador",
+        });
+        var auth = await operador.PostAsJsonAsync("/api/conta/login", new { usuario = login, senha = "Operador@4552" });
+        Assert.True(auth.IsSuccessStatusCode, await auth.Content.ReadAsStringAsync());
+        var token = (await auth.Content.ReadFromJsonAsync<JsonObject>())!["accessToken"]!.GetValue<string>();
+        operador.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var res = await operador.PutAsJsonAsync(
+            $"/api/aparelhos-loja/operacoes/{op["id"]!.GetValue<string>()}/vendedor",
+            new { id = op["vendedorId"]!.GetValue<string>() });
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+    }
+
+    [Fact]
     public async Task Cadastro_guarda_valor_de_venda_e_nao_vende_abaixo_do_minimo()
     {
         var imei = NovoImei();

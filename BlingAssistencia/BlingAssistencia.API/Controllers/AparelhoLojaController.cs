@@ -156,6 +156,11 @@ public class AparelhoLojaController : ControllerBase
     public Task<IActionResult> Estornar(string id, CancellationToken cancellationToken) =>
         Executar(() => _loja.EstornarAsync(id, cancellationToken));
 
+    [HttpPut("operacoes/{id}/vendedor")]
+    [Authorize(Roles = AppRoles.AdminOuRoot)]
+    public Task<IActionResult> AlterarVendedor(string id, [FromBody] VendedorRef? body, CancellationToken cancellationToken) =>
+        Executar(() => _loja.AlterarVendedorAsync(id, body, cancellationToken));
+
     [HttpDelete("operacoes/{id}")]
     [Authorize(Roles = AppRoles.AdminOuRoot)]
     public Task<IActionResult> ExcluirOperacao(string id, CancellationToken cancellationToken) =>

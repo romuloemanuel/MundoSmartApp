@@ -23,6 +23,7 @@ public interface IAparelhoLojaService
     Task<AparelhoLojaPainelDto> EditarCadastroAsync(string aparelhoId, AparelhoEntradaRequest pedido, CancellationToken cancellationToken = default);
     Task<OsAbertaConsultaDto> ConsultarOsAbertaAsync(string? numero, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> EstornarAsync(string operacaoId, CancellationToken cancellationToken = default);
+    Task<AparelhoLojaPainelDto> AlterarVendedorAsync(string operacaoId, VendedorRef? vendedor, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> ExcluirOperacaoAsync(string operacaoId, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> ExcluirAparelhoAsync(string aparelhoId, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> SalvarListaAsync(AparelhoListaPrecoRequest pedido, CancellationToken cancellationToken = default);
@@ -557,6 +558,50 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             await EstornarSaidaAsync(operacao, cancellationToken);
 
         operacao.Status = AparelhoOperacaoStatus.Estornada;
+        await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
+        return await MontarPainelAsync(cancellationToken);
+    }
+
+    public async Task<AparelhoLojaPainelDto> AlterarVendedorAsync(
+        string operacaoId,
+        VendedorRef? vendedor,
+        CancellationToken cancellationToken = default)
+    {
+        var operacao = await _repo.ObterOperacaoAsync(operacaoId, cancellationToken)
+            ?? throw new InvalidOperationException("Transação não encontrada.");
+        if (operacao.Status != AparelhoOperacaoStatus.Ativa)
+            throw new InvalidOperationException("Esta transação foi desfeita. Não dá para trocar o vendedor.");
+
+        var cadastro = new MapaVendedores(await _usuarios.ListarAsync(cancellationToken));
+        var escolhido = cadastro.Cadastrados()
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(vendedor?.Id) && v.Id == vendedor.Id.Trim());
+        if (escolhido is null)
+            throw new InvalidOperationException("Selecione um vendedor cadastrado.");
+
+        var destino = new VendedorRef { Id = escolhido.Id, Nome = escolhido.Nome };
+        MarcarVendedor(operacao, destino);
+
+        if (operacao.Tipo is AparelhoOperacaoTipo.Compra or AparelhoOperacaoTipo.Troca)
+        {
+            foreach (var id in IdsDeEntrada(operacao))
+            {
+                var aparelho = await ObterMovimentoAsync(id, cancellationToken);
+                if (aparelho is null) continue;
+                MarcarVendedorEntrada(aparelho, destino);
+                await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+            }
+        }
+
+        if (operacao.Tipo is AparelhoOperacaoTipo.Venda or AparelhoOperacaoTipo.Troca)
+        {
+            var saida = await ObterMovimentoAsync(operacao.Saida?.AparelhoId, cancellationToken);
+            if (saida is not null)
+            {
+                MarcarVendedorSaida(saida, destino);
+                await _repo.SalvarAparelhoAsync(saida, cancellationToken);
+            }
+        }
+
         await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
         return await MontarPainelAsync(cancellationToken);
     }

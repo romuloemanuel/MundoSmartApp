@@ -344,6 +344,10 @@ export class AparelhoLojaService {
     return this.http.post<AparelhoLojaPainel>(`${this.apiUrl}/operacoes/${id}/estornar`, {});
   }
 
+  alterarVendedor(id: string, vendedorId: string): Observable<AparelhoLojaPainel> {
+    return this.http.put<AparelhoLojaPainel>(`${this.apiUrl}/operacoes/${id}/vendedor`, { id: vendedorId });
+  }
+
   excluirOperacao(id: string): Observable<AparelhoLojaPainel> {
     return this.http.delete<AparelhoLojaPainel>(`${this.apiUrl}/operacoes/${id}`);
   }

@@ -502,7 +502,19 @@ interface FichaEntrada {
                   {{ rotuloTipo(op.tipo) }}
                   <div class="sub" *ngIf="op.status === 'estornada'">Desfeita</div>
                 </td>
-                <td>{{ op.vendedorNome || '—' }}</td>
+                <td>
+                  <select
+                    *ngIf="podeAlterarVendedor(op)"
+                    class="select-vendedor"
+                    [ngModel]="op.vendedorId"
+                    (ngModelChange)="alterarVendedor(op, $event)"
+                    [name]="'vendedorTx' + op.id"
+                    [disabled]="salvando"
+                  >
+                    <option *ngFor="let v of vendedoresDaTransacao(op); trackBy: trackVendedor" [value]="v.id">{{ v.nome }}</option>
+                  </select>
+                  <span *ngIf="!podeAlterarVendedor(op)">{{ op.vendedorNome || '—' }}</span>
+                </td>
                 <td>
                   {{ op.clienteNome || op.fornecedorNome || '—' }}
                 </td>
@@ -1480,7 +1492,19 @@ interface FichaEntrada {
         <tbody>
           <tr *ngFor="let op of operacoes" [class.estornada]="op.status === 'estornada'">
             <td>{{ op.data | date:'dd/MM/yyyy HH:mm':'UTC' }}</td>
-            <td>{{ op.vendedorNome || '—' }}</td>
+            <td>
+              <select
+                *ngIf="podeAlterarVendedor(op)"
+                class="select-vendedor"
+                [ngModel]="op.vendedorId"
+                (ngModelChange)="alterarVendedor(op, $event)"
+                [name]="'vendedorFin' + op.id"
+                [disabled]="salvando"
+              >
+                <option *ngFor="let v of vendedoresDaTransacao(op); trackBy: trackVendedor" [value]="v.id">{{ v.nome }}</option>
+              </select>
+              <span *ngIf="!podeAlterarVendedor(op)">{{ op.vendedorNome || '—' }}</span>
+            </td>
             <td>
               {{ rotuloTipo(op.tipo) }}
               <div class="sub" *ngIf="op.financiadoraNome">{{ op.financiadoraNome }}</div>
@@ -1660,6 +1684,7 @@ interface FichaEntrada {
     .filtro-vendedor { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 14px; }
     .filtro-vendedor label { font-size: 13px; font-weight: 600; }
     .filtro-vendedor select { min-width: 220px; }
+    .select-vendedor { min-width: 140px; max-width: 220px; }
     .grupo-aparelhos { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; margin: 0 0 4px; }
     .acoes-ficha a.secundario { display: inline-flex; align-items: center; text-decoration: none; padding: 8px 12px; border-radius: 8px; }
     .ficha-card { border: 1px solid #e2e8f0; border-radius: 12px; margin-top: 12px; background: #fff; overflow: hidden; }
@@ -3878,6 +3903,24 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
         abrir(null);
       },
     });
+  }
+
+  podeAlterarVendedor(op: AparelhoOperacao): boolean {
+    return this.isAdmin && !!op.id && op.status !== 'estornada';
+  }
+
+  vendedoresDaTransacao(op: AparelhoOperacao): AparelhoVendedorCadastro[] {
+    const lista = [...(this.painel?.vendedoresCadastrados ?? [])];
+    if (op.vendedorNome && !lista.some(v => v.id === op.vendedorId || this.igual(v.nome, op.vendedorNome))) {
+      lista.unshift({ id: op.vendedorId, nome: op.vendedorNome });
+    }
+    return lista;
+  }
+
+  alterarVendedor(op: AparelhoOperacao, vendedorId: string): void {
+    if (!this.podeAlterarVendedor(op) || !op.id) return;
+    if (!vendedorId || vendedorId === op.vendedorId) return;
+    this.enviar(this.api.alterarVendedor(op.id, vendedorId), 'Vendedor atualizado.');
   }
 
   estornar(op: AparelhoOperacao): void {
