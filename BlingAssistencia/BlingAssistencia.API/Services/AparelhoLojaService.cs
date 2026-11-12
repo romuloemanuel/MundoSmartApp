@@ -1095,6 +1095,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         var porAparelho = (await _repo.ListarNaoEstornadosAsync(cancellationToken))
             .Where(a => !string.IsNullOrWhiteSpace(a.Id))
             .ToDictionary(a => a.Id!);
+        var pagos = ValorPagoPorAparelho(operacoes);
 
         return new AparelhoLojaPainelDto
         {
@@ -1115,7 +1116,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             },
             Estoque = estoque.Select(a => ComPrecoFornecedor(ComForma(ParaDto(a, cadastro), a, ativas), a, lista)).ToList(),
             CustosAssistencia = comCusto.Select(a => ParaDto(a, cadastro)).ToList(),
-            Operacoes = operacoes.Select(op => ParaOperacaoDto(op, porId, cadastro)).ToList(),
+            Operacoes = operacoes.Select(op => ParaOperacaoDto(op, porId, cadastro, pagos)).ToList(),
             Movimentos = MontarMovimentos(ativas, porAparelho),
             Cadeias = cadeias,
             Meses = AgruparMeses(cadeias),
@@ -1149,6 +1150,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             .Where(op => !string.IsNullOrWhiteSpace(op.Id))
             .ToDictionary(op => op.Id!);
         var clientes = await ClientesDasOperacoesAsync(operacoes, cancellationToken);
+        var pagos = ValorPagoPorAparelho(operacoes);
 
         string Raiz(string id, HashSet<string> visto)
         {
@@ -1187,7 +1189,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             if (!ops.Any(op => op.Tipo is AparelhoOperacaoTipo.Venda or AparelhoOperacaoTipo.Troca))
                 continue;
 
-            var passos = ops.Select(op => PassoDaCadeia(op, ClienteDaOperacao(op, clientes), porId, cadastro)).ToList();
+            var passos = ops.Select(op => PassoDaCadeia(op, ClienteDaOperacao(op, clientes), porId, cadastro, pagos)).ToList();
             var aberta = membros.Any(m => m.Status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia);
             var dinheiroEntrou = Dinheiro(ops.Sum(op => op.DinheiroRecebido));
             var dinheiroSaiu = Dinheiro(ops.Sum(op => op.DinheiroPago));
@@ -1227,10 +1229,11 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         AparelhoOperacaoData op,
         ClienteLocalData? cliente,
         IReadOnlyDictionary<string, AparelhoLojaData> porId,
-        MapaVendedores cadastro)
+        MapaVendedores cadastro,
+        IReadOnlyDictionary<string, decimal> pagos)
     {
-        var entrou = MovimentosDaEntrada(op).Select(m => ItemDaCadeia(m, porId)).ToList();
-        var saiu = op.Saida is null ? [] : new List<AparelhoCadeiaItemDto> { ItemDaCadeia(op.Saida, porId) };
+        var entrou = MovimentosDaEntrada(op).Select(m => ItemDaCadeia(m, porId, pagos)).ToList();
+        var saiu = op.Saida is null ? [] : new List<AparelhoCadeiaItemDto> { ItemDaCadeia(op.Saida, porId, pagos) };
         var telefone = Texto(cliente?.Celular);
         if (telefone.Length == 0) telefone = Texto(cliente?.Telefone);
         return new AparelhoCadeiaPassoDto
@@ -1256,23 +1259,48 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         };
     }
 
+    private static Dictionary<string, decimal> ValorPagoPorAparelho(IEnumerable<AparelhoOperacaoData> operacoes)
+    {
+        var pagos = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        foreach (var op in operacoes.Where(o => o.Status == AparelhoOperacaoStatus.Ativa
+                     && o.Tipo is AparelhoOperacaoTipo.Compra or AparelhoOperacaoTipo.Troca))
+        {
+            foreach (var m in MovimentosDaEntrada(op))
+            {
+                if (string.IsNullOrWhiteSpace(m.AparelhoId) || m.Preco <= 0) continue;
+                pagos[m.AparelhoId] = m.Preco;
+            }
+        }
+
+        return pagos;
+    }
+
     private static AparelhoCadeiaItemDto ItemDaCadeia(
         AparelhoMovimentoData m,
-        IReadOnlyDictionary<string, AparelhoLojaData> porId)
+        IReadOnlyDictionary<string, AparelhoLojaData> porId,
+        IReadOnlyDictionary<string, decimal> pagos)
     {
         porId.TryGetValue(m.AparelhoId ?? "", out var aparelho);
+        var pecas = aparelho?.CustoPecas ?? 0;
+        var pago = 0m;
+        if (!string.IsNullOrWhiteSpace(m.AparelhoId))
+            pagos.TryGetValue(m.AparelhoId, out pago);
+        var custo = pago > 0 ? pago : m.Custo;
+        var custoTotal = pago > 0
+            ? Dinheiro(pago + pecas)
+            : aparelho is null ? m.Custo : Dinheiro(aparelho.Custo + pecas);
         return new()
         {
-        AparelhoId = m.AparelhoId,
-        Codigo = string.IsNullOrWhiteSpace(m.Codigo) ? aparelho?.Codigo ?? "" : m.Codigo,
-        Nome = NomeAparelho(m.Marca, m.Modelo, m.Configuracao),
-        Imei = m.Imei,
-        Cor = m.Cor,
-        Configuracao = m.Configuracao,
+            AparelhoId = m.AparelhoId,
+            Codigo = string.IsNullOrWhiteSpace(m.Codigo) ? aparelho?.Codigo ?? "" : m.Codigo,
+            Nome = NomeAparelho(m.Marca, m.Modelo, m.Configuracao),
+            Imei = m.Imei,
+            Cor = m.Cor,
+            Configuracao = m.Configuracao,
             Condicao = m.Condicao,
-            Custo = m.Custo,
-            CustoPecas = aparelho?.CustoPecas ?? 0,
-            CustoTotal = aparelho is null ? m.Custo : Dinheiro(aparelho.Custo + aparelho.CustoPecas),
+            Custo = custo,
+            CustoPecas = pecas,
+            CustoTotal = custoTotal,
             Valor = m.Preco,
         };
     }
@@ -1603,7 +1631,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     private static AparelhoOperacaoDto ParaOperacaoDto(
         AparelhoOperacaoData op,
         IReadOnlyDictionary<string, AparelhoLojaData> porId,
-        MapaVendedores cadastro) => new()
+        MapaVendedores cadastro,
+        IReadOnlyDictionary<string, decimal> pagos) => new()
     {
         Id = op.Id,
         Tipo = op.Tipo,
@@ -1615,8 +1644,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         FornecedorNome = op.FornecedorNome,
         EntradaResumo = ResumoEntradas(op),
         SaidaResumo = ResumoMovimento(op.Saida),
-        Entrou = MovimentosDaEntrada(op).Select(m => ItemDaCadeia(m, porId)).ToList(),
-        Saiu = op.Saida is null ? [] : [ItemDaCadeia(op.Saida, porId)],
+        Entrou = MovimentosDaEntrada(op).Select(m => ItemDaCadeia(m, porId, pagos)).ToList(),
+        Saiu = op.Saida is null ? [] : [ItemDaCadeia(op.Saida, porId, pagos)],
         ValorAvaliado = op.ValorAvaliado,
         PrecoSaida = op.PrecoSaida,
         DinheiroRecebido = op.DinheiroRecebido,

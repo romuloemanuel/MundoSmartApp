@@ -203,7 +203,11 @@ public class AparelhoLojaController : ControllerBase
             operacao.EntradaLoja = 0;
             operacao.RepasseFinanciadora = 0;
             foreach (var item in operacao.Entrou.Concat(operacao.Saiu))
+            {
                 item.Custo = 0;
+                item.CustoPecas = 0;
+                item.CustoTotal = 0;
+            }
         }
 
         foreach (var movimento in painel.Movimentos)

@@ -401,7 +401,7 @@ interface FichaEntrada {
           <div class="card" *ngIf="isAdmin">
             <span>Dinheiro que saiu</span>
             <strong class="valor-negativo">{{ dinheiro(r.saiu) }}</strong>
-            <small>Compras, custo do aparelho vendido e peças da assistência</small>
+            <small>Compras, valor pago no aparelho vendido (mais peças) e diferença de troca</small>
           </div>
           <div class="card" *ngIf="isAdmin">
             <span>Resultado</span>
@@ -2792,6 +2792,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   custoPecasDaEntrada(op: AparelhoOperacao): number {
+    if (op.tipo !== 'compra') return 0;
     const pecas = (op.entrou ?? []).reduce((s, a) => s + (Number(a.custoPecas) || 0), 0);
     return Math.round(pecas * 100) / 100;
   }
@@ -3648,7 +3649,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       .flatMap(op => this.aparelhosSaiu(op))
       .filter(a => (Number(a.valor) || 0) > 0);
     const valor = itens.reduce((s, a) => s + (Number(a.valor) || 0), 0);
-    const custo = itens.reduce((s, a) => s + (Number(a.custo) || 0), 0);
+    const custo = itens.reduce((s, a) => s + (Number(a.custoTotal ?? a.custo) || 0), 0);
     const lucro = custo - valor;
     const quantidade = itens.length;
     const arredondar = (n: number) => Math.round(n * 100) / 100;

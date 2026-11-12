@@ -437,6 +437,21 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Venda_sai_o_valor_pago_na_compra_nao_o_preco_de_venda()
+    {
+        var imei = NovoImei();
+        var cliente = await ClienteComDocumento();
+        var id = await IdComprado(imei, 1760);
+        var painel = await Post("/api/aparelhos-loja/venda", Venda(id, cliente, 2760));
+        var op = ExigirOperacao(painel, imei, "venda");
+        Assert.Equal(2760m, Num(op["dinheiroRecebido"]));
+        var saido = op["saiu"]!.AsArray()[0]!.AsObject();
+        Assert.Equal(1760m, Num(saido["custo"]));
+        Assert.Equal(1760m, Num(saido["custoTotal"]));
+        Assert.Equal(2760m, Num(saido["valor"]));
+    }
+
+    [Fact]
     public async Task Venda_abaixo_do_custo_e_permitida()
     {
         var imei = NovoImei();
