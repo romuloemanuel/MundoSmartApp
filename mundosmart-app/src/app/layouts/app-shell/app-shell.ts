@@ -83,6 +83,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
               <a routerLink="/vendas-celulares/compra" routerLinkActive="active" (click)="aoClicarItemCelulares()">Compra</a>
               <a routerLink="/vendas-celulares/venda" routerLinkActive="active" (click)="aoClicarItemCelulares()">Venda</a>
               <a routerLink="/vendas-celulares/troca" routerLinkActive="active" (click)="aoClicarItemCelulares()">Troca</a>
+              <a routerLink="/vendas-celulares/follow-up" routerLinkActive="active" (click)="aoClicarItemCelulares()">Follow-up</a>
               <a routerLink="/vendas-celulares/transacoes" routerLinkActive="active" (click)="aoClicarItemCelulares()">Transações</a>
               <a routerLink="/vendas-celulares/payjoy" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas Payjoy</a>
               <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas PayMobi</a>

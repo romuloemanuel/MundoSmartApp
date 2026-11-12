@@ -1,0 +1,406 @@
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h2>Follow-up de celulares</h2>
+      <p class="intro">
+        Clientes que querem trocar o aparelho ou comprar um celular nosso, à vista ou no boleto.
+        O ciclo é o mesmo da assistência: 3 contatos. No terceiro, fica como Não realizado.
+      </p>
+    </div>
+    <button type="button" (click)="abrirNovo()">+ Novo follow-up</button>
+  </div>
+
+  <div class="filtros-bar" *ngIf="!carregando">
+    <input
+      class="filtro-cliente"
+      type="search"
+      [(ngModel)]="filtroTexto"
+      name="filtroTexto"
+      placeholder="Cliente, telefone ou aparelho..."
+      (ngModelChange)="aplicarFiltros()"
+    />
+    <select [(ngModel)]="filtroInteresse" name="filtroInteresse" (ngModelChange)="aplicarFiltros()">
+      <option value="">Todo interesse</option>
+      <option *ngFor="let i of interesses" [value]="i.id">{{ i.label }}</option>
+    </select>
+    <select [(ngModel)]="filtroSituacao" name="filtroSituacao" (ngModelChange)="aplicarFiltros()">
+      <option *ngFor="let s of situacoes" [value]="s.id">{{ s.label }}</option>
+    </select>
+    <select [(ngModel)]="filtroStatus" name="filtroStatus" (ngModelChange)="aplicarFiltros()">
+      <option *ngFor="let f of statusFiltro" [value]="f.id">{{ f.label }}</option>
+    </select>
+    <input
+      type="date"
+      [(ngModel)]="filtroData"
+      name="filtroData"
+      title="Data de revisita"
+      (ngModelChange)="aplicarFiltros()"
+    />
+    <select [(ngModel)]="filtroResponsavel" name="filtroResponsavel" (ngModelChange)="aplicarFiltros()">
+      <option value="">Todo responsável</option>
+      <option *ngFor="let r of responsaveis" [value]="r">{{ r }}</option>
+    </select>
+    <button type="button" (click)="filtrarAtrasados()" [class.ativa]="filtroStatus === 'atrasado'">
+      Follow-up atrasado
+    </button>
+    <button type="button" class="btn-limpar" *ngIf="filtrosAtivos > 0" (click)="limparFiltros()">Limpar</button>
+  </div>
+
+  <p class="resumo" *ngIf="!carregando && itens.length">
+    Exibindo <strong>{{ filtrados.length }}</strong> de {{ itens.length }}
+    <span *ngIf="totalAtrasado > 0" class="atraso">
+      · <strong>{{ totalAtrasado }}</strong> follow-up atrasado(s)
+    </span>
+  </p>
+
+  <p *ngIf="carregando">Carregando...</p>
+  <p *ngIf="erro" class="erro">{{ erro }}</p>
+  <p *ngIf="sucesso" class="ok">{{ sucesso }}</p>
+
+  <app-grid-paginator
+    *ngIf="!carregando && filtrados.length > 0"
+    [total]="filtrados.length"
+    [page]="grid.page"
+    [pageSize]="grid.pageSize"
+    (pageChange)="grid.onPageChange($event)"
+    (pageSizeChange)="grid.onPageSizeChange($event)"
+  />
+
+  <div class="tabela-rolagem" *ngIf="!carregando && filtrados.length > 0">
+    <table class="data-grid">
+      <thead>
+        <tr>
+          <th class="col-urgencia" title="Urgência do follow-up">
+            <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('urgencia')" (click)="ordenar('urgencia')">
+              <span class="grid-sort-icon">{{ iconeOrdenacao('urgencia') }}</span>
+            </button>
+          </th>
+          <th>
+            <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('cliente')" (click)="ordenar('cliente')">
+              Cliente <span class="grid-sort-icon">{{ iconeOrdenacao('cliente') }}</span>
+            </button>
+          </th>
+          <th>
+            <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('interesse')" (click)="ordenar('interesse')">
+              Interesse <span class="grid-sort-icon">{{ iconeOrdenacao('interesse') }}</span>
+            </button>
+          </th>
+          <th>Aparelho</th>
+          <th>
+            <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('responsavel')" (click)="ordenar('responsavel')">
+              Responsável <span class="grid-sort-icon">{{ iconeOrdenacao('responsavel') }}</span>
+            </button>
+          </th>
+          <th>
+            <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('situacao')" (click)="ordenar('situacao')">
+              Situação <span class="grid-sort-icon">{{ iconeOrdenacao('situacao') }}</span>
+            </button>
+          </th>
+          <th>
+            <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('revisitar')" (click)="ordenar('revisitar')">
+              Revisitar <span class="grid-sort-icon">{{ iconeOrdenacao('revisitar') }}</span>
+            </button>
+          </th>
+          <th>
+            <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('contatos')" (click)="ordenar('contatos')">
+              Contatos <span class="grid-sort-icon">{{ iconeOrdenacao('contatos') }}</span>
+            </button>
+          </th>
+          <th class="col-hist">Histórico</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let item of pagina"
+          [class.row-atrasado]="emAberto(item) && status(item) === 'atrasado'"
+          [class.row-proximo]="emAberto(item) && status(item) === 'proximo'"
+        >
+          <td class="col-urgencia">
+            <button
+              type="button"
+              class="urgencia-dot-btn"
+              [title]="tituloUrgencia(item)"
+              [disabled]="!podeFollowUp(item)"
+              (click)="podeFollowUp(item) && abrirFollowUp(item)"
+            >
+              <span class="urgencia-dot" [class]="'urgencia-dot urgencia-dot--' + nivelUrgencia(item)" [class.urgencia-dot--pulse]="emAberto(item) && status(item) === 'atrasado'"></span>
+            </button>
+          </td>
+          <td class="col-cliente">
+            <div class="nome">{{ item.clienteNome }}</div>
+            <div class="sub">
+              {{ item.telefone }}
+              <a *ngIf="whatsapp(item.telefone) as link" [href]="link" target="_blank" rel="noopener">WhatsApp</a>
+            </div>
+          </td>
+          <td>
+            <span class="interesse" [class]="'interesse interesse-' + item.interesse">{{ labelInteresse(item) }}</span>
+          </td>
+          <td class="aparelhos">
+            <div *ngIf="item.aparelhoDesejado"><span>Nosso</span> {{ item.aparelhoDesejado }}</div>
+            <div *ngIf="item.aparelhoCliente"><span>Cliente</span> {{ item.aparelhoCliente }}</div>
+            <div class="sub" *ngIf="item.valorEstimado">{{ item.valorEstimado | currency:'BRL' }}</div>
+          </td>
+          <td>{{ item.responsavel || '—' }}</td>
+          <td>
+            <span
+              class="badge-sit"
+              [class.sit-aberto]="emAberto(item)"
+              [class.sit-convertido]="item.situacao === 'Convertido'"
+              [class.sit-nao]="item.situacao === 'Não realizado'"
+              [class.sit-des]="item.situacao === 'Desistência'"
+            >{{ item.situacao }}</span>
+          </td>
+          <td>
+            <ng-container *ngIf="emAberto(item); else revisitaFechada">
+              <span class="revisita" *ngIf="item.dataFollowUp; else semData">{{ item.dataFollowUp | date:'dd/MM/yyyy':'UTC' }}</span>
+              <ng-template #semData><span class="campo-hint">Sem data</span></ng-template>
+              <span class="follow-badge" [ngClass]="status(item)">{{ labelFollowUp(item) }}</span>
+            </ng-container>
+            <ng-template #revisitaFechada><span class="campo-hint">—</span></ng-template>
+          </td>
+          <td>{{ vezes(item) }}/{{ ciclo }}</td>
+          <td class="col-hist">
+            <button
+              type="button"
+              class="btn-hist"
+              *ngIf="temHistorico(item); else semHist"
+              title="Ver anotações"
+              (click)="abrirHistorico(item)"
+            >
+              {{ vezes(item) || '•' }}
+            </button>
+            <ng-template #semHist><span class="campo-hint">—</span></ng-template>
+          </td>
+          <td class="grid-acoes-cell">
+            <div class="grid-acoes">
+              <app-grid-acao
+                *ngIf="podeFollowUp(item)"
+                tipo="followup"
+                titulo="Registrar follow-up: anotar o contato e a próxima data"
+                [disabled]="salvandoFollowUp"
+                (acao)="abrirFollowUp(item)"
+              />
+              <app-grid-acao
+                *ngIf="emAberto(item)"
+                tipo="editar"
+                titulo="Editar dados do cliente e do aparelho"
+                (acao)="abrirEdicao(item)"
+              />
+              <app-grid-acao
+                *ngIf="emAberto(item)"
+                tipo="os"
+                titulo="Cliente comprou ou trocou: encerra como convertido"
+                [disabled]="salvandoConversao"
+                (acao)="abrirConverter(item)"
+              />
+              <app-grid-acao
+                *ngIf="emAberto(item)"
+                tipo="desistencia"
+                titulo="Desistência: o cliente não quer mais"
+                [disabled]="salvandoDesistencia"
+                (acao)="abrirDesistencia(item)"
+              />
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p *ngIf="!carregando && itens.length === 0 && !erro">
+    Nenhum cliente em follow-up.
+    <button type="button" class="btn-link" (click)="abrirNovo()">Registrar o primeiro</button>
+  </p>
+  <p *ngIf="!carregando && itens.length > 0 && filtrados.length === 0 && !erro">
+    Nenhum follow-up corresponde aos filtros.
+    <button type="button" class="btn-link" (click)="limparFiltros()">Limpar filtros</button>
+  </p>
+</div>
+
+<div class="backdrop" *ngIf="cadastroAberto" (click)="fecharCadastro()">
+  <div class="card card-larga" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <p class="eyebrow">Follow-up</p>
+    <h3>{{ editando ? 'Editar interesse' : 'Novo interesse' }}</h3>
+    <p class="sub">Quem quer trocar o aparelho ou comprar um celular nosso.</p>
+
+    <div class="grade">
+      <div class="form-group">
+        <label>Cliente <span class="req">*</span></label>
+        <input [(ngModel)]="form.clienteNome" name="clienteNome" placeholder="Nome de quem vai levar o celular" />
+      </div>
+      <div class="form-group">
+        <label>Telefone <span class="req">*</span></label>
+        <input [(ngModel)]="form.telefone" name="telefone" placeholder="WhatsApp" />
+      </div>
+      <div class="form-group">
+        <label>Interesse <span class="req">*</span></label>
+        <select [(ngModel)]="form.interesse" name="interesse">
+          <option value="">Selecione...</option>
+          <option *ngFor="let i of interesses" [value]="i.id">{{ i.label }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Quem acompanha <span class="req">*</span></label>
+        <select [(ngModel)]="form.responsavel" name="responsavel">
+          <option value="">Selecione...</option>
+          <option *ngFor="let r of responsaveis" [value]="r">{{ r }}</option>
+        </select>
+      </div>
+      <div class="form-group" *ngIf="form.interesse !== 'troca'">
+        <label>Aparelho que ele quer <span class="req" *ngIf="form.interesse">*</span></label>
+        <input [(ngModel)]="form.aparelhoDesejado" name="aparelhoDesejado" placeholder="Ex.: iPhone 13 128 GB" />
+      </div>
+      <div class="form-group" *ngIf="form.interesse === 'troca'">
+        <label>Aparelho nosso, se já souber</label>
+        <input [(ngModel)]="form.aparelhoDesejado" name="aparelhoDesejadoTroca" placeholder="O celular da loja na troca" />
+      </div>
+      <div class="form-group" *ngIf="form.interesse === 'troca'">
+        <label>Aparelho do cliente <span class="req">*</span></label>
+        <input [(ngModel)]="form.aparelhoCliente" name="aparelhoCliente" placeholder="O que ele traz para trocar" />
+      </div>
+      <div class="form-group" *ngIf="form.interesse !== 'troca'">
+        <label>Aparelho que ele tem hoje</label>
+        <input [(ngModel)]="form.aparelhoCliente" name="aparelhoClienteCompra" placeholder="Opcional" />
+      </div>
+      <div class="form-group">
+        <label>Valor combinado</label>
+        <input type="number" min="0" step="0.01" [(ngModel)]="form.valorEstimado" name="valorEstimado" />
+      </div>
+      <div class="form-group">
+        <label>Próximo follow-up</label>
+        <input type="date" [(ngModel)]="form.dataFollowUp" name="dataFollowUp" />
+        <span class="campo-hint">Sugestão de 3 dias úteis. Mude se o cliente pediu outra data.</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>O que o cliente pediu</label>
+      <textarea [(ngModel)]="form.observacao" name="observacao" rows="3" placeholder="Ex.: quer o preto, entrada de R$ 500, boleto em 10x…"></textarea>
+    </div>
+    <p class="erro" *ngIf="erroCadastro">{{ erroCadastro }}</p>
+    <footer class="acoes">
+      <button type="button" class="btn-sec" (click)="fecharCadastro()" [disabled]="salvandoCadastro">Cancelar</button>
+      <button type="button" class="btn-pri" (click)="salvarCadastro()" [disabled]="salvandoCadastro">
+        {{ salvandoCadastro ? 'Salvando…' : (editando ? 'Salvar' : 'Registrar follow-up') }}
+      </button>
+    </footer>
+  </div>
+</div>
+
+<div class="backdrop" *ngIf="followUpAlvo as alvo" (click)="fecharFollowUp()">
+  <div class="card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <p class="eyebrow">Follow-up</p>
+    <h3>Registrar contato</h3>
+    <p class="sub">
+      <strong>{{ alvo.clienteNome }}</strong>
+      · {{ labelInteresse(alvo) }}
+      · contato {{ vezes(alvo) + 1 }} de {{ ciclo }}
+    </p>
+    <p class="aviso" *ngIf="vezes(alvo) + 1 >= ciclo">
+      Este será o <strong>{{ ciclo }}º follow-up</strong>. O interesse será marcado como
+      <strong>Não realizado</strong> e as anotações ficam salvas.
+    </p>
+    <div class="form-group">
+      <label>Quem fez o contato <span class="req">*</span></label>
+      <select [(ngModel)]="responsavelContato" name="fuResponsavel">
+        <option value="">Selecione...</option>
+        <option *ngFor="let r of responsaveis" [value]="r">{{ r }}</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Justificativa / anotação <span class="req">*</span></label>
+      <textarea [(ngModel)]="anotacao" name="fuAnotacao" rows="3" placeholder="Ex.: sem resposta no WhatsApp / pediu para ligar sexta…"></textarea>
+    </div>
+    <div class="form-group" *ngIf="vezes(alvo) + 1 < ciclo">
+      <label>Próxima data para revisitar</label>
+      <input type="date" [(ngModel)]="proximaData" name="fuProxima" />
+      <span class="campo-hint">Sugestão: +{{ diasUteisFollowUp }} dias úteis.</span>
+    </div>
+    <ul class="hist" *ngIf="historico(alvo).length">
+      <li *ngFor="let f of historico(alvo)">
+        <strong>{{ f.data | date:'dd/MM/yyyy':'UTC' }} · {{ f.responsavel || '—' }}</strong>
+        <span>{{ f.anotacao }}</span>
+      </li>
+    </ul>
+    <p class="erro" *ngIf="erroFollowUp">{{ erroFollowUp }}</p>
+    <footer class="acoes">
+      <button type="button" class="btn-sec" (click)="fecharFollowUp()" [disabled]="salvandoFollowUp">Cancelar</button>
+      <button type="button" class="btn-pri" (click)="confirmarFollowUp()" [disabled]="salvandoFollowUp">
+        {{ salvandoFollowUp ? 'Salvando…' : (vezes(alvo) + 1 >= ciclo ? 'Registrar e concluir (Não realizado)' : 'Registrar follow-up') }}
+      </button>
+    </footer>
+  </div>
+</div>
+
+<div class="backdrop" *ngIf="desistenciaAlvo as alvo" (click)="fecharDesistencia()">
+  <div class="card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <p class="eyebrow aviso-titulo">Follow-up</p>
+    <h3>Desistência do cliente</h3>
+    <p class="sub"><strong>{{ alvo.clienteNome }}</strong> · {{ labelInteresse(alvo) }}</p>
+    <p class="aviso">Encerra o acompanhamento. Não entra como Não realizado.</p>
+    <div class="form-group">
+      <label>Motivo <span class="req">*</span></label>
+      <textarea [(ngModel)]="motivoDesistencia" name="motivo" rows="3" placeholder="Ex.: achou mais barato em outra loja / desistiu da troca…"></textarea>
+    </div>
+    <p class="erro" *ngIf="erroDesistencia">{{ erroDesistencia }}</p>
+    <footer class="acoes">
+      <button type="button" class="btn-sec" (click)="fecharDesistencia()" [disabled]="salvandoDesistencia">Cancelar</button>
+      <button type="button" class="btn-pri btn-alerta" (click)="confirmarDesistencia()" [disabled]="salvandoDesistencia">
+        {{ salvandoDesistencia ? 'Salvando…' : 'Confirmar desistência' }}
+      </button>
+    </footer>
+  </div>
+</div>
+
+<div class="backdrop" *ngIf="converterAlvo as alvo" (click)="fecharConverter()">
+  <div class="card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <p class="eyebrow">Follow-up</p>
+    <h3>Cliente comprou ou trocou</h3>
+    <p class="sub"><strong>{{ alvo.clienteNome }}</strong> · {{ labelInteresse(alvo) }}</p>
+    <p class="aviso aviso-ok">Encerra o follow-up como convertido. A venda ou a troca continua no caixa da loja.</p>
+    <div class="form-group">
+      <label>O que fechou</label>
+      <textarea [(ngModel)]="observacaoConversao" name="obsConversao" rows="3" placeholder="Ex.: levou o iPhone 13 no boleto / trocou o A14 pelo Moto G…"></textarea>
+    </div>
+    <p class="erro" *ngIf="erroConversao">{{ erroConversao }}</p>
+    <footer class="acoes">
+      <button type="button" class="btn-sec" (click)="fecharConverter()" [disabled]="salvandoConversao">Cancelar</button>
+      <button type="button" class="btn-pri" (click)="confirmarConverter()" [disabled]="salvandoConversao">
+        {{ salvandoConversao ? 'Salvando…' : 'Marcar como convertido' }}
+      </button>
+    </footer>
+  </div>
+</div>
+
+<div class="backdrop" *ngIf="historicoAlvo as alvo" (click)="fecharHistorico()">
+  <div class="card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <p class="eyebrow">Histórico</p>
+    <h3>{{ alvo.clienteNome }}</h3>
+    <p class="sub">{{ labelInteresse(alvo) }} · {{ vezes(alvo) }} contato(s)</p>
+    <div class="bloco" *ngIf="alvo.observacao">
+      <span>O que pediu</span>
+      <p>{{ alvo.observacao }}</p>
+    </div>
+    <div class="bloco" *ngIf="alvo.motivoDesistencia">
+      <span>Desistência</span>
+      <p>{{ alvo.motivoDesistencia }}</p>
+    </div>
+    <div class="bloco" *ngIf="alvo.observacaoConversao">
+      <span>Conversão</span>
+      <p>{{ alvo.observacaoConversao }}</p>
+    </div>
+    <ul class="hist" *ngIf="historico(alvo).length; else semContatos">
+      <li *ngFor="let f of historico(alvo); let i = index">
+        <strong>#{{ historico(alvo).length - i }} · {{ f.data | date:'dd/MM/yyyy':'UTC' }} · {{ f.responsavel || '—' }}</strong>
+        <span>{{ f.anotacao }}</span>
+      </li>
+    </ul>
+    <ng-template #semContatos>
+      <p class="campo-hint">Nenhum contato registrado ainda.</p>
+    </ng-template>
+    <footer class="acoes">
+      <button type="button" class="btn-pri" (click)="fecharHistorico()">Fechar</button>
+    </footer>
+  </div>
+</div>

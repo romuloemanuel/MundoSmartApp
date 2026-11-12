@@ -191,6 +191,12 @@ export const routes: Routes = [
         data: { tela: 'troca' },
       },
       {
+        path: 'vendas-celulares/follow-up',
+        loadComponent: () =>
+          import('./pages/vendas-celulares/follow-up/follow-up').then(m => m.FollowUpCelularesPage),
+        title: 'Follow-up de celulares',
+      },
+      {
         path: 'vendas-celulares/estoque',
         loadComponent: () =>
           import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),

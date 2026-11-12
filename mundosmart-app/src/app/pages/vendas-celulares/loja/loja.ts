@@ -29,6 +29,7 @@ import {
 } from '../../../services/aparelho-loja.service';
 import { avisarAvisoUsuario, avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
 import { OsImpressaoService } from '../../../services/os-impressao.service';
+import { ClientesService } from '../../../services/clientes';
 import { OS_IMPRESSAO_PADRAO_POS_CADASTRO } from '../../../config/os-impressao.config';
 import { BlingContato, BlingContatoRef, BlingOrdemServico, MarcaAparelho, ModeloAparelho } from '../../../models/bling.models';
 import { MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
@@ -528,6 +529,13 @@ interface FichaEntrada {
                 </td>
                 <td>
                   <button type="button" class="link" (click)="abrirCadeiaDaOperacao(op)">Ver cadeia</button>
+                  <button
+                    type="button"
+                    class="secundario"
+                    *ngIf="podeReimprimir(op)"
+                    [disabled]="reimprimindoId === op.id"
+                    (click)="reimprimirDocumentos(op)"
+                  >{{ reimprimindoId === op.id ? 'Abrindo…' : 'Reimprimir documentos' }}</button>
                   <button type="button" class="secundario" *ngIf="op.podeEstornar" [disabled]="salvando" (click)="estornar(op)">Desfazer</button>
                   <button type="button" class="perigo" *ngIf="isAdmin && (op.podeEstornar || op.status === 'estornada')" [disabled]="salvando" (click)="excluirOperacao(op)">Excluir</button>
                 </td>
@@ -567,6 +575,13 @@ interface FichaEntrada {
                   <span *ngIf="p.dinheiroEntrou" class="valor-positivo"> + {{ dinheiro(p.dinheiroEntrou) }}</span>
                   <span *ngIf="p.dinheiroSaiu" class="valor-negativo"> − {{ dinheiro(p.dinheiroSaiu) }}</span>
                 </p>
+                <button
+                  type="button"
+                  class="secundario"
+                  *ngIf="podeReimprimirPasso(p)"
+                  [disabled]="reimprimindoId === p.operacaoId"
+                  (click)="reimprimirDoPasso(p)"
+                >{{ reimprimindoId === p.operacaoId ? 'Abrindo…' : 'Reimprimir documentos' }}</button>
               </div>
             </div>
           </article>
@@ -1797,6 +1812,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   painel: AparelhoLojaPainel | null = null;
   carregando = false;
   salvando = false;
+  reimprimindoId = '';
   erro = '';
   modo: Modo | null = null;
   modalCliente = false;
@@ -1922,6 +1938,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     private router: Router,
     private appAuth: AppAuthService,
     private impressao: OsImpressaoService,
+    private clientes: ClientesService,
   ) {
     this.gridTransacoes.pageSize = 100;
     this.gridEstoque.pageSize = 100;
@@ -3817,6 +3834,51 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     );
   }
 
+  podeReimprimir(op: AparelhoOperacao): boolean {
+    return op.status !== 'estornada' && (op.tipo === 'venda' || op.tipo === 'troca');
+  }
+
+  podeReimprimirPasso(p: AparelhoCadeiaPasso): boolean {
+    return p.tipo === 'venda' || p.tipo === 'troca';
+  }
+
+  reimprimirDoPasso(p: AparelhoCadeiaPasso): void {
+    const op = this.operacoes.find(item => item.id === p.operacaoId);
+    if (!op) {
+      avisarErroUsuario('Não encontrei esta transação para reimprimir.');
+      return;
+    }
+    this.reimprimirDocumentos(op);
+  }
+
+  reimprimirDocumentos(op: AparelhoOperacao): void {
+    if (!this.podeReimprimir(op)) return;
+    const abrir = (cliente: BlingContato | null) => {
+      const rascunho = this.rascunhoDaOperacao(op, cliente);
+      if (!rascunho) {
+        avisarErroUsuario('Não encontrei o aparelho desta transação para reimprimir.');
+        return;
+      }
+      this.abrirContrato(rascunho);
+    };
+    const id = op.clienteId;
+    if (!id) {
+      abrir(null);
+      return;
+    }
+    this.reimprimindoId = op.id ?? '';
+    this.clientes.obter(id).subscribe({
+      next: cliente => {
+        this.reimprimindoId = '';
+        abrir(cliente);
+      },
+      error: () => {
+        this.reimprimindoId = '';
+        abrir(null);
+      },
+    });
+  }
+
   estornar(op: AparelhoOperacao): void {
     if (!op.id || !confirm('Desfazer esta operação? O estoque e o desconto voltam ao estado anterior.')) return;
     this.enviar(this.api.estornar(op.id), 'Operação desfeita.');
@@ -3858,10 +3920,17 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return true;
   }
 
-  private aplicarDiferencaNoContrato(rascunho: RascunhoContrato | null, preco: number): void {
+  private aplicarDiferencaNoContrato(
+    rascunho: RascunhoContrato | null,
+    preco: number,
+    dados?: { sentido: string; diferenca: number; pagamento: string; financiadora?: string },
+  ): void {
     if (!rascunho) return;
-    const diferenca = this.centavos(this.troca.diferenca);
-    if (this.troca.sentido === 'nenhuma') {
+    const sentido = dados?.sentido ?? this.troca.sentido;
+    const diferenca = dados ? this.centavos(dados.diferenca) : this.centavos(this.troca.diferenca);
+    const pagamento = dados?.pagamento ?? this.troca.pagamento;
+    const financiadora = (dados?.financiadora ?? this.troca.financiadoraNome).trim();
+    if (sentido === 'nenhuma') {
       rascunho.valores['valor_entrada'] = moedaContrato(0);
       rascunho.valores['valor_saldo'] = moedaContrato(preco);
       rascunho.formaPagamento = 'acombinar';
@@ -3870,28 +3939,28 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       rascunho.valores['observacoes'] = rascunho.complemento;
       return;
     }
-    if (this.troca.sentido === 'loja') {
+    if (sentido === 'loja') {
       const saldo = Math.max(0, Math.round((preco - diferenca) * 100) / 100);
       rascunho.valores['valor_entrada'] = moedaContrato(diferenca);
       rascunho.valores['valor_saldo'] = moedaContrato(saldo);
       rascunho.entrada = moedaContrato(diferenca);
       rascunho.repasse = '';
-      if (this.troca.pagamento === 'dinheiro') rascunho.formaPagamento = 'dinheiro';
-      else if (this.troca.pagamento === 'cartao') rascunho.formaPagamento = 'cartao';
+      if (pagamento === 'dinheiro') rascunho.formaPagamento = 'dinheiro';
+      else if (pagamento === 'cartao') rascunho.formaPagamento = 'cartao';
       else {
         rascunho.formaPagamento = 'outra';
-        rascunho.financiadoraNome = this.troca.financiadoraNome.trim();
+        rascunho.financiadoraNome = financiadora;
       }
-      const parcelas = this.troca.pagamento === 'cartao' ? this.textoParcelasCartao(this.opcaoJurosTroca) : '';
-      rascunho.complemento = `${rascunho.complemento || ''} Diferença de R$ ${moedaContrato(diferenca)} para a loja, em ${this.rotuloForma(this.troca.pagamento)}. ${parcelas}`.trim();
+      const parcelas = pagamento === 'cartao' && !dados ? this.textoParcelasCartao(this.opcaoJurosTroca) : '';
+      rascunho.complemento = `${rascunho.complemento || ''} Diferença de R$ ${moedaContrato(diferenca)} para a loja, em ${this.rotuloForma(pagamento)}. ${parcelas}`.trim();
       rascunho.valores['observacoes'] = rascunho.complemento;
       return;
     }
     rascunho.valores['valor_entrada'] = moedaContrato(0);
     rascunho.valores['valor_saldo'] = moedaContrato(preco);
     rascunho.entrada = '';
-    rascunho.formaPagamento = this.troca.pagamento === 'dinheiro' ? 'dinheiro' : 'pix';
-    rascunho.complemento = `${rascunho.complemento || ''} A loja devolve R$ ${moedaContrato(diferenca)} em ${this.troca.pagamento === 'pix' ? 'PIX' : 'dinheiro'}.`.trim();
+    rascunho.formaPagamento = pagamento === 'dinheiro' ? 'dinheiro' : 'pix';
+    rascunho.complemento = `${rascunho.complemento || ''} A loja devolve R$ ${moedaContrato(diferenca)} em ${pagamento === 'pix' ? 'PIX' : 'dinheiro'}.`.trim();
     rascunho.valores['observacoes'] = rascunho.complemento;
   }
 
@@ -3990,8 +4059,83 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     };
   }
 
-  private rascunhoVenda(item: AparelhoLojaItem, preco: number, negociacao: NegociacaoForm, complemento = '') {
-    const pessoa = this.pessoaContrato();
+  private rascunhoDaOperacao(op: AparelhoOperacao, cliente: BlingContato | null): RascunhoContrato | null {
+    const saida = (op.saiu ?? [])[0];
+    if (!saida) return null;
+    const preco = this.centavos(op.precoSaida) || this.centavos(saida.valor);
+    const partes = this.separarNomeAparelho(saida.nome, saida.configuracao);
+    const item: AparelhoLojaItem = {
+      imei: saida.imei,
+      marca: partes.marca,
+      modelo: partes.modelo,
+      cor: saida.cor ?? '',
+      configuracao: saida.configuracao ?? '',
+      condicao: saida.condicao || 'usado',
+      custo: Number(saida.custo) || 0,
+      status: 'vendido',
+      origem: 'compra',
+      clienteOrigemNome: '',
+      clienteVendaNome: '',
+      descontoVigente: false,
+      dataEntrada: op.data,
+    };
+    const forma = this.formaDaOperacao(op.formaNegociacao);
+    const negociacao: NegociacaoForm = {
+      forma,
+      financiadoraNome: op.financiadoraNome ?? '',
+      entrada: Number(op.entradaLoja) > 0 ? Number(op.entradaLoja) : null,
+      repasse: Number(op.repasseFinanciadora) > 0 ? Number(op.repasseFinanciadora) : null,
+    };
+    const complemento = op.tipo === 'troca'
+      ? (op.entrou ?? [])
+        .map(a => `Aparelho dado na troca: ${a.nome}${a.configuracao ? ' ' + a.configuracao : ''}, IMEI ${a.imei}, avaliado em R$ ${moedaContrato(Number(a.valor) || 0)}.`)
+        .join(' ')
+      : (op.observacoes || '');
+    const pessoa = cliente ?? (op.clienteNome
+      ? { nome: op.clienteNome, cpfCnpj: op.clienteCpf } as BlingContato
+      : null);
+    const rascunho = this.rascunhoVenda(item, preco, negociacao, complemento, pessoa);
+    if (op.tipo === 'troca') {
+      const recebido = this.centavos(op.dinheiroRecebido);
+      const pago = this.centavos(op.dinheiroPago);
+      const sentido = recebido > 0 ? 'loja' : pago > 0 ? 'cliente' : 'nenhuma';
+      this.aplicarDiferencaNoContrato(rascunho, preco, {
+        sentido,
+        diferenca: sentido === 'loja' ? recebido : pago,
+        pagamento: op.formaNegociacao || 'dinheiro',
+        financiadora: op.financiadoraNome,
+      });
+    }
+    return rascunho;
+  }
+
+  private formaDaOperacao(forma?: string): FormaNegociacao {
+    if (forma === 'cartao' || forma === 'avista_cartao' || forma === 'payjoy'
+      || forma === 'paymobi' || forma === 'crefaz' || forma === 'outra' || forma === 'avista') {
+      return forma;
+    }
+    return 'avista';
+  }
+
+  private separarNomeAparelho(nome: string, config?: string): { marca: string; modelo: string } {
+    let texto = (nome ?? '').trim();
+    const capacidade = (config ?? '').trim();
+    if (capacidade && texto.toLowerCase().endsWith(capacidade.toLowerCase())) {
+      texto = texto.slice(0, texto.length - capacidade.length).trim();
+    }
+    const i = texto.indexOf(' ');
+    if (i < 0) return { marca: texto, modelo: '' };
+    return { marca: texto.slice(0, i), modelo: texto.slice(i + 1) };
+  }
+
+  private rascunhoVenda(
+    item: AparelhoLojaItem,
+    preco: number,
+    negociacao: NegociacaoForm,
+    complemento = '',
+    cliente?: BlingContato | null,
+  ) {
+    const pessoa = this.pessoaContrato(cliente);
     const aVistaOuCartao = negociacao.forma === 'avista' || negociacao.forma === 'cartao';
     const entrada = aVistaOuCartao ? preco : Number(negociacao.entrada ?? 0);
     const repasse = aVistaOuCartao || negociacao.forma === 'paymobi' ? 0 : Number(negociacao.repasse ?? 0);
@@ -4034,8 +4178,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     };
   }
 
-  private pessoaContrato() {
-    const cliente = this.cliente;
+  private pessoaContrato(cliente = this.cliente) {
     if (!cliente) return null;
     return {
       nome: cliente.nome ?? '',

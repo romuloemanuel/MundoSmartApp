@@ -108,6 +108,7 @@ export interface AparelhoOperacao {
   tipo: string;
   status: string;
   data: string;
+  clienteId?: number;
   clienteNome: string;
   clienteCpf: string;
   fornecedorNome: string;
@@ -429,6 +430,8 @@ export class AparelhoLojaService {
     saudeBateria?: number | null;
     bateriaPerfeita?: boolean | null;
     pecasTrocadas?: { nome: string; apareceMensagem: boolean }[];
+    passaPorAssistencia?: boolean;
+    osNumero?: string;
   }): Observable<AparelhoLojaPainel> {
     return this.http.put<AparelhoLojaPainel>(`${this.apiUrl}/${id}/cadastro`, body);
   }

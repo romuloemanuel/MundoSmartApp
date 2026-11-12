@@ -214,6 +214,7 @@ public class AparelhoOperacaoDto
     public string Tipo { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime Data { get; set; }
+    public long? ClienteId { get; set; }
     public string ClienteNome { get; set; } = string.Empty;
     public string ClienteCpf { get; set; } = string.Empty;
     public string FornecedorNome { get; set; } = string.Empty;

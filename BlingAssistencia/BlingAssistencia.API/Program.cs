@@ -84,6 +84,8 @@ builder.Services.AddSingleton<IBlingVendaCelularRepository, BlingVendaCelularRep
 builder.Services.AddSingleton<IAparelhoLojaRepository, AparelhoLojaRepository>();
 builder.Services.AddSingleton<IAparelhoCodigoEstoque, AparelhoCodigoEstoque>();
 builder.Services.AddSingleton<IAparelhoLojaService, AparelhoLojaService>();
+builder.Services.AddSingleton<IFollowUpCelularRepository, FollowUpCelularRepository>();
+builder.Services.AddSingleton<IFollowUpCelularService, FollowUpCelularService>();
 builder.Services.AddSingleton<IReceitaService, ReceitaService>();
 builder.Services.AddSingleton<IControleCustoRepository, ControleCustoRepository>();
 builder.Services.AddSingleton<IControleCustoService, ControleCustoService>();
@@ -326,6 +328,7 @@ try
     await app.Services.GetRequiredService<IBlingComissaoLojaRepository>().EnsureIndexesAsync();
     var aparelhosLojaRepo = app.Services.GetRequiredService<IAparelhoLojaRepository>();
     await aparelhosLojaRepo.EnsureIndexesAsync();
+    await app.Services.GetRequiredService<IFollowUpCelularRepository>().EnsureIndexesAsync();
     var vinculoCel = app.Services.GetRequiredService<IClienteAparelhoCompradoService>();
     await vinculoCel.RecalcularPendenciasAsync();
     var estoqueLote = app.Services.GetRequiredService<IEstoqueLoteService>();

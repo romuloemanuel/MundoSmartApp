@@ -1001,6 +1001,36 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Cadastro_associa_os_ja_aberta_ao_aparelho_da_loja()
+    {
+        var cliente = await ClienteComDocumento();
+        var modelo = await PrimeiroModelo();
+        var imei = NovoImei();
+        var comprado = await Comprar(imei, 1400);
+        var item = ExigirEstoque(comprado, imei);
+        Assert.True(item["osEntradaId"] is null || item["osEntradaId"]!.GetValue<long>() == 0);
+
+        var os = await CriarOs(cliente, modelo, imei, "Aberto", null);
+        var editado = await Put($"/api/aparelhos-loja/{item["id"]!.GetValue<string>()}/cadastro", new
+        {
+            imei,
+            marca = "Apple",
+            modelo = "iPhone 13",
+            cor = "Preto",
+            configuracao = "128GB",
+            condicao = "usado",
+            valorVenda = 10000m,
+            valorMinimoVenda = 1m,
+            bateriaPerfeita = true,
+            osNumero = os.Numero,
+        });
+        var depois = ExigirEstoque(editado, imei);
+        Assert.Equal(os.Numero, depois["osEntradaNumero"]!.GetValue<string>());
+        Assert.True(depois["testesNaOs"]!.GetValue<bool>());
+        Assert.Equal("em_assistencia", depois["status"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task Os_aberta_reaproveita_os_testes_e_o_desagio_fica_no_valor_pago()
     {
         var cliente = await ClienteComDocumento();

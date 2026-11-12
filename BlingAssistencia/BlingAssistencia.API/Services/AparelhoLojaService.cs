@@ -932,6 +932,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             await AplicarValorPagoAsync(aparelho, pedido.ValorPago.Value, cancellationToken);
         if (pedido.ValorParaCompra is not null)
             aparelho.ValorParaCompra = pedido.ValorParaCompra.Value > 0 ? Dinheiro(pedido.ValorParaCompra.Value) : 0;
+        await AssociarOsAsync(aparelho, entrada, exigirAberta: false, cancellationToken);
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
         return await MontarPainelAsync(cancellationToken);
     }
@@ -1608,6 +1609,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         Tipo = op.Tipo,
         Status = op.Status,
         Data = op.Data,
+        ClienteId = op.ClienteId,
         ClienteNome = string.IsNullOrWhiteSpace(op.ClienteNome) ? op.FornecedorNome : op.ClienteNome,
         ClienteCpf = op.ClienteCpf,
         FornecedorNome = op.FornecedorNome,
@@ -2016,27 +2018,57 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     private async Task ReterSeAssistenciaAsync(
         AparelhoLojaData aparelho,
         AparelhoEntradaRequest entrada,
+        CancellationToken cancellationToken) =>
+        await AssociarOsAsync(aparelho, entrada, exigirAberta: true, cancellationToken);
+
+    private async Task AssociarOsAsync(
+        AparelhoLojaData aparelho,
+        AparelhoEntradaRequest entrada,
+        bool exigirAberta,
         CancellationToken cancellationToken)
     {
         var numero = Texto(entrada.OsNumero);
         if (!entrada.PassaPorAssistencia && numero.Length == 0)
             return;
 
-        if (entrada.PassaPorAssistencia)
-            aparelho.Status = AparelhoLojaStatus.EmAssistencia;
         if (numero.Length == 0)
         {
+            if (aparelho.OsEntradaId is > 0)
+            {
+                if (entrada.PassaPorAssistencia)
+                    aparelho.Status = AparelhoLojaStatus.EmAssistencia;
+                return;
+            }
+
             if (entrada.PassaPorAssistencia)
+            {
+                aparelho.Status = AparelhoLojaStatus.EmAssistencia;
                 await AbrirOsDaLojaAsync(aparelho, cancellationToken);
+            }
+            return;
+        }
+
+        var jaVinculada = aparelho.OsEntradaId is > 0
+            && (string.Equals(aparelho.OsEntradaNumero, numero, StringComparison.OrdinalIgnoreCase)
+                || (aparelho.OsEntradaId?.ToString() == numero));
+        if (jaVinculada)
+        {
+            if (entrada.PassaPorAssistencia)
+                aparelho.Status = AparelhoLojaStatus.EmAssistencia;
             return;
         }
 
         var os = await _os.ObterPorNumeroAsync(numero, cancellationToken)
             ?? throw new InvalidOperationException("Não encontrei essa ordem de serviço.");
-        if (OsSituacaoHelper.EhFinalizada(os.Situacao))
+        if (OsSituacaoHelper.EhCancelada(os.Situacao))
+            throw new InvalidOperationException($"A OS {numero} está {os.Situacao}. Informe outra OS.");
+        if (exigirAberta && OsSituacaoHelper.EhFinalizada(os.Situacao))
             throw new InvalidOperationException($"A OS {numero} está {os.Situacao}. Informe uma OS ainda aberta.");
+
         var imeiOs = Imei(os.Imei);
-        if (imeiOs.Length == 15 && imeiOs != aparelho.Imei)
+        if (imeiOs.Length == 15 && aparelho.Imei.Length == 0)
+            aparelho.Imei = imeiOs;
+        if (imeiOs.Length == 15 && aparelho.Imei.Length == 15 && imeiOs != aparelho.Imei)
             throw new InvalidOperationException("O IMEI da ordem de serviço é outro. Confira o aparelho.");
 
         aparelho.OsEntradaId = os.BlingId;
@@ -2044,8 +2076,14 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         aparelho.JustificativaAssistencia = Limitar(Texto(os.Defeito), 400);
         aparelho.TestesNaOs = true;
         aparelho.Testes = [];
+        if (!OsSituacaoHelper.EhFinalizada(os.Situacao) || entrada.PassaPorAssistencia)
+            aparelho.Status = AparelhoLojaStatus.EmAssistencia;
+
         var nota = $"Testes feitos na OS {aparelho.OsEntradaNumero}. O deságio já está no valor pago pela loja.";
-        aparelho.Observacoes = string.IsNullOrWhiteSpace(aparelho.Observacoes) ? nota : $"{aparelho.Observacoes} {nota}";
+        if (string.IsNullOrWhiteSpace(aparelho.Observacoes))
+            aparelho.Observacoes = nota;
+        else if (aparelho.Observacoes.IndexOf(nota, StringComparison.OrdinalIgnoreCase) < 0)
+            aparelho.Observacoes = $"{aparelho.Observacoes} {nota}";
     }
 
     private async Task AbrirOsDaLojaAsync(AparelhoLojaData aparelho, CancellationToken cancellationToken)

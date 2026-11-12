@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import * as QRCode from 'qrcode';
 import { AparelhosService } from '../../../services/aparelhos';
-import { AparelhoLojaItem, AparelhoLojaPainel, AparelhoLojaService } from '../../../services/aparelho-loja.service';
+import { AparelhoLojaItem, AparelhoLojaPainel, AparelhoLojaService, OsAbertaConsulta } from '../../../services/aparelho-loja.service';
 import { MarcaAparelho, ModeloAparelho } from '../../../models/bling.models';
 import { MODELO_LIMITE_LISTA } from '../../../config/aparelhos.config';
 import { avisarAvisoUsuario, avisarErroUsuario, avisarSucessoUsuario } from '../../../services/user-feedback.service';
@@ -20,7 +21,7 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
   selector: 'app-editar-aparelho-loja-modal',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FotosAngulo],
+  imports: [CommonModule, RouterLink, FotosAngulo],
   template: `
     <div class="modal-backdrop" (click)="cancelar()">
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="titulo-edicao-aparelho" (click)="$event.stopPropagation()">
@@ -123,6 +124,36 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
           <label>Informações<textarea data-campo="observacoes" (input)="observacoes = valor($event)" rows="3"></textarea></label>
           <label>Alerta permanente<textarea data-campo="alerta" (input)="alerta = valor($event)" rows="2"></textarea></label>
 
+          <section class="os-edicao">
+            <h4>Ordem de serviço</h4>
+            <p class="hint" *ngIf="aparelho.osEntradaId">
+              Já vinculada:
+              <a class="os-link" [routerLink]="['/ordens-servico', aparelho.osEntradaId]">OS {{ aparelho.osEntradaNumero || aparelho.osEntradaId }}</a>.
+              Informe outro número só se precisar trocar.
+            </p>
+            <p class="hint" *ngIf="!aparelho.osEntradaId">
+              Este celular já entrou na loja. Informe a OS da assistência para vincular, ou marque para abrir uma nova.
+            </p>
+            <label class="check-label" *ngIf="!aparelho.osEntradaId">
+              <input type="checkbox" data-campo="passaPorAssistencia" (change)="passaPorAssistencia = marcado($event)" />
+              Passa pela assistência antes de vender
+            </label>
+            <div class="form-group">
+              <label>OS já aberta</label>
+              <input data-campo="osNumero" (input)="onOsNumero(valor($event))" inputmode="numeric" placeholder="Número da OS" />
+            </div>
+            <p class="hint" *ngIf="osBuscando">Buscando a OS…</p>
+            <p class="hint os-ok" *ngIf="osAberta">
+              OS {{ osConsulta?.numero }} · {{ osConsulta?.situacao }}
+              <span *ngIf="osConsulta?.cliente"> · {{ osConsulta?.cliente }}</span>
+              <span *ngIf="osConsulta?.aparelho"> · {{ osConsulta?.aparelho }}</span>
+              <span *ngIf="osConsulta?.imei"> · IMEI {{ osConsulta?.imei }}</span>
+            </p>
+            <p class="hint os-alerta" *ngIf="osEncerrada">A OS {{ osConsulta?.numero }} está {{ osConsulta?.situacao }}. Ainda assim dá para vincular neste cadastro.</p>
+            <p class="hint os-alerta" *ngIf="osNaoEncontrada">Não encontrei essa OS.</p>
+            <p class="hint os-alerta" *ngIf="osImeiDiverge">O IMEI desta OS é outro. Confira o aparelho.</p>
+          </section>
+
           <section class="fotos-edicao">
             <h4>Fotos deste aparelho</h4>
             <p class="hint" *ngIf="carregandoFotos">Carregando fotos…</p>
@@ -211,6 +242,13 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
     .margem.negativa { color: #9a3412; }
     .secundario { background: #fff; color: #0d0d0d; border: 1px solid #cbd5e1; }
     .perigo { background: #fff; color: #9a3412; border: 1px solid #fecaca; }
+    .os-edicao { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+    .os-edicao h4 { margin: 0 0 8px; font-size: 14px; }
+    .os-link { color: #1d4ed8; font-weight: 700; text-decoration: none; }
+    .check-label { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0 12px; }
+    .check-label input { width: auto; }
+    .os-ok { color: #166534 !important; }
+    .os-alerta { color: #9a3412 !important; }
     .fotos-edicao { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
     .fotos-edicao h4 { margin: 0 0 8px; font-size: 14px; }
     .fotos-meios { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -258,6 +296,11 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
   bateriaPerfeita: '' | 'sim' | 'nao' = '';
   observacoes = '';
   alerta = '';
+  osNumero = '';
+  passaPorAssistencia = false;
+  osConsulta: OsAbertaConsulta | null = null;
+  osBuscando = false;
+  private buscaOs?: ReturnType<typeof setTimeout>;
   pecas: { nome: string; apareceMensagem: boolean }[] = [{ nome: '', apareceMensagem: false }];
   ehIphone = false;
   salvando = false;
@@ -301,6 +344,8 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     this.bateriaPerfeita = a.bateriaPerfeita === true ? 'sim' : a.bateriaPerfeita === false ? 'nao' : '';
     this.observacoes = a.observacoes || '';
     this.alerta = a.alertaPermanente || '';
+    this.osNumero = a.osEntradaNumero || (a.osEntradaId ? String(a.osEntradaId) : '');
+    this.passaPorAssistencia = a.status === 'em_assistencia' || !!a.osEntradaId;
     this.pecas = (a.pecasTrocadas?.length ? a.pecasTrocadas : [{ nome: '', apareceMensagem: false }])
       .map(p => ({ nome: p.nome, apareceMensagem: !!p.apareceMensagem }));
     if (this.configuracao && !this.configuracoes.includes(this.configuracao)) {
@@ -322,6 +367,7 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.buscaOs) clearTimeout(this.buscaOs);
     this.pararPoll();
     this.limparPreviewFoto();
   }
@@ -466,6 +512,59 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
 
   onBateriaPerfeita(valor: string): void {
     this.bateriaPerfeita = valor === 'sim' || valor === 'nao' ? valor : '';
+  }
+
+  get osAberta(): boolean {
+    return !!this.osConsulta?.encontrada && !!this.osConsulta.aberta;
+  }
+
+  get osEncerrada(): boolean {
+    return !!this.osConsulta?.encontrada && !this.osConsulta.aberta;
+  }
+
+  get osNaoEncontrada(): boolean {
+    return !!this.osNumero && !this.osBuscando && !!this.osConsulta && !this.osConsulta.encontrada;
+  }
+
+  get osImeiDiverge(): boolean {
+    const imeiOs = (this.osConsulta?.imei ?? '').replace(/\D/g, '');
+    const imei = this.imei.replace(/\D/g, '');
+    return this.osAberta && imeiOs.length === 15 && imei.length === 15 && imeiOs !== imei;
+  }
+
+  onOsNumero(valor: string): void {
+    this.osNumero = apenasDigitos(valor);
+    this.osConsulta = null;
+    if (this.buscaOs) clearTimeout(this.buscaOs);
+    if (!this.osNumero) {
+      this.osBuscando = false;
+      this.pintar();
+      return;
+    }
+    this.osBuscando = true;
+    const numero = this.osNumero;
+    this.pintar();
+    this.buscaOs = setTimeout(() => this.buscarOs(numero), 400);
+  }
+
+  private buscarOs(numero: string): void {
+    this.api.consultarOs(numero).subscribe({
+      next: os => {
+        if (this.osNumero !== numero) return;
+        this.osConsulta = os;
+        this.osBuscando = false;
+        if (os.encontrada && os.aberta && os.imei && !this.imei) {
+          this.imei = os.imei;
+        }
+        this.pintar();
+      },
+      error: () => {
+        if (this.osNumero !== numero) return;
+        this.osBuscando = false;
+        this.osConsulta = null;
+        this.pintar();
+      },
+    });
   }
 
   incluirPeca(): void {
@@ -622,6 +721,8 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
       saudeBateria: this.saudeBateria,
       bateriaPerfeita: this.ehIphone ? this.bateriaPerfeita === 'sim' : null,
       pecasTrocadas: this.ehIphone ? this.pecasPreenchidas() : [],
+      passaPorAssistencia: this.passaPorAssistencia,
+      osNumero: this.osNumero.trim() || undefined,
     }).subscribe({
       next: painel => {
         this.salvando = false;
@@ -662,6 +763,9 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     setar('bateriaPerfeita', this.bateriaPerfeita);
     setar('observacoes', this.observacoes);
     setar('alerta', this.alerta);
+    setar('osNumero', this.osNumero);
+    const passa = root.querySelector('[data-campo="passaPorAssistencia"]') as HTMLInputElement | null;
+    if (passa && passa.checked !== this.passaPorAssistencia) passa.checked = this.passaPorAssistencia;
     this.pecas.forEach((p, i) => {
       const nome = root.querySelector(`[data-peca="${i}"]`) as HTMLInputElement | null;
       if (nome && nome.value !== p.nome) nome.value = p.nome;
