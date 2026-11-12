@@ -75,6 +75,15 @@ public interface IAparelhoLojaService
 
 public sealed class AparelhoLojaService : IAparelhoLojaService
 {
+    public static readonly DateTime DataLimiteEstoqueInicial = new(2026, 11, 4);
+
+    public static bool CadastroEhEstoqueInicial(string? tipo, DateTime data) =>
+        string.Equals(tipo, AparelhoOperacaoTipo.Compra, StringComparison.OrdinalIgnoreCase)
+        && data.Date <= DataLimiteEstoqueInicial;
+
+    private static bool EhEstoqueInicial(AparelhoOperacaoData op) =>
+        CadastroEhEstoqueInicial(op.Tipo, op.Data);
+
     private static readonly CultureInfo PtBr = new("pt-BR");
     private readonly IAparelhoLojaRepository _repo;
     private readonly IAparelhoCodigoEstoque _codigos;
@@ -1150,9 +1159,9 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 EmAssistencia = estoque.Count(a => a.Status == AparelhoLojaStatus.EmAssistencia),
                 CustoEstoque = estoque.Sum(a => a.Custo + a.CustoPecas),
                 DinheiroRecebido = ativas.Sum(op => op.DinheiroRecebido),
-                DinheiroPago = ativas.Sum(op => op.DinheiroPago),
-                SaldoCaixa = ativas.Sum(op => op.DinheiroRecebido - op.DinheiroPago),
-                Compras = ativas.Count(op => op.Tipo == AparelhoOperacaoTipo.Compra),
+                DinheiroPago = ativas.Where(op => !EhEstoqueInicial(op)).Sum(op => op.DinheiroPago),
+                SaldoCaixa = ativas.Sum(op => op.DinheiroRecebido) - ativas.Where(op => !EhEstoqueInicial(op)).Sum(op => op.DinheiroPago),
+                Compras = ativas.Count(op => op.Tipo == AparelhoOperacaoTipo.Compra && !EhEstoqueInicial(op)),
                 Vendas = ativas.Count(op => op.Tipo == AparelhoOperacaoTipo.Venda),
                 Trocas = ativas.Count(op => op.Tipo == AparelhoOperacaoTipo.Troca),
                 CustoPecas = comCusto.Sum(a => a.CustoPecas),
@@ -2397,11 +2406,11 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             return new AparelhoVendedorResumoDto
             {
                 Nome = nome,
-                Entradas = doVendedor.Count(o => o.Entrada is not null),
+                Entradas = doVendedor.Count(o => o.Entrada is not null && !EhEstoqueInicial(o)),
                 Vendas = doVendedor.Count(o => o.Tipo == AparelhoOperacaoTipo.Venda),
                 Trocas = doVendedor.Count(o => o.Tipo == AparelhoOperacaoTipo.Troca),
                 DinheiroRecebido = doVendedor.Sum(o => o.DinheiroRecebido),
-                DinheiroPago = doVendedor.Sum(o => o.DinheiroPago),
+                DinheiroPago = doVendedor.Where(o => !EhEstoqueInicial(o)).Sum(o => o.DinheiroPago),
                 CustoPecas = aparelhos.Sum(a => a.CustoPecas),
                 CustoMaoDeObra = aparelhos.Sum(a => a.CustoMaoDeObra),
             };

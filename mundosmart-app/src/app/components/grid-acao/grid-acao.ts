@@ -10,7 +10,9 @@ export type GridAcaoTipo =
   | 'os'
   | 'followup'
   | 'abrir-os'
-  | 'desistencia';
+  | 'desistencia'
+  | 'desfazer'
+  | 'cadeia';
 
 @Component({
   selector: 'app-grid-acao',
@@ -28,6 +30,8 @@ export type GridAcaoTipo =
       [class.grid-acao-followup]="tipo === 'followup'"
       [class.grid-acao-abrir-os]="tipo === 'abrir-os'"
       [class.grid-acao-desistencia]="tipo === 'desistencia'"
+      [class.grid-acao-desfazer]="tipo === 'desfazer'"
+      [class.grid-acao-cadeia]="tipo === 'cadeia'"
       [disabled]="disabled"
       [title]="tituloEfetivo"
       [attr.aria-label]="tituloEfetivo"
@@ -144,6 +148,34 @@ export type GridAcaoTipo =
         <line x1="15" y1="9" x2="9" y2="15" />
         <line x1="9" y1="9" x2="15" y2="15" />
       </svg>
+      <svg
+        *ngIf="tipo === 'desfazer'"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="1 4 1 10 7 10" />
+        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+      </svg>
+      <svg
+        *ngIf="tipo === 'cadeia'"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <line x1="6" y1="3" x2="6" y2="15" />
+        <circle cx="18" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" />
+        <path d="M18 9a9 9 0 0 1-9 9" />
+      </svg>
     </button>
   `,
   styles: [`
@@ -171,6 +203,16 @@ export type GridAcaoTipo =
       background: #fffbeb !important;
       border-color: #fcd34d !important;
       color: #b45309 !important;
+    }
+    :host .grid-acao-desfazer:hover:not(:disabled) {
+      background: #fff7ed !important;
+      border-color: #fdba74 !important;
+      color: #c2410c !important;
+    }
+    :host .grid-acao-cadeia:hover:not(:disabled) {
+      background: #f5f3ff !important;
+      border-color: #c4b5fd !important;
+      color: #6d28d9 !important;
     }
   `],
 })
@@ -202,6 +244,10 @@ export class GridAcao {
         return this.comDicaNovaAba('Abrir Ordem de Serviço');
       case 'desistencia':
         return 'Desistência do cliente';
+      case 'desfazer':
+        return 'Desfazer';
+      case 'cadeia':
+        return 'Ver cadeia';
       default:
         return this.comDicaNovaAba('Editar');
     }
@@ -233,7 +279,8 @@ export class GridAcao {
       this.tipo === 'imprimir' ||
       this.tipo === 'excluir' ||
       this.tipo === 'os' ||
-      this.tipo === 'followup'
+      this.tipo === 'followup' ||
+      this.tipo === 'desfazer'
     ) {
       return texto;
     }

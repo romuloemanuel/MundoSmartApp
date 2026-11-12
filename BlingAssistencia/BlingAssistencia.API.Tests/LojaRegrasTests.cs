@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using MundoSmart.BlingAssistencia.API.Services;
 using MundoSmart.BlingAssistencia.API.Settings;
 
 namespace MundoSmart.BlingAssistencia.API.Tests;
@@ -218,6 +219,15 @@ public class LojaRegrasTests
             .ToList();
         Assert.Contains("Administrador", cadastrados);
         Assert.DoesNotContain("Root", cadastrados);
+    }
+
+    [Fact]
+    public void Cadastro_ate_quatro_de_novembro_e_estoque_inicial()
+    {
+        Assert.True(AparelhoLojaService.CadastroEhEstoqueInicial("compra", new DateTime(2026, 11, 4, 23, 40, 0, DateTimeKind.Utc)));
+        Assert.False(AparelhoLojaService.CadastroEhEstoqueInicial("compra", new DateTime(2026, 11, 5, 0, 0, 0, DateTimeKind.Utc)));
+        Assert.False(AparelhoLojaService.CadastroEhEstoqueInicial("venda", new DateTime(2026, 11, 4, 10, 0, 0, DateTimeKind.Utc)));
+        Assert.False(AparelhoLojaService.CadastroEhEstoqueInicial("troca", new DateTime(2026, 10, 20, 10, 0, 0, DateTimeKind.Utc)));
     }
 
     [Fact]

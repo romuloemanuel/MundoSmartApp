@@ -171,7 +171,7 @@ interface FichaEntrada {
         <div class="card">
           <span>Dinheiro que saiu</span>
           <strong>{{ dinheiro(painel.resumo.dinheiroPago) }}</strong>
-          <small>Compras e trocas em que a loja paga</small>
+          <small>Compras depois de 4/11/2026 e trocas em que a loja paga</small>
         </div>
         <div class="card">
           <span>Saldo de caixa</span>
@@ -357,7 +357,7 @@ interface FichaEntrada {
         <div class="filtros-periodo">
           <button type="button" *ngFor="let p of periodos" [class.ativo]="periodoDias === p.dias" (click)="escolherPeriodo(p.dias)">{{ p.nome }}</button>
         </div>
-        <p class="hint">Clique no vendedor para ver só o resultado dele neste período.</p>
+        <p class="hint">Clique no vendedor para ver só o resultado dele neste período. Cadastro até 4/11/2026 entra como estoque inicial e não sai do caixa.</p>
         <table class="data-grid" *ngIf="resultadosPorVendedor.length">
           <thead>
             <tr>
@@ -499,7 +499,8 @@ interface FichaEntrada {
                 <td class="codigo-celula">{{ codigosTransacao(op) }}</td>
                 <td>{{ op.data | date:'dd/MM/yyyy HH:mm':'UTC' }}</td>
                 <td>
-                  {{ rotuloTipo(op.tipo) }}
+                  {{ ehEstoqueInicial(op) ? 'Estoque inicial' : rotuloTipo(op.tipo) }}
+                  <div class="sub" *ngIf="ehEstoqueInicial(op)">Cadastro até 4/11/2026</div>
                   <div class="sub" *ngIf="op.status === 'estornada'">Desfeita</div>
                 </td>
                 <td>
@@ -537,19 +538,38 @@ interface FichaEntrada {
                   <div class="valor-negativo" *ngIf="saiuDaOperacao(op)">− {{ dinheiro(saiuDaOperacao(op)) }}</div>
                   <div class="sub" *ngIf="custoDaVenda(op)">Custo do aparelho {{ dinheiro(custoDaVenda(op)) }}</div>
                   <div class="sub" *ngIf="custoPecasDaEntrada(op)">Peças {{ dinheiro(custoPecasDaEntrada(op)) }}</div>
-                  <div class="sub" *ngIf="!op.dinheiroRecebido && !saiuDaOperacao(op)">Sem dinheiro</div>
+                  <div class="sub" *ngIf="ehEstoqueInicial(op)">Estoque inicial</div>
+                  <div class="sub" *ngIf="!op.dinheiroRecebido && !saiuDaOperacao(op) && !ehEstoqueInicial(op)">Sem dinheiro</div>
                 </td>
-                <td>
-                  <button type="button" class="link" (click)="abrirCadeiaDaOperacao(op)">Ver cadeia</button>
-                  <button
-                    type="button"
-                    class="secundario"
-                    *ngIf="podeReimprimir(op)"
-                    [disabled]="reimprimindoId === op.id"
-                    (click)="reimprimirDocumentos(op)"
-                  >{{ reimprimindoId === op.id ? 'Abrindo…' : 'Reimprimir documentos' }}</button>
-                  <button type="button" class="secundario" *ngIf="op.podeEstornar" [disabled]="salvando" (click)="estornar(op)">Desfazer</button>
-                  <button type="button" class="perigo" *ngIf="isAdmin && (op.podeEstornar || op.status === 'estornada')" [disabled]="salvando" (click)="excluirOperacao(op)">Excluir</button>
+                <td class="grid-acoes-cell">
+                  <div class="grid-acoes">
+                    <app-grid-acao
+                      tipo="cadeia"
+                      titulo="Ver cadeia: do aparelho inicial até o último sair da loja"
+                      (acao)="abrirCadeiaDaOperacao(op)"
+                    />
+                    <app-grid-acao
+                      *ngIf="podeReimprimir(op)"
+                      tipo="imprimir"
+                      [titulo]="reimprimindoId === op.id ? 'Abrindo os documentos…' : 'Reimprimir documentos'"
+                      [disabled]="reimprimindoId === op.id"
+                      (acao)="reimprimirDocumentos(op)"
+                    />
+                    <app-grid-acao
+                      *ngIf="op.podeEstornar"
+                      tipo="desfazer"
+                      titulo="Desfazer: estoque e desconto voltam ao estado anterior"
+                      [disabled]="salvando"
+                      (acao)="estornar(op)"
+                    />
+                    <app-grid-acao
+                      *ngIf="isAdmin && (op.podeEstornar || op.status === 'estornada')"
+                      tipo="excluir"
+                      titulo="Excluir esta transação"
+                      [disabled]="salvando"
+                      (acao)="excluirOperacao(op)"
+                    />
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -587,13 +607,13 @@ interface FichaEntrada {
                   <span *ngIf="p.dinheiroEntrou" class="valor-positivo"> + {{ dinheiro(p.dinheiroEntrou) }}</span>
                   <span *ngIf="p.dinheiroSaiu" class="valor-negativo"> − {{ dinheiro(p.dinheiroSaiu) }}</span>
                 </p>
-                <button
-                  type="button"
-                  class="secundario"
+                <app-grid-acao
                   *ngIf="podeReimprimirPasso(p)"
+                  tipo="imprimir"
+                  [titulo]="reimprimindoId === p.operacaoId ? 'Abrindo os documentos…' : 'Reimprimir documentos'"
                   [disabled]="reimprimindoId === p.operacaoId"
-                  (click)="reimprimirDoPasso(p)"
-                >{{ reimprimindoId === p.operacaoId ? 'Abrindo…' : 'Reimprimir documentos' }}</button>
+                  (acao)="reimprimirDoPasso(p)"
+                />
               </div>
             </div>
           </article>
@@ -1506,7 +1526,8 @@ interface FichaEntrada {
               <span *ngIf="!podeAlterarVendedor(op)">{{ op.vendedorNome || '—' }}</span>
             </td>
             <td>
-              {{ rotuloTipo(op.tipo) }}
+              {{ ehEstoqueInicial(op) ? 'Estoque inicial' : rotuloTipo(op.tipo) }}
+              <div class="sub" *ngIf="ehEstoqueInicial(op)">Cadastro até 4/11/2026</div>
               <div class="sub" *ngIf="op.financiadoraNome">{{ op.financiadoraNome }}</div>
               <div class="sub" *ngIf="op.formaNegociacao && op.formaNegociacao !== 'avista' && (op.formaNegociacao !== 'financiadora' || !op.financiadoraNome)">{{ rotuloForma(op.formaNegociacao) }}</div>
             </td>
@@ -1525,7 +1546,7 @@ interface FichaEntrada {
                 À vista {{ dinheiro(op.entradaLoja) }} · Cartão {{ dinheiro(op.repasseFinanciadora) }}
               </div>
             </td>
-            <td *ngIf="financeiro">{{ dinheiro(op.dinheiroPago) }}</td>
+            <td *ngIf="financeiro">{{ ehEstoqueInicial(op) ? 'Estoque inicial' : dinheiro(op.dinheiroPago) }}</td>
             <td>
               <button
                 type="button"
@@ -2175,7 +2196,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       const saiu = ops.reduce((s, op) => s + this.saiuDaOperacao(op), 0);
       return {
         nome: v.nome,
-        compras: ops.filter(op => op.tipo === 'compra').length,
+        compras: ops.filter(op => op.tipo === 'compra' && !this.ehEstoqueInicial(op)).length,
         vendas: ops.filter(op => op.tipo === 'venda').length,
         trocas: ops.filter(op => op.tipo === 'troca').length,
         entrou,
@@ -2200,7 +2221,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     const saiu = ops.reduce((s, op) => s + this.saiuDaOperacao(op), 0);
     return {
       nome: this.buscaVendedor,
-      compras: ops.filter(op => op.tipo === 'compra').length,
+      compras: ops.filter(op => op.tipo === 'compra' && !this.ehEstoqueInicial(op)).length,
       vendas: ops.filter(op => op.tipo === 'venda').length,
       trocas: ops.filter(op => op.tipo === 'troca').length,
       entrou,
@@ -2817,7 +2838,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   custoPecasDaEntrada(op: AparelhoOperacao): number {
-    if (op.tipo !== 'compra') return 0;
+    if (op.tipo !== 'compra' || this.ehEstoqueInicial(op)) return 0;
     const pecas = (op.entrou ?? []).reduce((s, a) => s + (Number(a.custoPecas) || 0), 0);
     return Math.round(pecas * 100) / 100;
   }
@@ -2828,7 +2849,14 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return Math.round(custo * 100) / 100;
   }
 
+  ehEstoqueInicial(op: AparelhoOperacao): boolean {
+    if (op.tipo !== 'compra' || op.status === 'estornada') return false;
+    const dia = (op.data || '').slice(0, 10);
+    return dia.length === 10 && dia <= '2026-11-04';
+  }
+
   saiuDaOperacao(op: AparelhoOperacao): number {
+    if (this.ehEstoqueInicial(op)) return 0;
     const total = (Number(op.dinheiroPago) || 0) + this.custoPecasDaEntrada(op) + this.custoDaVenda(op);
     return Math.round(total * 100) / 100;
   }
