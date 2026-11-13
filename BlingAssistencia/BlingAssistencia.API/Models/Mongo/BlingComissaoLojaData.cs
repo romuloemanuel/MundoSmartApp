@@ -36,8 +36,19 @@ public class BlingComissaoLojaData
 
     [BsonRepresentation(BsonType.Decimal128)]
     [BsonIgnoreIfNull]
+    [BsonElement("custoOrigem")]
+    public decimal? CustoOrigem { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonIgnoreIfNull]
     [BsonElement("custo")]
     public decimal? Custo { get; set; }
+
+    [BsonElement("custoEditado")]
+    public bool CustoEditado { get; set; }
+
+    [BsonElement("excluida")]
+    public bool Excluida { get; set; }
 
     [BsonElement("atualizadoEm")]
     public DateTime AtualizadoEm { get; set; }

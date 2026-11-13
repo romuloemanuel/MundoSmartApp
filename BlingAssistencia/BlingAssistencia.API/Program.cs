@@ -90,6 +90,7 @@ builder.Services.AddSingleton<IReceitaBlingVendaRepository, ReceitaBlingVendaRep
 builder.Services.AddSingleton<IReceitaService, ReceitaService>();
 builder.Services.AddSingleton<IControleCustoRepository, ControleCustoRepository>();
 builder.Services.AddSingleton<IControleCustoService, ControleCustoService>();
+builder.Services.AddSingleton<IBlingVendaExclusaoRepository, BlingVendaExclusaoRepository>();
 builder.Services.AddSingleton<IBlingComissaoLojaRepository, BlingComissaoLojaRepository>();
 builder.Services.AddSingleton<IComissaoOrigemService, ComissaoOrigemService>();
 builder.Services.AddSingleton<IClienteAparelhoCompradoService, ClienteAparelhoCompradoService>();
@@ -327,6 +328,7 @@ try
     var vendasCelRepo = app.Services.GetRequiredService<IBlingVendaCelularRepository>();
     await vendasCelRepo.EnsureIndexesAsync();
     await app.Services.GetRequiredService<IBlingComissaoLojaRepository>().EnsureIndexesAsync();
+    await app.Services.GetRequiredService<IBlingVendaExclusaoRepository>().EnsureIndexesAsync();
     var aparelhosLojaRepo = app.Services.GetRequiredService<IAparelhoLojaRepository>();
     await aparelhosLojaRepo.EnsureIndexesAsync();
     await app.Services.GetRequiredService<IFollowUpCelularRepository>().EnsureIndexesAsync();

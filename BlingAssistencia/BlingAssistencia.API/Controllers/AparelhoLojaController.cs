@@ -85,6 +85,21 @@ public class AparelhoLojaController : ControllerBase
         }
     }
 
+    [HttpGet("{id}")]
+    public async Task<IActionResult> Obter(string id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var dto = await _loja.ObterAsync(id, cancellationToken);
+            if (!EhAdmin()) ZerarCusto(dto);
+            return Ok(dto);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
     [HttpPut("{id}/cadastro")]
     public Task<IActionResult> EditarCadastro(string id, [FromBody] AparelhoEntradaRequest? body, CancellationToken cancellationToken) =>
         Executar(() => _loja.EditarCadastroAsync(id, body ?? new AparelhoEntradaRequest(), cancellationToken));

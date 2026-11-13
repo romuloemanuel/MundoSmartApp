@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MundoSmart.BlingAssistencia.API.Models;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
 using MundoSmart.BlingAssistencia.API.Services;
 
@@ -39,6 +40,23 @@ public class ComissoesOrigemController : ControllerBase
         try
         {
             return Ok(await _comissoes.LojaAsync(inicio, fim, cancellationToken));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
+    [HttpPut("loja/{pedidoId:long}/{itemId:long}")]
+    public async Task<IActionResult> AtualizarLoja(
+        long pedidoId,
+        long itemId,
+        [FromBody] ComissaoLojaAtualizarRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _comissoes.AtualizarLojaAsync(pedidoId, itemId, request, cancellationToken));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

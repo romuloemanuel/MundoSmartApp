@@ -127,6 +127,8 @@ export interface BlingOrdemServico {
   /** Loja de origem: MCC | ARCE | SJ | CJR */
   lojaOrigem?: string;
   itens?: BlingOrdemServicoItem[];
+  /** Soma do custo das peças (linhas que não são serviço). */
+  custoPecas?: number;
   // ── Campos locais (MongoDB) ───────────────────────────────
   marcaId?: string;
   marcaNome?: string;

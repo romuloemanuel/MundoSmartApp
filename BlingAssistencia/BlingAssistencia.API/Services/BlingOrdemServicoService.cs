@@ -322,6 +322,7 @@ public class BlingOrdemServicoService : IBlingOrdemServicoService
         os.PreferenciaContatoSelecionado = local.PreferenciaContatoSelecionado;
         if (string.IsNullOrWhiteSpace(os.Defeito) && !string.IsNullOrWhiteSpace(local.Defeito))
             os.Defeito = local.Defeito;
+        os.CustoPecas = BlingLocalMappings.SomarCustoPecas(local.Itens);
     }
 
     private static OsLocalData ExtrairDadosLocais(BlingOrdemServico os)

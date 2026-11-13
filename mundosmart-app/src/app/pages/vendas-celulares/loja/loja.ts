@@ -549,6 +549,13 @@ interface FichaEntrada {
                       (acao)="abrirCadeiaDaOperacao(op)"
                     />
                     <app-grid-acao
+                      *ngIf="idCustoDaOperacao(op)"
+                      tipo="editar"
+                      titulo="Editar custo do aparelho"
+                      [disabled]="salvando"
+                      (acao)="abrirEdicaoPorId(idCustoDaOperacao(op))"
+                    />
+                    <app-grid-acao
                       *ngIf="podeReimprimir(op)"
                       tipo="imprimir"
                       [titulo]="reimprimindoId === op.id ? 'Abrindo os documentos…' : 'Reimprimir documentos'"
@@ -1372,7 +1379,7 @@ interface FichaEntrada {
             <td class="grid-acoes-cell" (click)="$event.stopPropagation()">
               <div class="grid-acoes" *ngIf="podeEditar(a)">
                 <app-grid-acao tipo="editar" titulo="Editar" (acao)="abrirEdicao(a)" />
-                <app-grid-acao tipo="excluir" titulo="Excluir" *ngIf="isAdmin" [disabled]="salvando" (acao)="excluirAparelho(a)" />
+                <app-grid-acao tipo="excluir" titulo="Excluir" *ngIf="isAdmin && podeExcluirAparelho(a)" [disabled]="salvando" (acao)="excluirAparelho(a)" />
               </div>
             </td>
           </tr>
@@ -1444,9 +1451,9 @@ interface FichaEntrada {
                   <button type="button" *ngIf="podeEditar(a)" (click)="abrirEdicao(a)">Editar cadastro</button>
                   <a *ngIf="a.status === 'em_estoque'" class="secundario" [routerLink]="['/vendas-celulares/venda']" [queryParams]="{ codigo: a.codigo }">Vender</a>
                   <a *ngIf="a.status === 'em_estoque'" class="secundario" [routerLink]="['/vendas-celulares/troca']" [queryParams]="{ codigo: a.codigo }">Trocar</a>
-                  <button type="button" class="perigo" *ngIf="isAdmin && podeEditar(a)" [disabled]="salvando" (click)="excluirAparelho(a)">Excluir aparelho</button>
+                  <button type="button" class="perigo" *ngIf="isAdmin && podeExcluirAparelho(a)" [disabled]="salvando" (click)="excluirAparelho(a)">Excluir aparelho</button>
                 </div>
-                <p class="hint" *ngIf="!podeEditar(a)">Este aparelho já saiu. O cadastro fica só para consulta.</p>
+                <p class="hint" *ngIf="!podeEditar(a)">Este aparelho foi desfeito. O cadastro fica só para consulta.</p>
               </div>
             </div>
           </div>
@@ -1484,6 +1491,12 @@ interface FichaEntrada {
                 [routerLink]="['/ordens-servico', os.id]"
               >OS {{ os.numero }}</a>
               <span *ngIf="!linksOs(a).length">—</span>
+              <app-grid-acao
+                *ngIf="podeEditar(a)"
+                tipo="editar"
+                titulo="Editar custo deste aparelho"
+                (acao)="abrirEdicao(a)"
+              />
             </td>
           </tr>
         </tbody>
@@ -1599,7 +1612,7 @@ interface FichaEntrada {
       *ngIf="aparelhoEmEdicao as a"
       [aparelho]="a"
       [marcas]="marcas"
-      [podeExcluir]="isAdmin"
+      [podeExcluir]="isAdmin && podeExcluirAparelho(a)"
       (fechou)="cancelarEdicao()"
       (salvou)="aoSalvarEdicao($event)"
       (atualizou)="aoAtualizarEdicao($event)"
@@ -3070,6 +3083,10 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   podeEditar(a: AparelhoLojaItem): boolean {
+    return a.status === 'em_estoque' || a.status === 'em_assistencia' || a.status === 'vendido';
+  }
+
+  podeExcluirAparelho(a: AparelhoLojaItem): boolean {
     return a.status === 'em_estoque' || a.status === 'em_assistencia';
   }
 
@@ -3159,6 +3176,32 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.aparelhoEmEdicao = a;
   }
 
+  abrirEdicaoPorId(id?: string | null): void {
+    if (!id || this.salvando) return;
+    const local = this.estoque.find(a => a.id === id) || this.custosAssistencia.find(a => a.id === id);
+    if (local) {
+      this.abrirEdicao(local);
+      return;
+    }
+    this.salvando = true;
+    this.api.obter(id).subscribe({
+      next: aparelho => {
+        this.salvando = false;
+        this.abrirEdicao(aparelho);
+      },
+      error: err => {
+        this.salvando = false;
+        avisarErroUsuario(err?.error?.erro || 'Não foi possível abrir o cadastro deste aparelho.');
+      },
+    });
+  }
+
+  idCustoDaOperacao(op: AparelhoOperacao): string | null {
+    const saida = this.aparelhosSaiu(op).map(a => a.aparelhoId).find(id => !!id);
+    if (saida) return saida;
+    return this.aparelhosEntrou(op).map(a => a.aparelhoId).find(id => !!id) || null;
+  }
+
   aoSalvarEdicao(painel: AparelhoLojaPainel): void {
     this.painel = painel;
     this.cancelarEdicao();
@@ -3168,7 +3211,8 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     this.painel = painel;
     const id = this.aparelhoEmEdicao?.id;
     if (id) {
-      const atual = (painel.estoque || []).find(x => x.id === id);
+      const atual = (painel.estoque || []).find(x => x.id === id)
+        || (painel.custosAssistencia || []).find(x => x.id === id);
       if (atual) this.aparelhoEmEdicao = atual;
     }
   }
@@ -3181,7 +3225,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   excluirAparelho(a: AparelhoLojaItem): void {
-    if (!this.isAdmin || !a.id) return;
+    if (!this.isAdmin || !a.id || !this.podeExcluirAparelho(a)) return;
     if (!confirm('Excluir este aparelho do estoque? Se ele entrou por compra, a compra some junto. Aparelho de troca precisa excluir a troca nas transações.')) return;
     const id = a.id;
     this.enviar(this.api.excluirAparelho(id), 'Aparelho excluído.', undefined, () => {

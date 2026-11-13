@@ -32,6 +32,7 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
         <div class="modal-body">
           <p class="codigo-etiqueta" *ngIf="aparelho.codigo">{{ aparelho.codigo }}</p>
           <p class="hint">{{ aparelho.marca }} {{ aparelho.modelo }}{{ aparelho.cor ? ' · ' + aparelho.cor : '' }}. Este código o sistema gerou na entrada e não muda.</p>
+          <p class="hint" *ngIf="aparelho.status === 'vendido'">Este aparelho já saiu. O valor pago continua no custo da venda e no caixa.</p>
           <div class="form-row">
             <div class="form-group">
               <label>Marca</label>

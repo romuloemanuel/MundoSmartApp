@@ -11,6 +11,7 @@ public interface IReceitaBlingVendaRepository
     Task<List<ReceitaBlingVendaData>> ListarNoPeriodoAsync(DateTime inicio, DateTime fim, CancellationToken cancellationToken = default);
     Task UpsertDoBlingAsync(ReceitaBlingVendaData lido, CancellationToken cancellationToken = default);
     Task<ReceitaBlingVendaData> SalvarAsync(ReceitaBlingVendaData doc, CancellationToken cancellationToken = default);
+    Task MarcarExcluidaAsync(long pedidoId, CancellationToken cancellationToken = default);
 }
 
 public sealed class ReceitaBlingVendaRepository : IReceitaBlingVendaRepository
@@ -72,6 +73,7 @@ public sealed class ReceitaBlingVendaRepository : IReceitaBlingVendaRepository
         atual.CustoLojaOrigem = lido.CustoLojaOrigem;
         if (!atual.CustoItemEditado) atual.CustoItem = lido.CustoItemOrigem;
         if (!atual.CustoLojaEditado) atual.CustoLoja = lido.CustoLojaOrigem;
+        if (lido.Excluida || atual.Excluida) atual.Excluida = true;
         atual.AtualizadoEm = DateTime.UtcNow;
         await _col.ReplaceOneAsync(x => x.Id == atual.Id, atual, cancellationToken: cancellationToken);
     }
@@ -88,4 +90,12 @@ public sealed class ReceitaBlingVendaRepository : IReceitaBlingVendaRepository
         await _col.ReplaceOneAsync(x => x.Id == doc.Id, doc, cancellationToken: cancellationToken);
         return doc;
     }
+
+    public Task MarcarExcluidaAsync(long pedidoId, CancellationToken cancellationToken = default) =>
+        _col.UpdateOneAsync(
+            x => x.PedidoId == pedidoId,
+            Builders<ReceitaBlingVendaData>.Update
+                .Set(x => x.Excluida, true)
+                .Set(x => x.AtualizadoEm, DateTime.UtcNow),
+            cancellationToken: cancellationToken);
 }

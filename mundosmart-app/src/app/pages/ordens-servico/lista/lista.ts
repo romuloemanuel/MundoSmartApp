@@ -105,8 +105,8 @@ import { FiltroOrigemAparelho } from '../../../components/filtro-origem-aparelho
     /* Larguras fixas em px: a grade rola na horizontal em vez de esmagar/sobrepor colunas. */
     .os-grid {
       table-layout: fixed;
-      width: 1224px;
-      min-width: 1224px;
+      width: 1288px;
+      min-width: 1288px;
       max-width: none;
       border-collapse: separate;
       border-spacing: 0;
@@ -151,6 +151,23 @@ import { FiltroOrigemAparelho } from '../../../components/filtro-origem-aparelho
       text-align: center;
     }
     .os-grid .col-valor { width: 90px; min-width: 90px; max-width: 90px; text-align: right; white-space: nowrap; font-size: 11px; font-variant-numeric: tabular-nums; padding-right: 6px; }
+    .os-grid .col-custo-peca {
+      width: 64px;
+      min-width: 64px;
+      max-width: 64px;
+      text-align: right;
+      white-space: nowrap;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      padding-right: 6px;
+    }
+    .os-grid th.col-custo-peca {
+      white-space: normal;
+      font-size: 10px;
+      line-height: 1.15;
+      font-weight: 700;
+    }
+    .os-grid .col-custo-peca.zerado { color: #dc2626; font-weight: 700; }
     .os-grid .col-acoes { width: 100px; min-width: 100px; max-width: 100px; padding-left: 4px; padding-right: 4px; }
 
     .os-grid .col-cliente-nome {
@@ -923,6 +940,8 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
           retorno: os.retorno ? 'S' : 'N',
           loja: this.siglaLoja(os) || '—',
           entrada: this.formatarDataRelatorio(this.dataEntradaLabel(os)),
+          custoPeca: moeda(this.custoPecaOs(os)),
+          custoPecaZerado: this.custoPecaZerado(os),
           valor: moeda(this.valorAVistaOs(os)),
         };
       }),
@@ -1344,6 +1363,14 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   valorAVistaOs(os: BlingOrdemServico): number {
     return Number(os.valorAVista ?? os.valorTotalAcordado ?? os.valorTotal ?? 0) || 0;
+  }
+
+  custoPecaOs(os: BlingOrdemServico): number {
+    return Number(os.custoPecas ?? 0) || 0;
+  }
+
+  custoPecaZerado(os: BlingOrdemServico): boolean {
+    return this.custoPecaOs(os) <= 0;
   }
 
   valorCompacto(valor?: number | null): string {

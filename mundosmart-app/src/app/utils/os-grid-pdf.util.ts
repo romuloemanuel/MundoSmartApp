@@ -22,6 +22,8 @@ export interface OsGridPdfLinha {
   retorno: string;
   loja: string;
   entrada: string;
+  custoPeca: string;
+  custoPecaZerado?: boolean;
   valor: string;
 }
 
@@ -54,6 +56,7 @@ export function montarHtmlOsGridPdf(linhas: OsGridPdfLinha[], opts: OsGridPdfOpc
           <th>Ret.</th>
           <th>Loja</th>
           <th>Entrada</th>
+          <th class="num">Peça</th>
           <th class="num">Valor</th>
         </tr>
       </thead>
@@ -72,12 +75,14 @@ export function montarHtmlOsGridPdf(linhas: OsGridPdfLinha[], opts: OsGridPdfOpc
             <td>${esc(r.retorno)}</td>
             <td>${esc(r.loja)}</td>
             <td>${esc(r.entrada)}</td>
+            <td class="num${r.custoPecaZerado ? ' zerado' : ''}">${esc(r.custoPeca)}</td>
             <td class="num">${esc(r.valor)}</td>
           </tr>`).join('')}
       </tbody>
       <tfoot>
         <tr>
           <td colspan="12">Total à vista (${esc(linhas.length)})</td>
+          <td></td>
           <td class="num">${esc(opts.totalValor)}</td>
         </tr>
       </tfoot>
@@ -109,6 +114,7 @@ export function montarHtmlOsGridPdf(linhas: OsGridPdfLinha[], opts: OsGridPdfOpc
     }
     th { background: #f1f5f9; font-weight: 600; }
     td.num, th.num { text-align: right; white-space: nowrap; }
+    td.zerado { color: #dc2626; font-weight: 700; }
     tfoot td { font-weight: 700; background: #f8fafc; }
     .vazio { color: #64748b; }
     .rodape {

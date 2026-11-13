@@ -41,6 +41,8 @@ public class BlingOrdemServico
     /// <summary>Loja de origem: MCC | ARCE | SJ | CJR</summary>
     public string? LojaOrigem { get; set; }
     public List<BlingOrdemServicoItem>? Itens { get; set; }
+    /// <summary>Soma do custo das peças (linhas que não são serviço).</summary>
+    public decimal CustoPecas { get; set; }
 
     // ── Campos locais (MongoDB) ───────────────────────────────────────────────
     public string? MarcaId { get; set; }

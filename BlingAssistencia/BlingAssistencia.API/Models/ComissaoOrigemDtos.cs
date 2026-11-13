@@ -28,6 +28,8 @@ public class ComissaoVendedorDto
 
 public class ComissaoLancamentoDto
 {
+    public long PedidoId { get; set; }
+    public long ItemId { get; set; }
     public string Data { get; set; } = string.Empty;
     public string Tipo { get; set; } = string.Empty;
     public string Vendedor { get; set; } = string.Empty;
@@ -38,5 +40,13 @@ public class ComissaoLancamentoDto
     public decimal DinheiroPago { get; set; }
     /// <summary>Nulo quando o Bling não trouxe preço de custo. O preço de venda não entra aqui.</summary>
     public decimal? Custo { get; set; }
+    public bool CustoEditado { get; set; }
+    public bool Excluida { get; set; }
     public decimal Liquido { get; set; }
+}
+
+public class ComissaoLojaAtualizarRequest
+{
+    public decimal? Custo { get; set; }
+    public bool? Excluida { get; set; }
 }

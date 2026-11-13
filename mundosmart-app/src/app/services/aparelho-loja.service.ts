@@ -416,6 +416,10 @@ export class AparelhoLojaService {
     );
   }
 
+  obter(id: string): Observable<AparelhoLojaItem> {
+    return this.http.get<AparelhoLojaItem>(`${this.apiUrl}/${encodeURIComponent(id)}`);
+  }
+
   editarCadastro(id: string, body: {
     imei?: string;
     marca?: string;

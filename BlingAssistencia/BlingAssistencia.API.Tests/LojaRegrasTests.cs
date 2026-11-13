@@ -194,6 +194,36 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Cadastro_altera_o_valor_pago_depois_da_venda()
+    {
+        var imei = NovoImei();
+        var cliente = await ClienteComDocumento();
+        var id = await IdComprado(imei, 1000);
+        await Post("/api/aparelhos-loja/venda", Venda(id, cliente, 1500));
+        var editado = await Put($"/api/aparelhos-loja/{id}/cadastro", new
+        {
+            imei,
+            marca = "Apple",
+            modelo = "iPhone 13",
+            cor = "Preto",
+            configuracao = "128GB",
+            condicao = "usado",
+            valorVenda = 2000m,
+            valorMinimoVenda = 1500m,
+            valorPago = 700m,
+            bateriaPerfeita = true,
+        });
+        var saido = ExigirOperacao(editado, imei, "venda")["saiu"]!.AsArray()[0]!.AsObject();
+        Assert.Equal(700m, Num(saido["custo"]));
+        Assert.Equal(700m, Num(saido["custoTotal"]));
+        var compra = ExigirOperacao(editado, imei, "compra");
+        Assert.Equal(700m, Num(compra["dinheiroPago"]));
+        var ficha = await Get($"/api/aparelhos-loja/{id}");
+        Assert.Equal("vendido", ficha["status"]!.GetValue<string>());
+        Assert.Equal(700m, Num(ficha["custo"]));
+    }
+
+    [Fact]
     public async Task Compra_entra_no_estoque_sem_desconto_e_o_caixa_sai_o_valor_pago()
     {
         var imei = NovoImei();
@@ -1361,11 +1391,52 @@ public class LojaRegrasTests
         Assert.Equal(0m, Num(depois["bling"]!["custoItem"]) - Num(antes["bling"]!["custoItem"]));
         Assert.Equal(0m, Num(depois["bling"]!["custoLoja"]) - Num(antes["bling"]!["custoLoja"]));
 
+        await Put($"/api/receitas/bling/{pedidoId}", new { excluida = false });
         var lista = await Get($"/api/receitas/bling?inicio={hoje:yyyy-MM-dd}&fim={hoje:yyyy-MM-dd}");
         var encontrada = lista["vendas"]!.AsArray().FirstOrDefault(v => v?["pedidoId"]?.GetValue<long>() == pedidoId);
-        Assert.NotNull(encontrada);
-        Assert.True(encontrada!["excluida"]!.GetValue<bool>());
-        Assert.Equal(50m, Num(encontrada["custoItem"]));
+        Assert.Null(encontrada);
+        var aindaFora = await PeriodoAtual();
+        Assert.Equal(0m, Num(aindaFora["bling"]!["bruto"]) - Num(antes["bling"]!["bruto"]));
+    }
+
+    [Fact]
+    public async Task Comissao_do_bling_permite_editar_custo_e_excluir_venda()
+    {
+        var pedidoId = 9_000_000_000L + DateTime.UtcNow.Ticks % 1_000_000_000L + Interlocked.Increment(ref _seq);
+        var hoje = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HorarioBrasil.TimeZone).Date;
+        var dia = hoje.ToString("yyyy-MM-dd");
+        var repo = _factory.Services.GetRequiredService<IBlingComissaoLojaRepository>();
+        await repo.SalvarAsync(new BlingComissaoLojaData
+        {
+            BlingPedidoId = pedidoId,
+            BlingItemId = 1,
+            Data = dia,
+            Pedido = "Pedido T" + pedidoId,
+            Vendedor = "Vendedor teste",
+            Produto = "Capinha",
+            Cliente = "Cliente Bling",
+            Valor = 200,
+            CustoOrigem = 0,
+            Custo = 0,
+        });
+
+        var editada = await Put($"/api/comissoes/loja/{pedidoId}/1", new { custo = 40m });
+        Assert.Equal(40m, Num(editada["custo"]));
+        Assert.True(editada["custoEditado"]!.GetValue<bool>());
+        Assert.Equal(160m, Num(editada["liquido"]));
+
+        var meio = await Get($"/api/comissoes/loja?inicio={dia}&fim={dia}");
+        var linhaMeio = meio["lancamentos"]!.AsArray().First(v => v?["pedidoId"]?.GetValue<long>() == pedidoId);
+        Assert.Equal(40m, Num(linhaMeio!["custo"]));
+
+        var fora = await Put($"/api/comissoes/loja/{pedidoId}/1", new { excluida = true });
+        Assert.True(fora["excluida"]!.GetValue<bool>());
+        await Put($"/api/comissoes/loja/{pedidoId}/1", new { excluida = false });
+        var depois = await Get($"/api/comissoes/loja?inicio={dia}&fim={dia}");
+        Assert.DoesNotContain(depois["lancamentos"]!.AsArray(), v => v?["pedidoId"]?.GetValue<long>() == pedidoId);
+        Assert.Equal(Num(meio["liquido"]) - 160m, Num(depois["liquido"]));
+        Assert.Equal(Num(meio["custo"]) - 40m, Num(depois["custo"]));
+        Assert.Equal(meio["quantidade"]!.GetValue<int>() - 1, depois["quantidade"]!.GetValue<int>());
     }
 
     private async Task<JsonObject> PeriodoAtual()

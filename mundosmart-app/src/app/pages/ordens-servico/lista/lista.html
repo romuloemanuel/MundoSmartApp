@@ -227,6 +227,7 @@
             Entrada <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('data') }}</span>
           </button>
         </th>
+        <th class="col-custo-peca" title="Custo de peça">Custo peça</th>
         <th class="col-valor">
           <button type="button" class="grid-sort-btn" [class.grid-sort-ativo]="colunaOrdenada('valor')" (click)="ordenar('valor')">
             Valor <span class="grid-sort-icon" aria-hidden="true">{{ iconeOrdenacao('valor') }}</span>
@@ -314,6 +315,11 @@
           <span>{{ dataEntradaLabel(os) | date:'dd/MM/yy':tz }}</span>
           <span class="col-data-hora" *ngIf="dataEntradaLabel(os)">{{ dataEntradaLabel(os) | date:'HH:mm':tz }}</span>
         </td>
+        <td
+          class="col-custo-peca"
+          [class.zerado]="custoPecaZerado(os)"
+          title="Custo de peça"
+        >{{ valorCompacto(custoPecaOs(os)) }}</td>
         <td class="col-valor">{{ valorCompacto(valorAVistaOs(os)) }}</td>
         <td class="col-acoes">
           <app-grid-acoes-os

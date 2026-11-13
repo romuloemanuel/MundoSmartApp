@@ -3,12 +3,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comissoes-origem.service';
+import { ComissaoLancamento, ComissaoOrigem, ComissoesOrigemService } from '../../../services/comissoes-origem.service';
+import { GridAcao } from '../../../components/grid-acao/grid-acao';
 
 @Component({
   selector: 'app-comissao-origem',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, GridAcao],
   template: `
     <div class="page">
       <div class="page-header">
@@ -93,6 +94,7 @@ import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comiss
                 <th>Custo</th>
                 <th>Líquido</th>
                 <th *ngIf="smartphones">Saiu</th>
+                <th *ngIf="!smartphones"></th>
               </tr>
             </thead>
             <tbody>
@@ -104,9 +106,34 @@ import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comiss
                 <td>{{ l.produto || '—' }}</td>
                 <td>{{ l.cliente }}</td>
                 <td>{{ moeda(l.valor) }}</td>
-                <td>{{ l.custo == null ? '—' : moeda(l.custo) }}</td>
+                <td *ngIf="smartphones">{{ l.custo == null ? '—' : moeda(l.custo) }}</td>
+                <td *ngIf="!smartphones">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    [(ngModel)]="l.custo"
+                    [name]="'custo' + chave(l)"
+                    [disabled]="salvandoChave === chave(l)"
+                  />
+                  <span class="editado" *ngIf="l.custoEditado">editado</span>
+                </td>
                 <td>{{ moeda(l.liquido) }}</td>
                 <td *ngIf="smartphones">{{ moeda(l.dinheiroPago) }}</td>
+                <td *ngIf="!smartphones" class="acoes">
+                  <app-grid-acao
+                    tipo="editar"
+                    titulo="Salvar custo desta venda"
+                    [disabled]="salvandoChave === chave(l)"
+                    (acao)="salvarCusto(l)"
+                  />
+                  <app-grid-acao
+                    tipo="excluir"
+                    titulo="Tirar esta venda dos relatórios"
+                    [disabled]="salvandoChave === chave(l)"
+                    (acao)="excluirVenda(l)"
+                  />
+                </td>
               </tr>
             </tbody>
           </table>
@@ -129,6 +156,9 @@ import { ComissaoOrigem, ComissoesOrigemService } from '../../../services/comiss
     table { width: 100%; border-collapse: collapse; background: #fff; }
     th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
     th { font-size: 12px; color: #475569; }
+    td input[type=number] { width: 110px; height: 32px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; }
+    .acoes { display: flex; gap: 6px; align-items: center; }
+    .editado { display: block; font-size: 11px; color: #0369a1; }
   `],
 })
 export class ComissaoOrigemPage implements OnInit, OnDestroy {
@@ -138,6 +168,7 @@ export class ComissaoOrigemPage implements OnInit, OnDestroy {
   relatorio: ComissaoOrigem | null = null;
   carregando = false;
   erro = '';
+  salvandoChave = '';
   private sub: Subscription | null = null;
 
   constructor(
@@ -156,7 +187,7 @@ export class ComissaoOrigemPage implements OnInit, OnDestroy {
   get explicacao(): string {
     return this.smartphones
       ? 'Aparelhos vendidos e trocados neste sistema. O produto é o que saiu. O líquido é o dinheiro que entrou menos o custo desse aparelho. Na troca, o que o cliente deixou não conta como venda.'
-      : 'Vendas de acessório e eletrônico do Bling, atualizadas sozinhas a cada 30 minutos. O relatório abre com o que já foi lido. Celular fica em Comissão de smartphones. O líquido é o valor do item menos o custo cadastrado no produto.';
+      : 'Vendas de acessório e eletrônico do Bling, atualizadas sozinhas a cada 30 minutos. O relatório abre com o que já foi lido. Celular fica em Comissão de smartphones. O líquido é o valor do item menos o custo cadastrado no produto. Dá para corrigir o custo. Venda excluída sai de todos os relatórios e não volta.';
   }
 
   ngOnInit(): void {
@@ -190,6 +221,38 @@ export class ComissaoOrigemPage implements OnInit, OnDestroy {
       error: () => {
         this.erro = 'Não foi possível gerar o relatório.';
         this.carregando = false;
+      },
+    });
+  }
+
+  chave(l: ComissaoLancamento): string {
+    return `${l.pedidoId ?? 0}-${l.itemId ?? 0}`;
+  }
+
+  salvarCusto(l: ComissaoLancamento): void {
+    this.aplicarLoja(l, { custo: Number(l.custo) || 0 });
+  }
+
+  excluirVenda(l: ComissaoLancamento): void {
+    if (!confirm('Esta venda sai da comissão, das receitas e dos demais relatórios. Não volta. Continuar?'))
+      return;
+    this.aplicarLoja(l, { excluida: true });
+  }
+
+  private aplicarLoja(l: ComissaoLancamento, body: { custo?: number; excluida?: boolean }): void {
+    const pedidoId = l.pedidoId;
+    const itemId = l.itemId;
+    if (pedidoId == null || itemId == null) return;
+    this.salvandoChave = this.chave(l);
+    this.erro = '';
+    this.api.atualizarLoja(pedidoId, itemId, body).subscribe({
+      next: () => {
+        this.salvandoChave = '';
+        this.carregar();
+      },
+      error: () => {
+        this.erro = 'Não foi possível atualizar esta venda.';
+        this.salvandoChave = '';
       },
     });
   }

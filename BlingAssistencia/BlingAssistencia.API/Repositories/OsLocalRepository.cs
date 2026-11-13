@@ -157,7 +157,8 @@ public class OsLocalRepository : IOsLocalRepository
             .Include(x => x.TecnicoNome)
             .Include(x => x.Retorno)
             .Include(x => x.PreferenciaContatoSelecionado)
-            .Include(x => x.LojaOrigem);
+            .Include(x => x.LojaOrigem)
+            .Include(x => x.Itens);
 
         var sort = OsListarOrdenacao.MontarSortMongo(filtros);
         var skip = (pagina - 1) * tamanho;

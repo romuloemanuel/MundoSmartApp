@@ -89,6 +89,7 @@ internal static class BlingLocalMappings
             ObservacoesInternas = local.ObservacoesInternas,
             LojaOrigem = OsLojaHelper.Normalizar(local.LojaOrigem),
             Itens = local.Itens,
+            CustoPecas = SomarCustoPecas(local.Itens),
             MarcaId = local.MarcaId,
             MarcaNome = local.MarcaNome,
             ModeloId = local.ModeloId,
@@ -204,6 +205,7 @@ internal static class BlingLocalMappings
             TipoPecaProblemaNome = local.TipoPecaProblemaNome,
             PreferenciaContatoSelecionado = local.PreferenciaContatoSelecionado,
             LojaOrigem = OsLojaHelper.Normalizar(local.LojaOrigem),
+            CustoPecas = SomarCustoPecas(local.Itens),
         };
 
         if (local.ContatoId.HasValue || !string.IsNullOrWhiteSpace(local.ContatoNome))
@@ -593,6 +595,20 @@ internal static class BlingLocalMappings
                 CriadoEm = j.CriadoEm
             })
             .ToList();
+    }
+
+    internal static decimal SomarCustoPecas(IEnumerable<BlingOrdemServicoItem>? itens)
+    {
+        if (itens is null) return 0;
+        decimal total = 0;
+        foreach (var item in itens)
+        {
+            if (string.Equals(item.TipoItem, "servico", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var qtd = item.Quantidade <= 0 ? 1 : item.Quantidade;
+            total += (item.CustoPeca ?? 0) * qtd;
+        }
+        return total;
     }
 
     private static string? NormalizarTipoContatoOrcamento(string? valor)

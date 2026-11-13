@@ -15,6 +15,8 @@ export interface ComissaoVendedor {
 }
 
 export interface ComissaoLancamento {
+  pedidoId?: number;
+  itemId?: number;
   data: string;
   tipo: string;
   vendedor: string;
@@ -24,6 +26,8 @@ export interface ComissaoLancamento {
   valor: number;
   dinheiroPago: number;
   custo: number | null;
+  custoEditado?: boolean;
+  excluida?: boolean;
   liquido: number;
 }
 
@@ -52,6 +56,14 @@ export class ComissoesOrigemService {
 
   loja(inicio: string, fim: string): Observable<ComissaoOrigem> {
     return this.http.get<ComissaoOrigem>(`${this.base}/loja`, { params: this.params(inicio, fim) });
+  }
+
+  atualizarLoja(
+    pedidoId: number,
+    itemId: number,
+    body: { custo?: number; excluida?: boolean },
+  ): Observable<ComissaoLancamento> {
+    return this.http.put<ComissaoLancamento>(`${this.base}/loja/${pedidoId}/${itemId}`, body);
   }
 
   private params(inicio: string, fim: string): HttpParams {

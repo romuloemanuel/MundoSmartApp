@@ -221,7 +221,7 @@ const FAIXA_VAZIA: ReceitaFaixa = { bruto: 0, custoItem: 0, custoLoja: 0, quanti
     <section class="painel" *ngIf="dados && !carregando">
       <h2>Vendas do Bling</h2>
       <p class="legenda-grafico">
-        Tire do relatório a venda que não deve contar. Informe o custo do item e o custo da loja quando o Bling não trouxer.
+        Tire do relatório a venda que não deve contar — ela não volta. Informe o custo do item e o custo da loja quando o Bling não trouxer.
       </p>
       <div class="filtros">
         <div class="form-group">
@@ -248,7 +248,7 @@ const FAIXA_VAZIA: ReceitaFaixa = { bruto: 0, custoItem: 0, custoLoja: 0, quanti
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let v of vendasBling" [class.fora]="v.excluida">
+            <tr *ngFor="let v of vendasBling">
               <td>{{ v.numero || v.pedidoId }}</td>
               <td>{{ dataBr(v.data) }}</td>
               <td>{{ v.clienteNome || '—' }}</td>
@@ -283,18 +283,10 @@ const FAIXA_VAZIA: ReceitaFaixa = { bruto: 0, custoItem: 0, custoLoja: 0, quanti
                   (acao)="salvarCustos(v)"
                 />
                 <app-grid-acao
-                  *ngIf="!v.excluida"
                   tipo="excluir"
-                  titulo="Tirar esta venda do relatório"
+                  titulo="Tirar esta venda dos relatórios"
                   [disabled]="salvandoId === v.pedidoId"
-                  (acao)="alternarExclusao(v, true)"
-                />
-                <app-grid-acao
-                  *ngIf="v.excluida"
-                  tipo="desfazer"
-                  titulo="Voltar esta venda ao relatório"
-                  [disabled]="salvandoId === v.pedidoId"
-                  (acao)="alternarExclusao(v, false)"
+                  (acao)="excluirVenda(v)"
                 />
               </td>
             </tr>
@@ -357,8 +349,6 @@ const FAIXA_VAZIA: ReceitaFaixa = { bruto: 0, custoItem: 0, custoLoja: 0, quanti
     td input[type=number] { width: 110px; height: 32px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; }
     .acoes { display: flex; gap: 6px; align-items: center; }
     .editado { display: block; font-size: 11px; color: #0369a1; }
-    tr.fora td { color: #94a3b8; }
-    tr.fora td:first-child { text-decoration: line-through; }
   `],
 })
 export class ReceitasPage implements OnInit {
@@ -536,8 +526,10 @@ export class ReceitasPage implements OnInit {
     });
   }
 
-  alternarExclusao(venda: ReceitaBlingVenda, excluida: boolean): void {
-    this.aplicarBling(venda.pedidoId, { excluida });
+  excluirVenda(venda: ReceitaBlingVenda): void {
+    if (!confirm('Esta venda sai das receitas, da comissão da loja e dos demais relatórios. Não volta. Continuar?'))
+      return;
+    this.aplicarBling(venda.pedidoId, { excluida: true });
   }
 
   private aplicarBling(pedidoId: number, body: { excluida?: boolean; custoItem?: number; custoLoja?: number }): void {
@@ -545,7 +537,9 @@ export class ReceitasPage implements OnInit {
     this.erroBling = '';
     this.receitas.atualizarBling(pedidoId, body).subscribe({
       next: atual => {
-        this.vendasBling = this.vendasBling.map(v => v.pedidoId === atual.pedidoId ? atual : v);
+        this.vendasBling = this.vendasBling
+          .map(v => v.pedidoId === atual.pedidoId ? atual : v)
+          .filter(v => !v.excluida);
         this.salvandoId = null;
         this.carregar(true);
       },

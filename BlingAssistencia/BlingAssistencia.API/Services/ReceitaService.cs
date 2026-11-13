@@ -24,6 +24,8 @@ public sealed class ReceitaService : IReceitaService
     private readonly IOsLocalRepository _os;
     private readonly IEstoqueLoteService _estoque;
     private readonly IReceitaBlingVendaRepository _blingVendas;
+    private readonly IBlingVendaExclusaoRepository _exclusoes;
+    private readonly IBlingComissaoLojaRepository _comissaoLoja;
     private readonly IBlingAuthService _auth;
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<ReceitaService> _log;
@@ -33,6 +35,8 @@ public sealed class ReceitaService : IReceitaService
         IOsLocalRepository os,
         IEstoqueLoteService estoque,
         IReceitaBlingVendaRepository blingVendas,
+        IBlingVendaExclusaoRepository exclusoes,
+        IBlingComissaoLojaRepository comissaoLoja,
         IBlingAuthService auth,
         IHttpClientFactory httpFactory,
         ILogger<ReceitaService> log)
@@ -41,6 +45,8 @@ public sealed class ReceitaService : IReceitaService
         _os = os;
         _estoque = estoque;
         _blingVendas = blingVendas;
+        _exclusoes = exclusoes;
+        _comissaoLoja = comissaoLoja;
         _auth = auth;
         _httpFactory = httpFactory;
         _log = log;
@@ -82,10 +88,14 @@ public sealed class ReceitaService : IReceitaService
     {
         var aviso = await SincronizarBlingAsync(inicio.Date, fim.Date, cancellationToken);
         var lista = await _blingVendas.ListarNoPeriodoAsync(inicio.Date, fim.Date, cancellationToken);
+        var excluidos = await _exclusoes.PedidoIdsAsync(cancellationToken);
         return new ReceitaBlingVendasResponse
         {
             Aviso = aviso,
-            Vendas = lista.Select(ParaDto).ToList(),
+            Vendas = lista
+                .Where(v => !v.Excluida && !excluidos.Contains(v.PedidoId))
+                .Select(ParaDto)
+                .ToList(),
         };
     }
 
@@ -96,8 +106,12 @@ public sealed class ReceitaService : IReceitaService
     {
         var venda = await _blingVendas.ObterPorPedidoIdAsync(pedidoId, cancellationToken)
             ?? throw new InvalidOperationException("Esta venda do Bling ainda não está no relatório.");
-        if (request.Excluida is not null)
-            venda.Excluida = request.Excluida.Value;
+        if (request.Excluida == true)
+        {
+            await _exclusoes.MarcarAsync(pedidoId, cancellationToken);
+            await _comissaoLoja.MarcarPedidoExcluidoAsync(pedidoId, cancellationToken);
+            venda.Excluida = true;
+        }
         if (request.CustoItem is not null)
         {
             venda.CustoItem = Round(Math.Max(0, request.CustoItem.Value));
@@ -274,6 +288,7 @@ public sealed class ReceitaService : IReceitaService
     {
         var avisoSync = await SincronizarBlingAsync(inicio, fim, cancellationToken);
         var vendas = await _blingVendas.ListarNoPeriodoAsync(inicio, fim, cancellationToken);
+        var excluidos = await _exclusoes.PedidoIdsAsync(cancellationToken);
         var dest = painel.Periodos;
         var contouPedido = false;
         var algumCusto = false;
@@ -281,7 +296,7 @@ public sealed class ReceitaService : IReceitaService
 
         foreach (var venda in vendas)
         {
-            if (venda.Excluida)
+            if (venda.Excluida || excluidos.Contains(venda.PedidoId))
             {
                 excluídas++;
                 continue;
@@ -321,6 +336,7 @@ public sealed class ReceitaService : IReceitaService
         var dataFinal = fim.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var truncou = false;
         var leu = false;
+        var excluidos = await _exclusoes.PedidoIdsAsync(cancellationToken);
 
         for (var pagina = 1; pagina <= 30; pagina++)
         {
@@ -345,6 +361,8 @@ public sealed class ReceitaService : IReceitaService
                 if (Cancelado(item)) continue;
                 var snapshot = LerPedido(item);
                 if (snapshot is null) continue;
+                if (excluidos.Contains(snapshot.PedidoId))
+                    snapshot.Excluida = true;
                 await _blingVendas.UpsertDoBlingAsync(snapshot, cancellationToken);
             }
 

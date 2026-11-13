@@ -21,6 +21,7 @@ public interface IAparelhoLojaService
     Task<AparelhoLojaPainelDto> LiberarAsync(string aparelhoId, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> InformarImeiAsync(string aparelhoId, string? imei, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> EditarCadastroAsync(string aparelhoId, AparelhoEntradaRequest pedido, CancellationToken cancellationToken = default);
+    Task<AparelhoLojaDto> ObterAsync(string aparelhoId, CancellationToken cancellationToken = default);
     Task<OsAbertaConsultaDto> ConsultarOsAbertaAsync(string? numero, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> EstornarAsync(string operacaoId, CancellationToken cancellationToken = default);
     Task<AparelhoLojaPainelDto> AlterarVendedorAsync(string operacaoId, VendedorRef? vendedor, CancellationToken cancellationToken = default);
@@ -953,7 +954,9 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     {
         var aparelho = await _repo.ObterAparelhoAsync(aparelhoId, cancellationToken)
             ?? throw new InvalidOperationException("Aparelho não encontrado no estoque.");
-        if (!EstaNaLoja(aparelho.Status))
+        if (aparelho.Status == AparelhoLojaStatus.Estornado)
+            throw new InvalidOperationException("Esse aparelho foi desfeito. O cadastro não pode mais ser alterado.");
+        if (aparelho.Status is not (AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia or AparelhoLojaStatus.Vendido))
             throw new InvalidOperationException("Esse aparelho já saiu. O cadastro não pode mais ser alterado.");
 
         var entrada = await NormalizarEntradaAsync(pedido, cancellationToken, aparelho.Id);
@@ -991,6 +994,14 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         return await MontarPainelAsync(cancellationToken);
     }
 
+    public async Task<AparelhoLojaDto> ObterAsync(string aparelhoId, CancellationToken cancellationToken = default)
+    {
+        var aparelho = await _repo.ObterAparelhoAsync(aparelhoId, cancellationToken)
+            ?? throw new InvalidOperationException("Aparelho não encontrado.");
+        var cadastro = new MapaVendedores(await _usuarios.ListarAsync(cancellationToken));
+        return ParaDto(aparelho, cadastro);
+    }
+
     private async Task AplicarValorPagoAsync(
         AparelhoLojaData aparelho,
         decimal informado,
@@ -1001,38 +1012,48 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             throw new InvalidOperationException("Informe o valor pago pela loja.");
 
         aparelho.Custo = pago;
-        if (string.IsNullOrWhiteSpace(aparelho.OperacaoEntradaId))
-            return;
-
-        var operacao = await _repo.ObterOperacaoAsync(aparelho.OperacaoEntradaId, cancellationToken);
-        if (operacao is null || operacao.Status != AparelhoOperacaoStatus.Ativa)
-            return;
-
-        if (operacao.Tipo == AparelhoOperacaoTipo.Compra)
+        if (!string.IsNullOrWhiteSpace(aparelho.OperacaoEntradaId))
         {
-            operacao.DinheiroPago = pago;
-            operacao.ValorAvaliado = pago;
-            if (operacao.Entrada is not null)
+            var operacao = await _repo.ObterOperacaoAsync(aparelho.OperacaoEntradaId, cancellationToken);
+            if (operacao is { Status: AparelhoOperacaoStatus.Ativa })
             {
-                operacao.Entrada.Preco = pago;
-                operacao.Entrada.Custo = pago;
-            }
+                if (operacao.Tipo == AparelhoOperacaoTipo.Compra)
+                {
+                    operacao.DinheiroPago = pago;
+                    operacao.ValorAvaliado = pago;
+                    if (operacao.Entrada is not null)
+                    {
+                        operacao.Entrada.Preco = pago;
+                        operacao.Entrada.Custo = pago;
+                    }
 
-            await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
-            return;
+                    await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
+                }
+                else if (operacao.Tipo == AparelhoOperacaoTipo.Troca)
+                {
+                    var movimento = MovimentosDaEntrada(operacao).FirstOrDefault(m => m.AparelhoId == aparelho.Id);
+                    if (movimento is not null)
+                    {
+                        movimento.Preco = pago;
+                        movimento.Custo = pago;
+                        operacao.ValorAvaliado = Dinheiro(MovimentosDaEntrada(operacao).Sum(m => m.Preco));
+                        await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
+                    }
+                }
+            }
         }
 
-        if (operacao.Tipo != AparelhoOperacaoTipo.Troca)
+        if (string.IsNullOrWhiteSpace(aparelho.OperacaoSaidaId))
             return;
 
-        var movimento = MovimentosDaEntrada(operacao).FirstOrDefault(m => m.AparelhoId == aparelho.Id);
-        if (movimento is null)
+        var saidaOp = await _repo.ObterOperacaoAsync(aparelho.OperacaoSaidaId, cancellationToken);
+        if (saidaOp is not { Status: AparelhoOperacaoStatus.Ativa } || saidaOp.Saida is null)
+            return;
+        if (!string.Equals(saidaOp.Saida.AparelhoId, aparelho.Id, StringComparison.Ordinal))
             return;
 
-        movimento.Preco = pago;
-        movimento.Custo = pago;
-        operacao.ValorAvaliado = Dinheiro(MovimentosDaEntrada(operacao).Sum(m => m.Preco));
-        await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
+        saidaOp.Saida.Custo = Dinheiro(pago + aparelho.CustoPecas);
+        await _repo.SalvarOperacaoAsync(saidaOp, cancellationToken);
     }
 
     private static void ExigirImeiParaSair(AparelhoLojaData aparelho)

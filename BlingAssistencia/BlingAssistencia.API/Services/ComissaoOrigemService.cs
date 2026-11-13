@@ -13,6 +13,7 @@ public interface IComissaoOrigemService
 {
     Task<ComissaoOrigemDto> SmartphonesAsync(string? inicio, string? fim, CancellationToken cancellationToken = default);
     Task<ComissaoOrigemDto> LojaAsync(string? inicio, string? fim, CancellationToken cancellationToken = default);
+    Task<ComissaoLancamentoDto> AtualizarLojaAsync(long pedidoId, long itemId, ComissaoLojaAtualizarRequest request, CancellationToken cancellationToken = default);
     Task AtualizarLojaAsync(CancellationToken cancellationToken = default);
 }
 
@@ -20,6 +21,8 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
 {
     private readonly IAparelhoLojaRepository _loja;
     private readonly IBlingComissaoLojaRepository _cache;
+    private readonly IBlingVendaExclusaoRepository _exclusoes;
+    private readonly IReceitaBlingVendaRepository _receitaBling;
     private readonly IBlingAuthService _auth;
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<ComissaoOrigemService> _log;
@@ -28,12 +31,16 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
     public ComissaoOrigemService(
         IAparelhoLojaRepository loja,
         IBlingComissaoLojaRepository cache,
+        IBlingVendaExclusaoRepository exclusoes,
+        IReceitaBlingVendaRepository receitaBling,
         IBlingAuthService auth,
         IHttpClientFactory httpFactory,
         ILogger<ComissaoOrigemService> log)
     {
         _loja = loja;
         _cache = cache;
+        _exclusoes = exclusoes;
+        _receitaBling = receitaBling;
         _auth = auth;
         _httpFactory = httpFactory;
         _log = log;
@@ -85,19 +92,36 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
         if (de < janelaDe)
             aviso += " A atualização automática começa em " + janelaDe.ToString("dd/MM/yyyy", CultureInfo.GetCultureInfo("pt-BR")) + ".";
 
-        var lancamentos = salvas.Select(x => new ComissaoLancamentoDto
-        {
-            Data = x.Data,
-            Tipo = "venda",
-            Vendedor = x.Vendedor,
-            Descricao = x.Pedido,
-            Produto = x.Produto,
-            Cliente = x.Cliente,
-            Valor = x.Valor,
-            Custo = x.Custo,
-            Liquido = x.Valor - (x.Custo ?? 0),
-        }).ToList();
+        var excluidos = await _exclusoes.PedidoIdsAsync(cancellationToken);
+        var lancamentos = salvas
+            .Where(x => !x.Excluida && !excluidos.Contains(x.BlingPedidoId))
+            .Select(ParaLancamento)
+            .ToList();
         return Montar(lancamentos, aviso);
+    }
+
+    public async Task<ComissaoLancamentoDto> AtualizarLojaAsync(
+        long pedidoId,
+        long itemId,
+        ComissaoLojaAtualizarRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var linha = await _cache.ObterAsync(pedidoId, itemId, cancellationToken)
+            ?? throw new InvalidOperationException("Esta venda do Bling ainda não está no relatório de comissão.");
+        if (request.Excluida == true)
+        {
+            await _exclusoes.MarcarAsync(pedidoId, cancellationToken);
+            await _cache.MarcarPedidoExcluidoAsync(pedidoId, cancellationToken);
+            await _receitaBling.MarcarExcluidaAsync(pedidoId, cancellationToken);
+            linha.Excluida = true;
+        }
+        if (request.Custo is not null && !linha.Excluida)
+        {
+            linha.Custo = Math.Round(Math.Max(0, request.Custo.Value), 2, MidpointRounding.AwayFromZero);
+            linha.CustoEditado = true;
+            await _cache.SalvarAsync(linha, cancellationToken);
+        }
+        return ParaLancamento(linha);
     }
 
     public async Task AtualizarLojaAsync(CancellationToken cancellationToken = default)
@@ -130,6 +154,7 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
         var dataFinal = ate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var gravar = new List<BlingComissaoLojaData>();
         var produtos = new Dictionary<long, (string Nome, decimal? Custo)>();
+        var excluidos = await _exclusoes.PedidoIdsAsync(cancellationToken);
         var agora = DateTime.UtcNow;
         var leu = false;
         var incompleto = false;
@@ -164,6 +189,7 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
                 var numero = LerTexto(item, "numero");
                 var (vendedor, _) = LerVendedor(item);
                 var pedidoId = LerLong(item, "id");
+                if (excluidos.Contains(pedidoId)) continue;
                 var cliente = LerCliente(item);
                 var dia = dataPedido.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
                 var descricao = string.IsNullOrWhiteSpace(numero) ? "Pedido de venda" : $"Pedido {numero}";
@@ -228,13 +254,32 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
             Produto = produto,
             Cliente = cliente,
             Valor = valor,
+            CustoOrigem = custo,
             Custo = custo,
             AtualizadoEm = agora,
         };
 
+    private static ComissaoLancamentoDto ParaLancamento(BlingComissaoLojaData x) => new()
+    {
+        PedidoId = x.BlingPedidoId,
+        ItemId = x.BlingItemId,
+        Data = x.Data,
+        Tipo = "venda",
+        Vendedor = x.Vendedor,
+        Descricao = x.Pedido,
+        Produto = x.Produto,
+        Cliente = x.Cliente,
+        Valor = x.Valor,
+        Custo = x.Custo,
+        CustoEditado = x.CustoEditado,
+        Excluida = x.Excluida,
+        Liquido = x.Excluida ? 0 : x.Valor - (x.Custo ?? 0),
+    };
+
     private static ComissaoOrigemDto Montar(List<ComissaoLancamentoDto> lancamentos, string? aviso)
     {
-        var porVendedor = lancamentos
+        var ativos = lancamentos.Where(l => !l.Excluida).ToList();
+        var porVendedor = ativos
             .GroupBy(l => l.Vendedor, StringComparer.OrdinalIgnoreCase)
             .Select(g => new ComissaoVendedorDto
             {
@@ -260,13 +305,13 @@ public sealed class ComissaoOrigemService : IComissaoOrigemService
         return new ComissaoOrigemDto
         {
             Aviso = aviso,
-            Total = lancamentos.Sum(x => x.Valor),
-            DinheiroPago = lancamentos.Sum(x => x.DinheiroPago),
-            Custo = lancamentos.Sum(x => x.Custo ?? 0),
-            Liquido = lancamentos.Sum(x => x.Liquido),
-            Quantidade = lancamentos.Count,
-            Vendas = lancamentos.Count(x => x.Tipo is AparelhoOperacaoTipo.Venda or "venda"),
-            Trocas = lancamentos.Count(x => x.Tipo == AparelhoOperacaoTipo.Troca),
+            Total = ativos.Sum(x => x.Valor),
+            DinheiroPago = ativos.Sum(x => x.DinheiroPago),
+            Custo = ativos.Sum(x => x.Custo ?? 0),
+            Liquido = ativos.Sum(x => x.Liquido),
+            Quantidade = ativos.Count,
+            Vendas = ativos.Count(x => x.Tipo is AparelhoOperacaoTipo.Venda or "venda"),
+            Trocas = ativos.Count(x => x.Tipo == AparelhoOperacaoTipo.Troca),
             Vendedores = porVendedor,
             Lancamentos = lancamentos,
         };
