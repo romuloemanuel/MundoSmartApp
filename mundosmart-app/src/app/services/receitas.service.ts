@@ -28,6 +28,24 @@ export interface ReceitaPainel {
   periodos: ReceitaPeriodo[];
 }
 
+export interface ReceitaBlingVenda {
+  pedidoId: number;
+  numero: string;
+  data: string;
+  clienteNome: string;
+  bruto: number;
+  custoItem: number;
+  custoLoja: number;
+  custoItemEditado: boolean;
+  custoLojaEditado: boolean;
+  excluida: boolean;
+}
+
+export interface ReceitaBlingVendas {
+  aviso?: string | null;
+  vendas: ReceitaBlingVenda[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ReceitasService {
   private readonly base = `${environment.apiUrl}/receitas`;
@@ -39,5 +57,17 @@ export class ReceitasService {
       .set('agrupamento', agrupamento)
       .set('periodos', String(periodos));
     return this.http.get<ReceitaPainel>(this.base, { params });
+  }
+
+  vendasBling(inicio: string, fim: string): Observable<ReceitaBlingVendas> {
+    const params = new HttpParams().set('inicio', inicio).set('fim', fim);
+    return this.http.get<ReceitaBlingVendas>(`${this.base}/bling`, { params });
+  }
+
+  atualizarBling(
+    pedidoId: number,
+    body: { excluida?: boolean; custoItem?: number; custoLoja?: number },
+  ): Observable<ReceitaBlingVenda> {
+    return this.http.put<ReceitaBlingVenda>(`${this.base}/bling/${pedidoId}`, body);
   }
 }

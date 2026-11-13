@@ -1,7 +1,14 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ReceitaFaixa, ReceitaPainel, ReceitaPeriodo, ReceitasService } from '../../services/receitas.service';
+import { GridAcao } from '../../components/grid-acao/grid-acao';
+import {
+  ReceitaBlingVenda,
+  ReceitaFaixa,
+  ReceitaPainel,
+  ReceitaPeriodo,
+  ReceitasService,
+} from '../../services/receitas.service';
 
 type CategoriaId = 'bling' | 'celulares' | 'assistencia';
 type LeituraId = 'bruto' | 'depoisItem' | 'resultado';
@@ -38,7 +45,7 @@ const FAIXA_VAZIA: ReceitaFaixa = { bruto: 0, custoItem: 0, custoLoja: 0, quanti
 @Component({
   selector: 'app-receitas',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, GridAcao],
   template: `
     <div class="page-header">
       <h1>Receitas</h1>
@@ -211,6 +218,94 @@ const FAIXA_VAZIA: ReceitaFaixa = { bruto: 0, custoItem: 0, custoLoja: 0, quanti
       </div>
     </section>
 
+    <section class="painel" *ngIf="dados && !carregando">
+      <h2>Vendas do Bling</h2>
+      <p class="legenda-grafico">
+        Tire do relatório a venda que não deve contar. Informe o custo do item e o custo da loja quando o Bling não trouxer.
+      </p>
+      <div class="filtros">
+        <div class="form-group">
+          <label>Período</label>
+          <select [(ngModel)]="periodoBlingChave" (ngModelChange)="carregarBling()">
+            <option *ngFor="let p of dados.periodos" [ngValue]="p.chave">{{ p.rotulo }}</option>
+          </select>
+        </div>
+      </div>
+      <p class="aviso" *ngIf="avisoBlingLista">{{ avisoBlingLista }}</p>
+      <p class="erro" *ngIf="erroBling">{{ erroBling }}</p>
+      <p class="vazio" *ngIf="carregandoBling">Carregando vendas…</p>
+      <div class="tabela-wrap" *ngIf="!carregandoBling">
+        <table>
+          <thead>
+            <tr>
+              <th>Pedido</th>
+              <th>Data</th>
+              <th>Cliente</th>
+              <th>Faturamento</th>
+              <th>Custo do item</th>
+              <th>Custo da loja</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let v of vendasBling" [class.fora]="v.excluida">
+              <td>{{ v.numero || v.pedidoId }}</td>
+              <td>{{ dataBr(v.data) }}</td>
+              <td>{{ v.clienteNome || '—' }}</td>
+              <td>{{ moeda(v.bruto) }}</td>
+              <td>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  [(ngModel)]="v.custoItem"
+                  [name]="'custoItem' + v.pedidoId"
+                  [disabled]="salvandoId === v.pedidoId"
+                />
+                <span class="editado" *ngIf="v.custoItemEditado">editado</span>
+              </td>
+              <td>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  [(ngModel)]="v.custoLoja"
+                  [name]="'custoLoja' + v.pedidoId"
+                  [disabled]="salvandoId === v.pedidoId"
+                />
+                <span class="editado" *ngIf="v.custoLojaEditado">editado</span>
+              </td>
+              <td class="acoes">
+                <app-grid-acao
+                  tipo="editar"
+                  titulo="Salvar custos desta venda"
+                  [disabled]="salvandoId === v.pedidoId"
+                  (acao)="salvarCustos(v)"
+                />
+                <app-grid-acao
+                  *ngIf="!v.excluida"
+                  tipo="excluir"
+                  titulo="Tirar esta venda do relatório"
+                  [disabled]="salvandoId === v.pedidoId"
+                  (acao)="alternarExclusao(v, true)"
+                />
+                <app-grid-acao
+                  *ngIf="v.excluida"
+                  tipo="desfazer"
+                  titulo="Voltar esta venda ao relatório"
+                  [disabled]="salvandoId === v.pedidoId"
+                  (acao)="alternarExclusao(v, false)"
+                />
+              </td>
+            </tr>
+            <tr *ngIf="!vendasBling.length">
+              <td colspan="7">Nenhuma venda do Bling neste período.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <ul class="notas" *ngIf="dados && !carregando">
       <li *ngFor="let c of categorias"><strong>{{ c.nome }}.</strong> {{ c.explicacao }}</li>
     </ul>
@@ -259,6 +354,11 @@ const FAIXA_VAZIA: ReceitaFaixa = { bruto: 0, custoItem: 0, custoLoja: 0, quanti
     .total-linha td { font-weight: 700; background: #f8fafc; }
     .notas { padding-left: 18px; max-width: 860px; }
     .notas li { margin-bottom: 8px; }
+    td input[type=number] { width: 110px; height: 32px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0 8px; }
+    .acoes { display: flex; gap: 6px; align-items: center; }
+    .editado { display: block; font-size: 11px; color: #0369a1; }
+    tr.fora td { color: #94a3b8; }
+    tr.fora td:first-child { text-decoration: line-through; }
   `],
 })
 export class ReceitasPage implements OnInit {
@@ -267,7 +367,7 @@ export class ReceitasPage implements OnInit {
       id: 'bling',
       nome: 'Bling',
       cor: '#1d4ed8',
-      explicacao: 'Faturamento bruto é o total dos pedidos de acessórios e eletrônicos que não foram cancelados. O custo do item e o custo da loja só entram se o pedido trouxer esses valores. A lista de vendas do Bling em geral não traz custo, e o aviso deixa isso claro.',
+      explicacao: 'Faturamento bruto é o total dos pedidos de acessórios e eletrônicos que não foram cancelados e que continuam no relatório. O custo do item e o custo da loja vêm do pedido, ou do valor informado na lista de vendas abaixo.',
     },
     {
       id: 'celulares',
@@ -297,6 +397,12 @@ export class ReceitasPage implements OnInit {
   carregando = false;
   erro = '';
   aviso = '';
+  periodoBlingChave = '';
+  vendasBling: ReceitaBlingVenda[] = [];
+  carregandoBling = false;
+  avisoBlingLista = '';
+  erroBling = '';
+  salvandoId: number | null = null;
 
   constructor(private receitas: ReceitasService) {}
 
@@ -328,14 +434,19 @@ export class ReceitasPage implements OnInit {
     this.ligadasIds = new Set(this.ligadasIds);
   }
 
-  carregar(): void {
-    this.carregando = true;
+  carregar(silencioso = false): void {
+    if (!silencioso) this.carregando = true;
     this.erro = '';
     this.receitas.painel(this.agrupamento, this.quantidade).subscribe({
       next: painel => {
         this.dados = painel;
         this.aviso = painel.avisoBling || '';
         this.carregando = false;
+        const chaves = painel.periodos.map(p => p.chave);
+        if (!chaves.includes(this.periodoBlingChave)) {
+          this.periodoBlingChave = this.ultimo?.chave || chaves[chaves.length - 1] || '';
+        }
+        if (!silencioso) this.carregarBling();
       },
       error: () => {
         this.erro = 'Não foi possível carregar as receitas.';
@@ -389,6 +500,60 @@ export class ReceitasPage implements OnInit {
 
   moeda(valor: number): string {
     return (valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  dataBr(iso: string): string {
+    const partes = (iso || '').split('-');
+    if (partes.length !== 3) return iso || '—';
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+
+  carregarBling(): void {
+    const periodo = this.dados?.periodos.find(p => p.chave === this.periodoBlingChave);
+    if (!periodo) {
+      this.vendasBling = [];
+      return;
+    }
+    this.carregandoBling = true;
+    this.erroBling = '';
+    this.receitas.vendasBling(periodo.inicio, periodo.fim).subscribe({
+      next: lista => {
+        this.vendasBling = lista.vendas || [];
+        this.avisoBlingLista = lista.aviso || '';
+        this.carregandoBling = false;
+      },
+      error: () => {
+        this.erroBling = 'Não foi possível carregar as vendas do Bling.';
+        this.carregandoBling = false;
+      },
+    });
+  }
+
+  salvarCustos(venda: ReceitaBlingVenda): void {
+    this.aplicarBling(venda.pedidoId, {
+      custoItem: Number(venda.custoItem) || 0,
+      custoLoja: Number(venda.custoLoja) || 0,
+    });
+  }
+
+  alternarExclusao(venda: ReceitaBlingVenda, excluida: boolean): void {
+    this.aplicarBling(venda.pedidoId, { excluida });
+  }
+
+  private aplicarBling(pedidoId: number, body: { excluida?: boolean; custoItem?: number; custoLoja?: number }): void {
+    this.salvandoId = pedidoId;
+    this.erroBling = '';
+    this.receitas.atualizarBling(pedidoId, body).subscribe({
+      next: atual => {
+        this.vendasBling = this.vendasBling.map(v => v.pedidoId === atual.pedidoId ? atual : v);
+        this.salvandoId = null;
+        this.carregar(true);
+      },
+      error: () => {
+        this.erroBling = 'Não foi possível atualizar esta venda.';
+        this.salvandoId = null;
+      },
+    });
   }
 
   get barras() {

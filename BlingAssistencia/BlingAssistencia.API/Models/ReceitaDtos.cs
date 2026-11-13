@@ -32,3 +32,30 @@ public class ReceitaFaixaDto
     public decimal CustoLoja { get; set; }
     public int Quantidade { get; set; }
 }
+
+public class ReceitaBlingVendaDto
+{
+    public long PedidoId { get; set; }
+    public string Numero { get; set; } = string.Empty;
+    public string Data { get; set; } = string.Empty;
+    public string ClienteNome { get; set; } = string.Empty;
+    public decimal Bruto { get; set; }
+    public decimal CustoItem { get; set; }
+    public decimal CustoLoja { get; set; }
+    public bool CustoItemEditado { get; set; }
+    public bool CustoLojaEditado { get; set; }
+    public bool Excluida { get; set; }
+}
+
+public class ReceitaBlingVendasResponse
+{
+    public string? Aviso { get; set; }
+    public List<ReceitaBlingVendaDto> Vendas { get; set; } = [];
+}
+
+public class ReceitaBlingVendaAtualizarRequest
+{
+    public bool? Excluida { get; set; }
+    public decimal? CustoItem { get; set; }
+    public decimal? CustoLoja { get; set; }
+}

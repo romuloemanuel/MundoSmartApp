@@ -9,6 +9,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using MundoSmart.BlingAssistencia.API.Config;
+using MundoSmart.BlingAssistencia.API.Models.Mongo;
+using MundoSmart.BlingAssistencia.API.Repositories;
 using MundoSmart.BlingAssistencia.API.Services;
 using MundoSmart.BlingAssistencia.API.Settings;
 
@@ -1322,6 +1325,47 @@ public class LojaRegrasTests
         Assert.Equal(1500m, Num(celDepois["bruto"]) - Num(celAntes["bruto"]));
         Assert.Equal(1000m, Num(celDepois["custoItem"]) - Num(celAntes["custoItem"]));
         Assert.Equal(0m, Num(celDepois["custoLoja"]) - Num(celAntes["custoLoja"]));
+    }
+
+    [Fact]
+    public async Task Receita_do_bling_permite_excluir_venda_e_editar_custos()
+    {
+        var pedidoId = 8_000_000_000L + DateTime.UtcNow.Ticks % 1_000_000_000L + Interlocked.Increment(ref _seq);
+        var hoje = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, HorarioBrasil.TimeZone).Date;
+        var antes = await PeriodoAtual();
+        var repo = _factory.Services.GetRequiredService<IReceitaBlingVendaRepository>();
+        await repo.SalvarAsync(new ReceitaBlingVendaData
+        {
+            PedidoId = pedidoId,
+            Numero = "T" + pedidoId,
+            Data = hoje,
+            ClienteNome = "Cliente Bling",
+            Bruto = 200,
+            CustoItem = 0,
+            CustoLoja = 0,
+        });
+
+        var editada = await Put($"/api/receitas/bling/{pedidoId}", new { custoItem = 50m, custoLoja = 20m });
+        Assert.Equal(50m, Num(editada["custoItem"]));
+        Assert.Equal(20m, Num(editada["custoLoja"]));
+        Assert.True(editada["custoItemEditado"]!.GetValue<bool>());
+        var meio = await PeriodoAtual();
+        Assert.Equal(200m, Num(meio["bling"]!["bruto"]) - Num(antes["bling"]!["bruto"]));
+        Assert.Equal(50m, Num(meio["bling"]!["custoItem"]) - Num(antes["bling"]!["custoItem"]));
+        Assert.Equal(20m, Num(meio["bling"]!["custoLoja"]) - Num(antes["bling"]!["custoLoja"]));
+
+        var fora = await Put($"/api/receitas/bling/{pedidoId}", new { excluida = true });
+        Assert.True(fora["excluida"]!.GetValue<bool>());
+        var depois = await PeriodoAtual();
+        Assert.Equal(0m, Num(depois["bling"]!["bruto"]) - Num(antes["bling"]!["bruto"]));
+        Assert.Equal(0m, Num(depois["bling"]!["custoItem"]) - Num(antes["bling"]!["custoItem"]));
+        Assert.Equal(0m, Num(depois["bling"]!["custoLoja"]) - Num(antes["bling"]!["custoLoja"]));
+
+        var lista = await Get($"/api/receitas/bling?inicio={hoje:yyyy-MM-dd}&fim={hoje:yyyy-MM-dd}");
+        var encontrada = lista["vendas"]!.AsArray().FirstOrDefault(v => v?["pedidoId"]?.GetValue<long>() == pedidoId);
+        Assert.NotNull(encontrada);
+        Assert.True(encontrada!["excluida"]!.GetValue<bool>());
+        Assert.Equal(50m, Num(encontrada["custoItem"]));
     }
 
     private async Task<JsonObject> PeriodoAtual()

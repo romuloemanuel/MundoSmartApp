@@ -86,6 +86,7 @@ builder.Services.AddSingleton<IAparelhoCodigoEstoque, AparelhoCodigoEstoque>();
 builder.Services.AddSingleton<IAparelhoLojaService, AparelhoLojaService>();
 builder.Services.AddSingleton<IFollowUpCelularRepository, FollowUpCelularRepository>();
 builder.Services.AddSingleton<IFollowUpCelularService, FollowUpCelularService>();
+builder.Services.AddSingleton<IReceitaBlingVendaRepository, ReceitaBlingVendaRepository>();
 builder.Services.AddSingleton<IReceitaService, ReceitaService>();
 builder.Services.AddSingleton<IControleCustoRepository, ControleCustoRepository>();
 builder.Services.AddSingleton<IControleCustoService, ControleCustoService>();
@@ -346,6 +347,7 @@ try
     await tecnicosRepo.EnsureIndexesAsync();
     await tecnicosRepo.GarantirSeedAsync(["Rômulo", "Liniker"]);
     Console.WriteLine("[MundoSmart API] Técnicos seed: Rômulo, Liniker.");
+    await app.Services.GetRequiredService<IReceitaBlingVendaRepository>().EnsureIndexesAsync();
     var controleCustoRepo = app.Services.GetRequiredService<IControleCustoRepository>();
     await controleCustoRepo.EnsureIndexesAsync();
     await controleCustoRepo.GarantirColaboradoresAsync(ControleCustoModeloInicial.Colaboradores);

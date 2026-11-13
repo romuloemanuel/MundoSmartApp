@@ -13,6 +13,8 @@ namespace MundoSmart.BlingAssistencia.API.Services;
 public interface IReceitaService
 {
     Task<ReceitaPainelDto> MontarAsync(string? agrupamento, int periodos, CancellationToken cancellationToken = default);
+    Task<ReceitaBlingVendasResponse> ListarBlingAsync(DateTime inicio, DateTime fim, CancellationToken cancellationToken = default);
+    Task<ReceitaBlingVendaDto> AtualizarBlingAsync(long pedidoId, ReceitaBlingVendaAtualizarRequest request, CancellationToken cancellationToken = default);
 }
 
 public sealed class ReceitaService : IReceitaService
@@ -21,6 +23,7 @@ public sealed class ReceitaService : IReceitaService
     private readonly IAparelhoLojaRepository _loja;
     private readonly IOsLocalRepository _os;
     private readonly IEstoqueLoteService _estoque;
+    private readonly IReceitaBlingVendaRepository _blingVendas;
     private readonly IBlingAuthService _auth;
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<ReceitaService> _log;
@@ -29,6 +32,7 @@ public sealed class ReceitaService : IReceitaService
         IAparelhoLojaRepository loja,
         IOsLocalRepository os,
         IEstoqueLoteService estoque,
+        IReceitaBlingVendaRepository blingVendas,
         IBlingAuthService auth,
         IHttpClientFactory httpFactory,
         ILogger<ReceitaService> log)
@@ -36,6 +40,7 @@ public sealed class ReceitaService : IReceitaService
         _loja = loja;
         _os = os;
         _estoque = estoque;
+        _blingVendas = blingVendas;
         _auth = auth;
         _httpFactory = httpFactory;
         _log = log;
@@ -68,6 +73,43 @@ public sealed class ReceitaService : IReceitaService
         foreach (var periodo in painel.Periodos)
             Arredondar(periodo);
         return painel;
+    }
+
+    public async Task<ReceitaBlingVendasResponse> ListarBlingAsync(
+        DateTime inicio,
+        DateTime fim,
+        CancellationToken cancellationToken = default)
+    {
+        var aviso = await SincronizarBlingAsync(inicio.Date, fim.Date, cancellationToken);
+        var lista = await _blingVendas.ListarNoPeriodoAsync(inicio.Date, fim.Date, cancellationToken);
+        return new ReceitaBlingVendasResponse
+        {
+            Aviso = aviso,
+            Vendas = lista.Select(ParaDto).ToList(),
+        };
+    }
+
+    public async Task<ReceitaBlingVendaDto> AtualizarBlingAsync(
+        long pedidoId,
+        ReceitaBlingVendaAtualizarRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var venda = await _blingVendas.ObterPorPedidoIdAsync(pedidoId, cancellationToken)
+            ?? throw new InvalidOperationException("Esta venda do Bling ainda não está no relatório.");
+        if (request.Excluida is not null)
+            venda.Excluida = request.Excluida.Value;
+        if (request.CustoItem is not null)
+        {
+            venda.CustoItem = Round(Math.Max(0, request.CustoItem.Value));
+            venda.CustoItemEditado = true;
+        }
+        if (request.CustoLoja is not null)
+        {
+            venda.CustoLoja = Round(Math.Max(0, request.CustoLoja.Value));
+            venda.CustoLojaEditado = true;
+        }
+        await _blingVendas.SalvarAsync(venda, cancellationToken);
+        return ParaDto(venda);
     }
 
     private async Task SomarCelularesAsync(
@@ -230,17 +272,55 @@ public sealed class ReceitaService : IReceitaService
         DateTime fim,
         CancellationToken cancellationToken)
     {
+        var avisoSync = await SincronizarBlingAsync(inicio, fim, cancellationToken);
+        var vendas = await _blingVendas.ListarNoPeriodoAsync(inicio, fim, cancellationToken);
+        var dest = painel.Periodos;
+        var contouPedido = false;
+        var algumCusto = false;
+        var excluídas = 0;
+
+        foreach (var venda in vendas)
+        {
+            if (venda.Excluida)
+            {
+                excluídas++;
+                continue;
+            }
+            var i = Indice(janelas, venda.Data.Date);
+            if (i < 0) continue;
+            var faixa = dest[i].Bling;
+            faixa.Bruto += venda.Bruto;
+            faixa.CustoItem += venda.CustoItem;
+            faixa.CustoLoja += venda.CustoLoja;
+            faixa.Quantidade++;
+            contouPedido = true;
+            if (venda.CustoItem > 0 || venda.CustoLoja > 0) algumCusto = true;
+        }
+
+        painel.CustoBlingIndisponivel = contouPedido && !algumCusto;
+        var avisos = new List<string>();
+        if (!string.IsNullOrWhiteSpace(avisoSync))
+            avisos.Add(avisoSync);
+        if (excluídas > 0)
+            avisos.Add(excluídas == 1
+                ? "1 venda do Bling ficou de fora do relatório."
+                : $"{excluídas} vendas do Bling ficaram de fora do relatório.");
+        if (painel.CustoBlingIndisponivel)
+            avisos.Add("A lista de pedidos do Bling não traz o custo do item nem o custo da loja. Informe o custo em cada venda, ou o bruto, o depois do item e o resultado ficam iguais.");
+        return avisos.Count == 0 ? null : string.Join(" ", avisos);
+    }
+
+    private async Task<string?> SincronizarBlingAsync(DateTime inicio, DateTime fim, CancellationToken cancellationToken)
+    {
         var token = await TokenAsync();
         if (token is null)
-            return "Bling não está conectado. Vendas de acessórios e eletrônicos ficam zeradas até a conexão em Configurações → Bling.";
+            return "Bling não está conectado. Vendas já gravadas seguem no relatório. Conecte em Configurações → Bling para atualizar.";
 
         var http = _httpFactory.CreateClient("BlingProdutos");
         var dataInicial = inicio.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var dataFinal = fim.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        var dest = painel.Periodos;
         var truncou = false;
-        var contouPedido = false;
-        var algumCusto = false;
+        var leu = false;
 
         for (var pagina = 1; pagina <= 30; pagina++)
         {
@@ -257,25 +337,15 @@ public sealed class ReceitaService : IReceitaService
             if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
                 break;
 
+            leu = true;
             var lidos = 0;
             foreach (var item in data.EnumerateArray())
             {
                 lidos++;
                 if (Cancelado(item)) continue;
-                var total = LerTotal(item);
-                if (total <= 0) continue;
-                var dataPedido = LerData(item);
-                if (dataPedido is null) continue;
-                var i = Indice(janelas, dataPedido.Value);
-                if (i < 0) continue;
-                var custos = ReceitaBlingCusto.Ler(item);
-                var faixa = dest[i].Bling;
-                faixa.Bruto += total;
-                faixa.CustoItem += custos.Item;
-                faixa.CustoLoja += custos.Loja;
-                faixa.Quantidade++;
-                contouPedido = true;
-                if (custos.Informou) algumCusto = true;
+                var snapshot = LerPedido(item);
+                if (snapshot is null) continue;
+                await _blingVendas.UpsertDoBlingAsync(snapshot, cancellationToken);
             }
 
             if (lidos == 0) break;
@@ -283,13 +353,65 @@ public sealed class ReceitaService : IReceitaService
             if (pagina == 30) truncou = true;
         }
 
-        painel.CustoBlingIndisponivel = contouPedido && !algumCusto;
-        var avisos = new List<string>();
-        if (painel.CustoBlingIndisponivel)
-            avisos.Add("A lista de pedidos do Bling não traz o custo do item nem o custo da loja. Nessas vendas, o bruto, o depois do item e o resultado ficam iguais.");
         if (truncou)
-            avisos.Add("O recorte do Bling passou de 3.000 pedidos. Os mais antigos desta consulta podem ter ficado de fora.");
-        return avisos.Count == 0 ? null : string.Join(" ", avisos);
+            return "O recorte do Bling passou de 3.000 pedidos. Os mais antigos desta consulta podem ter ficado de fora.";
+        return leu ? null : "Não foi possível ler os pedidos de venda do Bling. Confira a permissão de Pedidos de venda.";
+    }
+
+    private static ReceitaBlingVendaData? LerPedido(JsonElement item)
+    {
+        var total = LerTotal(item);
+        if (total <= 0) return null;
+        var dataPedido = LerData(item);
+        if (dataPedido is null) return null;
+        var pedidoId = LerLong(item, "id");
+        if (pedidoId <= 0) return null;
+        var custos = ReceitaBlingCusto.Ler(item);
+        return new ReceitaBlingVendaData
+        {
+            PedidoId = pedidoId,
+            Numero = LerTexto(item, "numero"),
+            Data = dataPedido.Value.Date,
+            ClienteNome = LerCliente(item),
+            Bruto = Round(total),
+            CustoItemOrigem = custos.Item,
+            CustoLojaOrigem = custos.Loja,
+        };
+    }
+
+    private static ReceitaBlingVendaDto ParaDto(ReceitaBlingVendaData v) => new()
+    {
+        PedidoId = v.PedidoId,
+        Numero = v.Numero,
+        Data = v.Data.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        ClienteNome = v.ClienteNome,
+        Bruto = v.Bruto,
+        CustoItem = v.CustoItem,
+        CustoLoja = v.CustoLoja,
+        CustoItemEditado = v.CustoItemEditado,
+        CustoLojaEditado = v.CustoLojaEditado,
+        Excluida = v.Excluida,
+    };
+
+    private static long LerLong(JsonElement item, string nome)
+    {
+        if (!item.TryGetProperty(nome, out var valor)) return 0;
+        if (valor.ValueKind == JsonValueKind.Number && valor.TryGetInt64(out var n)) return n;
+        return long.TryParse(valor.ToString(), out var p) ? p : 0;
+    }
+
+    private static string LerTexto(JsonElement item, string nome)
+    {
+        if (!item.TryGetProperty(nome, out var valor) || valor.ValueKind != JsonValueKind.String)
+            return "";
+        return valor.GetString()?.Trim() ?? "";
+    }
+
+    private static string LerCliente(JsonElement item)
+    {
+        if (item.TryGetProperty("contato", out var contato) && contato.ValueKind == JsonValueKind.Object)
+            return LerTexto(contato, "nome");
+        return LerTexto(item, "cliente");
     }
 
     private static void Arredondar(ReceitaPeriodoDto periodo)
