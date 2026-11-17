@@ -184,14 +184,14 @@ interface FichaEntrada {
           <small>Soma da assistência técnica ao custo de cada celular</small>
         </div>
         <div class="card" *ngIf="lucroVendasAdmin as lucro">
-          <span>Lucro bruto dos vendidos</span>
+          <span>Lucro dos aparelhos que saíram</span>
           <strong [class.valor-positivo]="lucro.lucro >= 0" [class.valor-negativo]="lucro.lucro < 0">{{ dinheiro(lucro.lucro) }}</strong>
-          <small>{{ lucro.quantidade }} {{ lucro.quantidade === 1 ? 'aparelho vendido' : 'aparelhos vendidos' }} · custo {{ dinheiro(lucro.custo) }}</small>
+          <small>{{ lucro.quantidade }} {{ lucro.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · custo {{ dinheiro(lucro.custo) }}</small>
         </div>
         <div class="card" *ngIf="lucroVendasAdmin as lucro">
           <span>Percentual de lucro bruto</span>
           <strong [class.valor-positivo]="(lucro.percentual ?? 0) >= 0" [class.valor-negativo]="(lucro.percentual ?? 0) < 0">{{ percentual(lucro.percentual) }}</strong>
-          <small>Custo do celular mais o custo das peças, menos o valor vendido</small>
+          <small>Valor de saída menos o custo do celular e das peças</small>
         </div>
       </div>
 
@@ -357,17 +357,37 @@ interface FichaEntrada {
         <div class="filtros-periodo">
           <button type="button" *ngFor="let p of periodos" [class.ativo]="periodoDias === p.dias" (click)="escolherPeriodo(p.dias)">{{ p.nome }}</button>
         </div>
-        <p class="hint">Clique no vendedor para ver só o resultado dele neste período. Cadastro até 4/11/2026 entra como estoque inicial e não sai do caixa.</p>
+        <p class="hint">Clique no vendedor para filtrar o período. Cadastro até 4/11/2026 é estoque inicial e não mexe no caixa.</p>
+        <details class="metricas-tx" *ngIf="isAdmin" open>
+          <summary>O que cada métrica significa</summary>
+          <dl>
+            <dt>Caixa que entrou</dt>
+            <dd>Dinheiro que a loja recebeu: venda e diferença de troca a favor da loja.</dd>
+            <dt>Caixa que saiu</dt>
+            <dd>Dinheiro que a loja pagou: compra depois de 4/11/2026 e diferença de troca que a loja paga.</dd>
+            <dt>Saldo de caixa</dt>
+            <dd>Caixa que entrou menos caixa que saiu. Não é lucro do aparelho.</dd>
+            <dt>Valor do aparelho</dt>
+            <dd>Preço comercial. Se saiu, é dinheiro para a loja. Se entrou, é investimento.</dd>
+            <dt>Valor (coluna)</dt>
+            <dd>Tamanho do negócio em caixa (o maior entre recebido e pago). Se não houve caixa, usa o preço do aparelho.</dd>
+            <dt>Lucro</dt>
+            <dd>Só no aparelho que saiu: preço de saída menos custo (compra/avaliação + peças). A soma do recorte está no card.</dd>
+            <dt>Caixa (coluna)</dt>
+            <dd>Movimento de dinheiro vivo desta linha: + recebido, − pago. Custo do aparelho aparece só como referência.</dd>
+          </dl>
+        </details>
         <table class="data-grid" *ngIf="resultadosPorVendedor.length">
           <thead>
             <tr>
               <th>Vendedor</th>
-              <th>Compras</th>
-              <th>Vendas</th>
-              <th>Trocas</th>
-              <th *ngIf="isAdmin">Entrou</th>
-              <th *ngIf="isAdmin">Saiu</th>
-              <th *ngIf="isAdmin">Resultado</th>
+              <th title="Quantidade de compras (sem estoque inicial)">Compras</th>
+              <th title="Quantidade de vendas">Vendas</th>
+              <th title="Quantidade de trocas">Trocas</th>
+              <th *ngIf="isAdmin" title="Dinheiro que a loja recebeu">Caixa entrou</th>
+              <th *ngIf="isAdmin" title="Dinheiro que a loja pagou">Caixa saiu</th>
+              <th *ngIf="isAdmin" title="Caixa entrou menos caixa saiu">Saldo caixa</th>
+              <th *ngIf="isAdmin" title="Soma do lucro dos aparelhos que saíram">Lucro</th>
             </tr>
           </thead>
           <tbody>
@@ -384,6 +404,7 @@ interface FichaEntrada {
               <td *ngIf="isAdmin">{{ dinheiro(v.entrou) }}</td>
               <td *ngIf="isAdmin">{{ dinheiro(v.saiu) }}</td>
               <td *ngIf="isAdmin" [class.valor-positivo]="v.resultado >= 0" [class.valor-negativo]="v.resultado < 0">{{ dinheiro(v.resultado) }}</td>
+              <td *ngIf="isAdmin" [class.valor-positivo]="v.lucro >= 0" [class.valor-negativo]="v.lucro < 0">{{ dinheiro(v.lucro) }}</td>
             </tr>
           </tbody>
         </table>
@@ -394,31 +415,41 @@ interface FichaEntrada {
             <small>{{ r.trocas }} {{ r.trocas === 1 ? 'troca' : 'trocas' }} · {{ r.compras }} {{ r.compras === 1 ? 'compra' : 'compras' }}</small>
           </div>
           <div class="card" *ngIf="isAdmin">
-            <span>Dinheiro que entrou</span>
+            <span>Caixa que entrou</span>
             <strong class="valor-positivo">{{ dinheiro(r.entrou) }}</strong>
-            <small>Vendas e diferenças a favor da loja</small>
+            <small>Dinheiro recebido neste recorte</small>
           </div>
           <div class="card" *ngIf="isAdmin">
-            <span>Dinheiro que saiu</span>
+            <span>Caixa que saiu</span>
             <strong class="valor-negativo">{{ dinheiro(r.saiu) }}</strong>
-            <small>Compras, valor pago no aparelho vendido (mais peças) e diferença de troca</small>
+            <small>Dinheiro pago pela loja neste recorte</small>
           </div>
           <div class="card" *ngIf="isAdmin">
-            <span>Resultado</span>
+            <span>Saldo de caixa</span>
             <strong [class.valor-positivo]="r.resultado >= 0" [class.valor-negativo]="r.resultado < 0">{{ dinheiro(r.resultado) }}</strong>
-            <small>Neste período</small>
+            <small>Não mistura com lucro do aparelho</small>
+          </div>
+          <div class="card" *ngIf="isAdmin">
+            <span>Lucro dos que saíram</span>
+            <strong [class.valor-positivo]="r.lucro >= 0" [class.valor-negativo]="r.lucro < 0">{{ dinheiro(r.lucro) }}</strong>
+            <small>Preço de saída menos custo e peças</small>
           </div>
         </div>
         <div class="cards" *ngIf="isAdmin && lucroVendasPeriodo as lucro">
           <div class="card">
-            <span>Valor médio por aparelho vendido</span>
-            <strong>{{ lucro.valorMedio == null ? '—' : dinheiro(lucro.valorMedio) }}</strong>
-            <small>{{ lucro.quantidade }} {{ lucro.quantidade === 1 ? 'venda neste recorte' : 'vendas neste recorte' }} · total {{ dinheiro(lucro.valor) }}</small>
+            <span>Lucro dos aparelhos que saíram</span>
+            <strong [class.valor-positivo]="lucro.lucro >= 0" [class.valor-negativo]="lucro.lucro < 0">{{ dinheiro(lucro.lucro) }}</strong>
+            <small>Soma neste recorte · {{ lucro.quantidade }} {{ lucro.quantidade === 1 ? 'aparelho' : 'aparelhos' }} (venda ou troca)</small>
           </div>
           <div class="card">
-            <span>Percentual médio de lucro bruto</span>
+            <span>Valor médio de saída</span>
+            <strong>{{ lucro.valorMedio == null ? '—' : dinheiro(lucro.valorMedio) }}</strong>
+            <small>Média do preço comercial dos que saíram · total {{ dinheiro(lucro.valor) }}</small>
+          </div>
+          <div class="card">
+            <span>% de lucro bruto</span>
             <strong [class.valor-positivo]="(lucro.percentual ?? 0) >= 0" [class.valor-negativo]="(lucro.percentual ?? 0) < 0">{{ percentual(lucro.percentual) }}</strong>
-            <small>Custo do celular mais as peças, menos o valor vendido, dividido pelo valor vendido. Resultado {{ dinheiro(lucro.lucro) }}.</small>
+            <small>Lucro dividido pelo preço de saída. Custo no recorte: {{ dinheiro(lucro.custo) }}</small>
           </div>
         </div>
         <div class="modos visoes">
@@ -488,9 +519,10 @@ interface FichaEntrada {
                 <th>Tipo</th>
                 <th>Vendedor</th>
                 <th>Pessoa</th>
-                <th>Aparelhos</th>
-                <th>Valor</th>
-                <th *ngIf="isAdmin">Caixa</th>
+                <th title="Preço comercial: saída = dinheiro para a loja; entrada = investimento">Aparelhos</th>
+                <th title="Tamanho do negócio em caixa, ou o preço do aparelho se não houve caixa">Valor</th>
+                <th *ngIf="isAdmin" title="Preço de saída menos custo e peças, em cada aparelho que saiu">Lucro</th>
+                <th *ngIf="isAdmin" title="Dinheiro vivo: + recebido, − pago">Caixa</th>
                 <th></th>
               </tr>
             </thead>
@@ -523,10 +555,12 @@ interface FichaEntrada {
                   <div class="grupo-aparelhos" *ngFor="let a of aparelhosSaiu(op)">
                     <span class="valor-negativo">− {{ dinheiro(a.valor) }}</span>
                     <span>saiu {{ textoAparelhoGrupo(a) }}</span>
+                    <span class="sub">preço para a loja</span>
                   </div>
                   <div class="grupo-aparelhos" *ngFor="let a of aparelhosEntrou(op)">
                     <span class="valor-positivo">+ {{ dinheiro(a.valor) }}</span>
                     <span>entrou {{ textoAparelhoGrupo(a) }}</span>
+                    <span class="sub">investimento</span>
                   </div>
                   <div class="sub" *ngIf="!aparelhosSaiu(op).length && !aparelhosEntrou(op).length">
                     {{ op.saidaResumo || op.entradaResumo || '—' }}
@@ -534,12 +568,27 @@ interface FichaEntrada {
                 </td>
                 <td>{{ valorTransacao(op) ? dinheiro(valorTransacao(op)) : '—' }}</td>
                 <td *ngIf="isAdmin">
-                  <div class="valor-positivo" *ngIf="op.dinheiroRecebido">+ {{ dinheiro(op.dinheiroRecebido) }}</div>
-                  <div class="valor-negativo" *ngIf="saiuDaOperacao(op)">− {{ dinheiro(saiuDaOperacao(op)) }}</div>
-                  <div class="sub" *ngIf="custoDaVenda(op)">Custo do aparelho {{ dinheiro(custoDaVenda(op)) }}</div>
-                  <div class="sub" *ngIf="custoPecasDaEntrada(op)">Peças {{ dinheiro(custoPecasDaEntrada(op)) }}</div>
-                  <div class="sub" *ngIf="ehEstoqueInicial(op)">Estoque inicial</div>
-                  <div class="sub" *ngIf="!op.dinheiroRecebido && !saiuDaOperacao(op) && !ehEstoqueInicial(op)">Sem dinheiro</div>
+                  <ng-container *ngIf="aparelhosSaiu(op).length; else semLucroTx">
+                    <div
+                      *ngFor="let a of aparelhosSaiu(op)"
+                      [class.valor-positivo]="lucroDoAparelhoSaiu(a) >= 0"
+                      [class.valor-negativo]="lucroDoAparelhoSaiu(a) < 0"
+                    >
+                      {{ dinheiro(lucroDoAparelhoSaiu(a)) }}
+                    </div>
+                    <div class="sub" *ngIf="aparelhosSaiu(op).length > 1">
+                      Soma {{ dinheiro(lucroAparelhosQueSairam(op)) }}
+                    </div>
+                  </ng-container>
+                  <ng-template #semLucroTx>—</ng-template>
+                </td>
+                <td *ngIf="isAdmin">
+                  <div class="valor-positivo" *ngIf="op.dinheiroRecebido">+ {{ dinheiro(op.dinheiroRecebido) }} recebido</div>
+                  <div class="valor-negativo" *ngIf="caixaPago(op)">− {{ dinheiro(caixaPago(op)) }} pago</div>
+                  <div class="sub" *ngIf="custoDaVenda(op)">Custo (referência) {{ dinheiro(custoDaVenda(op)) }}</div>
+                  <div class="sub" *ngIf="custoPecasDaEntrada(op)">Peças no custo {{ dinheiro(custoPecasDaEntrada(op)) }}</div>
+                  <div class="sub" *ngIf="ehEstoqueInicial(op)">Estoque inicial · sem caixa</div>
+                  <div class="sub" *ngIf="!op.dinheiroRecebido && !caixaPago(op) && !ehEstoqueInicial(op)">Sem movimento de caixa</div>
                 </td>
                 <td class="grid-acoes-cell">
                   <div class="grid-acoes">
@@ -588,7 +637,7 @@ interface FichaEntrada {
             <label>Abrir um aparelho</label>
             <input [ngModel]="buscaCadeia" (ngModelChange)="onBuscaCadeia($event)" name="buscaCadeia" placeholder="Código, IMEI ou modelo" />
           </div>
-          <p class="hint">Cada bloco junta a compra, as trocas e a venda daquele aparelho. O que saiu fica negativo; o que entrou, positivo.</p>
+          <p class="hint">Cada bloco segue o aparelho da compra até a última saída. − é preço de saída (dinheiro para a loja). + é investimento do que entrou. Lucro só no que saiu.</p>
           <p class="hint" *ngIf="avisoCadeia">{{ avisoCadeia }}</p>
           <p class="hint" *ngIf="!carregando && !avisoCadeia && !cadeiasDoPeriodo.length">Nenhuma cadeia neste período{{ buscaVendedor ? ' para este vendedor' : '' }}. Cadeia só existe depois de uma troca ou venda.</p>
           <p class="hint" *ngIf="buscaCadeia.trim() && !avisoCadeia && !cadeiasDoPeriodo.length">Esse aparelho ainda não gerou troca nem venda.</p>
@@ -604,6 +653,9 @@ interface FichaEntrada {
                 <p *ngFor="let a of p.saiu">
                   <span class="valor-negativo">− {{ dinheiro(a.valor) }}</span>
                   saiu {{ textoAparelhoGrupo(a) }}
+                  <span class="sub" *ngIf="isAdmin" [class.valor-positivo]="lucroDoAparelhoSaiu(a) >= 0" [class.valor-negativo]="lucroDoAparelhoSaiu(a) < 0">
+                    · lucro {{ dinheiro(lucroDoAparelhoSaiu(a)) }}
+                  </span>
                 </p>
                 <p *ngFor="let a of p.entrou">
                   <span class="valor-positivo">+ {{ dinheiro(a.valor) }}</span>
@@ -1621,6 +1673,11 @@ interface FichaEntrada {
   `,
   styles: [`
     .hint { color: #64748b; font-size: 13px; margin: 0 0 14px; max-width: 820px; line-height: 1.45; }
+    .metricas-tx { max-width: 920px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+    .metricas-tx summary { cursor: pointer; font-weight: 700; color: #334155; font-size: 13px; }
+    .metricas-tx dl { display: grid; grid-template-columns: 160px 1fr; gap: 6px 12px; margin: 10px 0 0; font-size: 13px; }
+    .metricas-tx dt { color: #0f172a; font-weight: 700; }
+    .metricas-tx dd { margin: 0; color: #475569; }
     .codigo-etiqueta, .codigo-faixa { grid-column: 1 / -1; }
     .codigo-etiqueta { font-size: 48px; font-weight: 800; letter-spacing: 1px; margin: 0 0 8px; line-height: 1; }
     .codigo-banner { background: #0f172a; color: #fff; border-radius: 12px; padding: 16px 18px; margin: 0 0 16px; max-width: 920px; }
@@ -2118,7 +2175,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     if (this.tela === 'venda') return 'Busque pelo código que o sistema gerou na entrada, ou escolha marca e modelo.';
     if (this.tela === 'troca') return 'O aparelho que sai se busca pelo código das costas. O que entra ganha um código novo na hora.';
     if (this.tela === 'estoque') return 'Clique na linha para ver o cadastro. Editar abre uma janela. Compra, venda e troca ficam nos botões acima.';
-    if (this.tela === 'transacoes') return 'Uma linha por negócio. Filtre por código, data, tipo, vendedor, modelo e valor. A grid mostra 100 por página.';
+    if (this.tela === 'transacoes') return 'Caixa é dinheiro vivo. Lucro é só no aparelho que saiu. Preço de entrada é investimento.';
     return 'Valor de estoque e o dinheiro que entrou e saiu. Esta parte fica só para administrador.';
   }
 
@@ -2201,12 +2258,14 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     entrou: number;
     saiu: number;
     resultado: number;
+    lucro: number;
   }[] {
     const noPeriodo = this.operacoes.filter(op => this.noPeriodo(op.data) && op.status !== 'estornada');
     return this.vendedoresCadastrados.map(v => {
       const ops = noPeriodo.filter(op => this.vendedorBateCadastro(op.vendedorId, op.vendedorNome, v));
       const entrou = ops.reduce((s, op) => s + (Number(op.dinheiroRecebido) || 0), 0);
-      const saiu = ops.reduce((s, op) => s + this.saiuDaOperacao(op), 0);
+      const saiu = ops.reduce((s, op) => s + this.caixaPago(op), 0);
+      const lucro = ops.reduce((s, op) => s + this.lucroAparelhosQueSairam(op), 0);
       return {
         nome: v.nome,
         compras: ops.filter(op => op.tipo === 'compra' && !this.ehEstoqueInicial(op)).length,
@@ -2215,6 +2274,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
         entrou,
         saiu,
         resultado: Math.round((entrou - saiu) * 100) / 100,
+        lucro: Math.round(lucro * 100) / 100,
       };
     });
   }
@@ -2227,11 +2287,13 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     entrou: number;
     saiu: number;
     resultado: number;
+    lucro: number;
   } | null {
     if (!this.buscaVendedor) return null;
     const ops = this.transacoesFiltradas.filter(op => op.status !== 'estornada');
     const entrou = ops.reduce((s, op) => s + (Number(op.dinheiroRecebido) || 0), 0);
-    const saiu = ops.reduce((s, op) => s + this.saiuDaOperacao(op), 0);
+    const saiu = ops.reduce((s, op) => s + this.caixaPago(op), 0);
+    const lucro = ops.reduce((s, op) => s + this.lucroAparelhosQueSairam(op), 0);
     return {
       nome: this.buscaVendedor,
       compras: ops.filter(op => op.tipo === 'compra' && !this.ehEstoqueInicial(op)).length,
@@ -2240,6 +2302,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
       entrou,
       saiu,
       resultado: Math.round((entrou - saiu) * 100) / 100,
+      lucro: Math.round(lucro * 100) / 100,
     };
   }
 
@@ -2783,6 +2846,18 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return op.saiu?.length ? op.saiu : [];
   }
 
+  lucroDoAparelhoSaiu(a: AparelhoCadeiaItem): number {
+    const valor = Number(a.valor) || 0;
+    const custo = Number(a.custoTotal ?? a.custo) || 0;
+    return Math.round((valor - custo) * 100) / 100;
+  }
+
+  lucroAparelhosQueSairam(op: AparelhoOperacao): number {
+    if (op.status === 'estornada') return 0;
+    if (op.tipo !== 'venda' && op.tipo !== 'troca') return 0;
+    return Math.round(this.aparelhosSaiu(op).reduce((s, a) => s + this.lucroDoAparelhoSaiu(a), 0) * 100) / 100;
+  }
+
   aparelhosEntrou(op: AparelhoOperacao): AparelhoCadeiaItem[] {
     return op.entrou?.length ? op.entrou : [];
   }
@@ -2868,9 +2943,14 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return dia.length === 10 && dia <= '2026-11-04';
   }
 
+  caixaPago(op: AparelhoOperacao): number {
+    if (this.ehEstoqueInicial(op) || op.status === 'estornada') return 0;
+    return Math.round((Number(op.dinheiroPago) || 0) * 100) / 100;
+  }
+
   saiuDaOperacao(op: AparelhoOperacao): number {
     if (this.ehEstoqueInicial(op)) return 0;
-    const total = (Number(op.dinheiroPago) || 0) + this.custoPecasDaEntrada(op) + this.custoDaVenda(op);
+    const total = this.caixaPago(op) + this.custoPecasDaEntrada(op) + this.custoDaVenda(op);
     return Math.round(total * 100) / 100;
   }
 
@@ -3742,12 +3822,11 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   private lucroDasVendas(ops: AparelhoOperacao[]): LucroVendas {
     const itens = ops
-      .filter(op => op.tipo === 'venda' && op.status !== 'estornada')
-      .flatMap(op => this.aparelhosSaiu(op))
-      .filter(a => (Number(a.valor) || 0) > 0);
+      .filter(op => (op.tipo === 'venda' || op.tipo === 'troca') && op.status !== 'estornada')
+      .flatMap(op => this.aparelhosSaiu(op));
     const valor = itens.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const custo = itens.reduce((s, a) => s + (Number(a.custoTotal ?? a.custo) || 0), 0);
-    const lucro = custo - valor;
+    const lucro = valor - custo;
     const quantidade = itens.length;
     const arredondar = (n: number) => Math.round(n * 100) / 100;
     return {
