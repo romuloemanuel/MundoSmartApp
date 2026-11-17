@@ -9,6 +9,7 @@ import { ClienteAutocomplete } from '../../../components/cliente-autocomplete/cl
 import { NovoClienteModal } from '../../../components/novo-cliente-modal/novo-cliente-modal';
 import { AutocompleteCriavel, AutocompleteItem } from '../../../components/autocomplete-criavel/autocomplete-criavel';
 import { EditarAparelhoLojaModal } from './editar-aparelho-loja-modal';
+import { AcompanhamentoCaixaModal } from './acompanhamento-caixa-modal';
 import { GridAcao } from '../../../components/grid-acao/grid-acao';
 import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
 import { GridPaginationState } from '../../../utils/grid-pagination.state';
@@ -134,6 +135,7 @@ interface FichaEntrada {
     NovoClienteModal,
     AutocompleteCriavel,
     EditarAparelhoLojaModal,
+    AcompanhamentoCaixaModal,
     GridAcao,
     GridPaginator,
   ],
@@ -263,48 +265,8 @@ interface FichaEntrada {
             <small>Parte disto pode voltar para o estoque</small>
           </div>
         </div>
-        <div class="historico-estoque" *ngIf="historicoEstoque.length">
-          <p class="hint" *ngIf="historicoEstoque.length === 1">O primeiro ponto é hoje. A partir de amanhã a tabela mostra a oscilação dia a dia.</p>
-          <div class="tabela-scroll">
-            <table class="data-grid">
-              <thead>
-                <tr>
-                  <th>Dia</th>
-                  <th>Qtd</th>
-                  <th>Caixa entrou</th>
-                  <th>Δ caixa</th>
-                  <th>Saldo caixa</th>
-                  <th>Δ saldo</th>
-                  <th>Custo estoque</th>
-                  <th>Δ custo</th>
-                  <th>Valor venda</th>
-                  <th>Δ venda</th>
-                  <th>Lucro estoque</th>
-                  <th>Lucro realizado</th>
-                  <th>Parados AT</th>
-                  <th>Orçamento AT</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let d of historicoEstoque">
-                  <td>{{ dataCurta(d.dia) }}</td>
-                  <td>{{ d.quantidade }}</td>
-                  <td>{{ dinheiro(d.caixaEntrou) }}</td>
-                  <td [class.valor-positivo]="(d.deltaCaixaEntrou ?? 0) > 0" [class.valor-negativo]="(d.deltaCaixaEntrou ?? 0) < 0">{{ textoDelta(d.deltaCaixaEntrou) }}</td>
-                  <td>{{ dinheiro(d.saldoCaixa) }}</td>
-                  <td [class.valor-positivo]="(d.deltaSaldoCaixa ?? 0) > 0" [class.valor-negativo]="(d.deltaSaldoCaixa ?? 0) < 0">{{ textoDelta(d.deltaSaldoCaixa) }}</td>
-                  <td>{{ dinheiro(d.custo) }}</td>
-                  <td [class.valor-positivo]="(d.deltaCusto ?? 0) > 0" [class.valor-negativo]="(d.deltaCusto ?? 0) < 0">{{ textoDelta(d.deltaCusto) }}</td>
-                  <td>{{ dinheiro(d.valorVenda) }}</td>
-                  <td [class.valor-positivo]="(d.deltaValorVenda ?? 0) > 0" [class.valor-negativo]="(d.deltaValorVenda ?? 0) < 0">{{ textoDelta(d.deltaValorVenda) }}</td>
-                  <td>{{ dinheiro(d.lucroEstoque) }}</td>
-                  <td>{{ dinheiro(d.lucroRealizado) }}</td>
-                  <td>{{ dinheiro(d.custoAssistencia) }}</td>
-                  <td>{{ dinheiro(d.orcamentoAssistencia) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="acoes-transacoes">
+          <button type="button" class="btn-tx" (click)="abrirAcompanhamento()">Ver gráficos do mês</button>
         </div>
       </ng-container>
 
@@ -615,11 +577,8 @@ interface FichaEntrada {
             <small>Valor à vista das OS desses aparelhos</small>
           </div>
         </div>
-        <p class="hint" *ngIf="isAdmin">
-          <a routerLink="/vendas-celulares/loja/financeiro">Acompanhar caixa e estoque no tempo</a>
-          — caixa que entrou, valor dos aparelhos e lucro, para reinvestir.
-        </p>
         <div class="acoes-transacoes">
+          <button type="button" class="btn-tx" *ngIf="isAdmin" (click)="abrirAcompanhamento()">Ver gráficos do mês</button>
           <button
             type="button"
             class="btn-tx btn-tx-lucro"
@@ -1843,6 +1802,12 @@ interface FichaEntrada {
       (fecharModal)="modalCliente = false"
     />
 
+    <app-acompanhamento-caixa-modal
+      *ngIf="modalAcompanhamento"
+      [historico]="historicoEstoque"
+      (fechar)="fecharAcompanhamento()"
+    />
+
     <div class="modal-backdrop" *ngIf="modalVendidos" (click)="fecharModalVendidos()">
       <div class="modal-box modal-vendidos" (click)="$event.stopPropagation()" role="dialog" aria-labelledby="titulo-vendidos">
         <div class="modal-header">
@@ -2310,6 +2275,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   achadosCodigoTroca: AparelhoLojaItem[] = [];
   visaoTransacoes: VisaoTransacoes = 'lista';
   modalVendidos = false;
+  modalAcompanhamento = false;
   filtroVendidosBusca = '';
   filtroVendidosData = '';
   filtroVendidosTipo: FiltroTipoVendidos = 'venda';
@@ -3266,7 +3232,19 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   fecharModalVendidosComEsc(): void {
+    if (this.modalAcompanhamento) {
+      this.fecharAcompanhamento();
+      return;
+    }
     if (this.modalVendidos) this.fecharModalVendidos();
+  }
+
+  abrirAcompanhamento(): void {
+    this.modalAcompanhamento = true;
+  }
+
+  fecharAcompanhamento(): void {
+    this.modalAcompanhamento = false;
   }
 
   abrirModalVendidos(): void {

@@ -7,6 +7,7 @@ namespace MundoSmart.BlingAssistencia.API.Models.Mongo;
 /// <summary>
 /// Ordem de serviço armazenada localmente (modo bypass — sem Bling).
 /// </summary>
+[BsonIgnoreExtraElements]
 public class OsLocalData
 {
     [BsonId]
@@ -173,6 +174,10 @@ public class OsLocalData
 
     [BsonElement("valorAVista")]
     public decimal? ValorAVista { get; set; }
+
+    /// <summary>Valor combinado para o lojista quando o aparelho é da loja.</summary>
+    [BsonElement("valorLojista")]
+    public decimal? ValorLojista { get; set; }
 
     [BsonElement("valorAPrazo")]
     public decimal? ValorAPrazo { get; set; }

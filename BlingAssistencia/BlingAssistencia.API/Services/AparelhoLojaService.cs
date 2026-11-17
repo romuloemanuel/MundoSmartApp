@@ -1290,7 +1290,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     private static decimal ValorOrcamentoDaOs(OsLocalData? os)
     {
         if (os is null) return 0;
-        var total = PrimeiroValorPositivo(os.ValorAVista, os.ValorTotalAcordado, os.ValorTotal);
+        var total = PrimeiroValorPositivo(os.ValorLojista, os.ValorAVista, os.ValorTotalAcordado, os.ValorTotal);
         if (total > 0) return total;
         var linhas = 0m;
         foreach (var item in os.Itens ?? [])
