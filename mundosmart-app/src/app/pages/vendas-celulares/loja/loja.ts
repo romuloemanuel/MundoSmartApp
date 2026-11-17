@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as QRCode from 'qrcode';
 import { FormsModule } from '@angular/forms';
@@ -52,6 +52,18 @@ import {
 type Modo = 'compra' | 'venda' | 'troca';
 type TelaLoja = Modo | 'estoque' | 'transacoes' | 'financeiro';
 type VisaoTransacoes = 'lista' | 'cadeia';
+type FiltroLucroVendidos = '' | 'positivo' | 'negativo';
+type FiltroTipoVendidos = 'venda' | 'troca' | '';
+interface AparelhoVendidoLinha {
+  op: AparelhoOperacao;
+  item: AparelhoCadeiaItem;
+  tipo: string;
+  valorVenda: number;
+  valorPago: number;
+  lucro: number;
+  percentualVenda: number | null;
+  percentualPago: number | null;
+}
 type PeriodoDias = 7 | 14 | 30 | 90;
 interface LucroVendas {
   quantidade: number;
@@ -452,6 +464,12 @@ interface FichaEntrada {
             <small>Lucro dividido pelo preço de saída. Custo no recorte: {{ dinheiro(lucro.custo) }}</small>
           </div>
         </div>
+        <div class="acoes-lucro" *ngIf="isAdmin">
+          <button type="button" class="btn-lucro-vendidos" (click)="abrirModalVendidos()">
+            <strong>Ver lucro de cada aparelho</strong>
+            <span>Abre uma janela com valor de venda, valor pago, lucro (venda − pago) e o percentual.</span>
+          </button>
+        </div>
         <div class="modos visoes">
           <button type="button" [class.ativo]="visaoTransacoes === 'lista'" (click)="visaoTransacoes = 'lista'">
             <strong>Transações</strong>
@@ -575,6 +593,9 @@ interface FichaEntrada {
                       [class.valor-negativo]="lucroDoAparelhoSaiu(a) < 0"
                     >
                       {{ dinheiro(lucroDoAparelhoSaiu(a)) }}
+                      <div class="sub" *ngIf="percentualLucroSobreVenda(a) != null">
+                        {{ percentual(percentualLucroSobreVenda(a)) }} da venda
+                      </div>
                     </div>
                     <div class="sub" *ngIf="aparelhosSaiu(op).length > 1">
                       Soma {{ dinheiro(lucroAparelhosQueSairam(op)) }}
@@ -1660,6 +1681,149 @@ interface FichaEntrada {
       (fecharModal)="modalCliente = false"
     />
 
+    <div class="modal-backdrop" *ngIf="modalVendidos" (click)="fecharModalVendidos()">
+      <div class="modal-box modal-vendidos" (click)="$event.stopPropagation()" role="dialog" aria-labelledby="titulo-vendidos">
+        <div class="modal-header">
+          <h3 id="titulo-vendidos">Lucro de cada aparelho</h3>
+          <button type="button" class="modal-close" (click)="fecharModalVendidos()" aria-label="Fechar">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="hint">Uma linha por aparelho. Lucro = valor de venda − valor pago. % da venda = lucro ÷ venda. % sobre o pago = lucro ÷ o que a loja pagou.</p>
+          <div class="filtros-periodo">
+            <button type="button" *ngFor="let p of periodos" [class.ativo]="periodoDias === p.dias" (click)="escolherPeriodo(p.dias)">{{ p.nome }}</button>
+          </div>
+          <div class="busca-estoque busca-vendidos">
+            <div class="form-group grow">
+              <label>Buscar</label>
+              <input
+                [(ngModel)]="filtroVendidosBusca"
+                (ngModelChange)="resetPaginaVendidos()"
+                name="filtroVendidosBusca"
+                placeholder="Código, modelo, IMEI ou cliente"
+              />
+            </div>
+            <div class="form-group">
+              <label>Data</label>
+              <input type="date" [(ngModel)]="filtroVendidosData" (ngModelChange)="resetPaginaVendidos()" name="filtroVendidosData" />
+            </div>
+            <div class="form-group">
+              <label>Saída</label>
+              <select [(ngModel)]="filtroVendidosTipo" (ngModelChange)="resetPaginaVendidos()" name="filtroVendidosTipo">
+                <option value="venda">Só vendas</option>
+                <option value="troca">Só trocas</option>
+                <option value="">Vendas e trocas</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Vendedor</label>
+              <select [(ngModel)]="filtroVendidosVendedor" (ngModelChange)="resetPaginaVendidos()" name="filtroVendidosVendedor">
+                <option value="">Todos</option>
+                <option *ngFor="let v of vendedoresCadastrados; trackBy: trackVendedor" [value]="v.nome">{{ v.nome }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Lucro</label>
+              <select [(ngModel)]="filtroVendidosLucro" (ngModelChange)="resetPaginaVendidos()" name="filtroVendidosLucro">
+                <option value="">Todos</option>
+                <option value="positivo">Com lucro</option>
+                <option value="negativo">Com prejuízo</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Venda de</label>
+              <input type="number" min="0" step="0.01" [(ngModel)]="filtroVendidosVendaDe" (ngModelChange)="resetPaginaVendidos()" name="filtroVendidosVendaDe" />
+            </div>
+            <div class="form-group">
+              <label>Venda até</label>
+              <input type="number" min="0" step="0.01" [(ngModel)]="filtroVendidosVendaAte" (ngModelChange)="resetPaginaVendidos()" name="filtroVendidosVendaAte" />
+            </div>
+            <button type="button" class="secundario" *ngIf="temFiltroVendidos" (click)="limparFiltrosVendidos()">Limpar filtros</button>
+          </div>
+          <div class="cards" *ngIf="resumoVendidos as r">
+            <div class="card">
+              <span>Aparelhos</span>
+              <strong>{{ r.quantidade }}</strong>
+              <small>Com o filtro atual</small>
+            </div>
+            <div class="card">
+              <span>Total venda</span>
+              <strong>{{ dinheiro(r.venda) }}</strong>
+              <small>O que saiu para o cliente</small>
+            </div>
+            <div class="card">
+              <span>Total pago</span>
+              <strong>{{ dinheiro(r.pago) }}</strong>
+              <small>O que a loja pagou nesses aparelhos</small>
+            </div>
+            <div class="card">
+              <span>Lucro (venda − pago)</span>
+              <strong [class.valor-positivo]="r.lucro >= 0" [class.valor-negativo]="r.lucro < 0">{{ dinheiro(r.lucro) }}</strong>
+              <small>{{ r.percentualVenda == null ? '—' : percentual(r.percentualVenda) }} da venda</small>
+            </div>
+          </div>
+          <p class="hint" *ngIf="!carregando && !aparelhosVendidosFiltrados.length">
+            Nenhum aparelho neste recorte.
+            {{ filtroVendidosTipo === 'venda' ? 'Este filtro começa em vendas. Para ver o que saiu em troca, mude Saída.' : 'Alargue o período ou limpe os filtros.' }}
+          </p>
+          <app-grid-paginator
+            *ngIf="aparelhosVendidosFiltrados.length"
+            [total]="aparelhosVendidosFiltrados.length"
+            [page]="gridVendidos.page"
+            [pageSize]="gridVendidos.pageSize"
+            (pageChange)="gridVendidos.onPageChange($event)"
+            (pageSizeChange)="gridVendidos.onPageSizeChange($event)"
+          />
+          <table class="data-grid" *ngIf="aparelhosVendidosPaginados.length">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Código</th>
+                <th>Aparelho</th>
+                <th>Cliente</th>
+                <th>Vendedor</th>
+                <th>Valor venda</th>
+                <th>Valor pago</th>
+                <th>Lucro (venda − pago)</th>
+                <th>% da venda</th>
+                <th>% sobre o pago</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let l of aparelhosVendidosPaginados">
+                <td>
+                  {{ l.op.data | date:'dd/MM/yyyy HH:mm':'UTC' }}
+                  <div class="sub">{{ rotuloTipo(l.tipo) }}</div>
+                </td>
+                <td class="codigo-celula">{{ l.item.codigo || '—' }}</td>
+                <td>
+                  {{ l.item.nome }}
+                  <div class="sub" *ngIf="l.item.imei">IMEI {{ l.item.imei }}</div>
+                </td>
+                <td>{{ l.op.clienteNome || '—' }}</td>
+                <td>{{ l.op.vendedorNome || '—' }}</td>
+                <td>{{ dinheiro(l.valorVenda) }}</td>
+                <td>{{ dinheiro(l.valorPago) }}</td>
+                <td [class.valor-positivo]="l.lucro >= 0" [class.valor-negativo]="l.lucro < 0">{{ dinheiro(l.lucro) }}</td>
+                <td>{{ percentual(l.percentualVenda) }}</td>
+                <td>{{ percentual(l.percentualPago) }}</td>
+                <td class="grid-acoes-cell">
+                  <app-grid-acao
+                    tipo="cadeia"
+                    titulo="Ver cadeia deste aparelho"
+                    (acao)="verCadeiaDoVendido(l.op)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="secundario" (click)="fecharModalVendidos()">Fechar</button>
+        </div>
+      </div>
+    </div>
+
     <app-editar-aparelho-loja-modal
       *ngIf="aparelhoEmEdicao as a"
       [aparelho]="a"
@@ -1769,6 +1933,18 @@ interface FichaEntrada {
     .modos button span, .modos a span { color: #dbeafe; font-size: 13px; font-weight: 500; line-height: 1.35; }
     .modos button.ativo, .modos a.ativo { background: #1e3a8a; outline: 3px solid #93c5fd; }
     .modos.visoes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .acoes-lucro { margin: 0 0 14px; }
+    .btn-lucro-vendidos {
+      display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+      background: #0f172a; color: #fff; border: 0; border-radius: 12px;
+      padding: 14px 16px; cursor: pointer; text-align: left; max-width: 520px;
+    }
+    .btn-lucro-vendidos:hover { background: #1e293b; }
+    .btn-lucro-vendidos strong { font-size: 16px; }
+    .btn-lucro-vendidos span { color: #cbd5e1; font-size: 13px; font-weight: 500; line-height: 1.35; }
+    .modal-vendidos { max-width: 1180px; }
+    .busca-vendidos { align-items: flex-end; }
+    .busca-vendidos .secundario { margin-bottom: 2px; }
     .filtros-periodo { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
     .filtros-periodo button { background: #fff; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 999px; padding: 6px 12px; }
     .filtros-periodo button.ativo { background: #0f172a; color: #fff; border-color: #0f172a; }
@@ -1867,6 +2043,7 @@ interface FichaEntrada {
       background: #fff; border-radius: 12px; width: 100%; max-width: 760px; max-height: 90vh;
       display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25); overflow: hidden;
     }
+    .modal-box.modal-vendidos { max-width: min(1180px, 96vw); }
     .modal-header {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
       padding: 16px 20px; background: #0d0d0d; color: #fff;
@@ -1959,6 +2136,14 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   buscaCodigoTroca = '';
   achadosCodigoTroca: AparelhoLojaItem[] = [];
   visaoTransacoes: VisaoTransacoes = 'lista';
+  modalVendidos = false;
+  filtroVendidosBusca = '';
+  filtroVendidosData = '';
+  filtroVendidosTipo: FiltroTipoVendidos = 'venda';
+  filtroVendidosVendedor = '';
+  filtroVendidosLucro: FiltroLucroVendidos = '';
+  filtroVendidosVendaDe: number | null = null;
+  filtroVendidosVendaAte: number | null = null;
   avisoCadeia = '';
   buscaVendedor = '';
   filtroCodigoTx = '';
@@ -1968,6 +2153,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   filtroValorDeTx: number | null = null;
   filtroValorAteTx: number | null = null;
   gridTransacoes = new GridPaginationState();
+  gridVendidos = new GridPaginationState();
   gridEstoque = new GridPaginationState();
   periodoDias: PeriodoDias = 30;
   readonly periodos: { dias: PeriodoDias; nome: string }[] = [
@@ -2848,8 +3034,135 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   lucroDoAparelhoSaiu(a: AparelhoCadeiaItem): number {
     const valor = Number(a.valor) || 0;
-    const custo = Number(a.custoTotal ?? a.custo) || 0;
-    return Math.round((valor - custo) * 100) / 100;
+    const pago = Number(a.custo) || 0;
+    return Math.round((valor - pago) * 100) / 100;
+  }
+
+  percentualLucroSobreVenda(a: AparelhoCadeiaItem): number | null {
+    const venda = Number(a.valor) || 0;
+    if (!(venda > 0)) return null;
+    return Math.round((this.lucroDoAparelhoSaiu(a) / venda) * 1000) / 10;
+  }
+
+  @HostListener('document:keydown.escape')
+  fecharModalVendidosComEsc(): void {
+    if (this.modalVendidos) this.fecharModalVendidos();
+  }
+
+  abrirModalVendidos(): void {
+    if (!this.filtroVendidosVendedor && this.buscaVendedor) {
+      this.filtroVendidosVendedor = this.buscaVendedor;
+    }
+    this.modalVendidos = true;
+    this.gridVendidos.reset();
+  }
+
+  fecharModalVendidos(): void {
+    this.modalVendidos = false;
+  }
+
+  verCadeiaDoVendido(op: AparelhoOperacao): void {
+    this.fecharModalVendidos();
+    this.abrirCadeiaDaOperacao(op);
+  }
+
+  resetPaginaVendidos(): void {
+    this.gridVendidos.reset();
+  }
+
+  limparFiltrosVendidos(): void {
+    this.filtroVendidosBusca = '';
+    this.filtroVendidosData = '';
+    this.filtroVendidosTipo = 'venda';
+    this.filtroVendidosVendedor = '';
+    this.filtroVendidosLucro = '';
+    this.filtroVendidosVendaDe = null;
+    this.filtroVendidosVendaAte = null;
+    this.gridVendidos.reset();
+  }
+
+  get temFiltroVendidos(): boolean {
+    return !!(
+      this.filtroVendidosBusca.trim()
+      || this.filtroVendidosData
+      || this.filtroVendidosTipo !== 'venda'
+      || this.filtroVendidosVendedor
+      || this.filtroVendidosLucro
+      || this.filtroVendidosVendaDe != null
+      || this.filtroVendidosVendaAte != null
+    );
+  }
+
+  get aparelhosVendidosFiltrados(): AparelhoVendidoLinha[] {
+    const busca = this.normalizar(this.filtroVendidosBusca);
+    const tokens = busca.split(/\s+/).filter(Boolean);
+    const de = this.numeroBusca(this.filtroVendidosVendaDe);
+    const ate = this.numeroBusca(this.filtroVendidosVendaAte);
+    const linhas: AparelhoVendidoLinha[] = [];
+    for (const op of this.operacoes) {
+      if (op.status === 'estornada') continue;
+      if (op.tipo !== 'venda' && op.tipo !== 'troca') continue;
+      if (this.filtroVendidosTipo && op.tipo !== this.filtroVendidosTipo) continue;
+      if (!this.noPeriodoVendidos(op.data)) continue;
+      if (this.filtroVendidosVendedor && !this.vendedorBateNome(op.vendedorNome, this.filtroVendidosVendedor)) continue;
+      for (const item of this.aparelhosSaiu(op)) {
+        const valorVenda = Number(item.valor) || 0;
+        const valorPago = Number(item.custo) || 0;
+        const lucro = Math.round((valorVenda - valorPago) * 100) / 100;
+        if (this.filtroVendidosLucro === 'positivo' && lucro < 0) continue;
+        if (this.filtroVendidosLucro === 'negativo' && lucro >= 0) continue;
+        if (de != null && valorVenda < de) continue;
+        if (ate != null && valorVenda > ate) continue;
+        if (tokens.length) {
+          const hay = this.normalizar(`${item.codigo || ''} ${item.nome || ''} ${item.imei || ''} ${op.clienteNome || ''} ${op.vendedorNome || ''}`);
+          if (!tokens.every(tok => hay.includes(tok))) continue;
+        }
+        linhas.push({
+          op,
+          item,
+          tipo: op.tipo,
+          valorVenda,
+          valorPago,
+          lucro,
+          percentualVenda: valorVenda > 0 ? Math.round((lucro / valorVenda) * 1000) / 10 : null,
+          percentualPago: valorPago > 0 ? Math.round((lucro / valorPago) * 1000) / 10 : null,
+        });
+      }
+    }
+    return linhas;
+  }
+
+  get aparelhosVendidosPaginados(): AparelhoVendidoLinha[] {
+    return this.gridVendidos.paginate(this.aparelhosVendidosFiltrados);
+  }
+
+  get resumoVendidos(): { quantidade: number; venda: number; pago: number; lucro: number; percentualVenda: number | null } | null {
+    const lista = this.aparelhosVendidosFiltrados;
+    if (!lista.length) return null;
+    const arredondar = (n: number) => Math.round(n * 100) / 100;
+    const venda = lista.reduce((s, l) => s + l.valorVenda, 0);
+    const pago = lista.reduce((s, l) => s + l.valorPago, 0);
+    const lucro = arredondar(venda - pago);
+    return {
+      quantidade: lista.length,
+      venda: arredondar(venda),
+      pago: arredondar(pago),
+      lucro,
+      percentualVenda: venda > 0 ? Math.round((lucro / venda) * 1000) / 10 : null,
+    };
+  }
+
+  private noPeriodoVendidos(dataIso?: string | null): boolean {
+    if (!dataIso) return false;
+    if (this.filtroVendidosData) return this.dataTransacaoBate(dataIso, this.filtroVendidosData);
+    const t = Date.parse(dataIso);
+    if (!Number.isFinite(t)) return false;
+    return t >= Date.now() - this.periodoDias * 24 * 60 * 60 * 1000;
+  }
+
+  private vendedorBateNome(nome?: string | null, filtro?: string): boolean {
+    if (!filtro) return true;
+    return this.normalizar(nome || '') === this.normalizar(filtro);
   }
 
   lucroAparelhosQueSairam(op: AparelhoOperacao): number {
@@ -2917,6 +3230,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   resetPaginaTransacoes(): void {
     this.gridTransacoes.reset();
+    this.gridVendidos.reset();
   }
 
   codigosTransacao(op: AparelhoOperacao): string {
