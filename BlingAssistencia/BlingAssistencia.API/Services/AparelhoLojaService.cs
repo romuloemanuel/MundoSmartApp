@@ -1222,15 +1222,15 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             .Where(a => !string.IsNullOrWhiteSpace(a.Id))
             .ToDictionary(a => a.Id!);
         var pagos = ValorPagoPorAparelho(operacoes);
-        var assistencia = await TotaisAssistenciaAsync(estoque, cancellationToken);
+        var (aptos, assistencia) = await SepararAptosEAssistenciaAsync(estoque, cancellationToken);
 
         return new AparelhoLojaPainelDto
         {
             Resumo = new AparelhoLojaResumoDto
             {
-                EmEstoque = estoque.Count(a => a.Status == AparelhoLojaStatus.EmEstoque),
+                EmEstoque = aptos.Count,
                 EmAssistencia = assistencia.Quantidade,
-                CustoEstoque = estoque.Sum(a => a.Custo + a.CustoPecas),
+                CustoEstoque = Dinheiro(aptos.Sum(a => a.Custo + a.CustoPecas)),
                 CustoAssistencia = assistencia.Custo,
                 OrcamentoAssistencia = assistencia.Orcamento,
                 DinheiroRecebido = ativas.Sum(op => op.DinheiroRecebido),
@@ -1263,16 +1263,28 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 AtualizadoEm = p.AtualizadoEm,
             }).ToList(),
             VendedoresCadastrados = cadastro.Cadastrados(),
-            HistoricoEstoque = await RegistrarEListarMetricasAsync(estoque, ativas, porId, pagos, assistencia, cancellationToken),
+            HistoricoEstoque = await RegistrarEListarMetricasAsync(aptos, ativas, porId, pagos, assistencia, cancellationToken),
         };
     }
 
-    private async Task<(int Quantidade, decimal Custo, decimal Orcamento)> TotaisAssistenciaAsync(
+    private async Task<(List<AparelhoLojaData> Aptos, (int Quantidade, decimal Custo, decimal Orcamento) Assistencia)> SepararAptosEAssistenciaAsync(
         IReadOnlyList<AparelhoLojaData> estoque,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var parados = estoque.Where(a => a.Status == AparelhoLojaStatus.EmAssistencia).ToList();
+        var aptos = new List<AparelhoLojaData>();
+        var parados = new List<AparelhoLojaData>();
+        foreach (var aparelho in estoque)
+        {
+            if (aparelho.Status == AparelhoLojaStatus.EmAssistencia)
+                parados.Add(aparelho);
+            else if (aparelho.Status == AparelhoLojaStatus.EmEstoque)
+            {
+                if (await TemOsAtivaAsync(aparelho, cancellationToken)) parados.Add(aparelho);
+                else aptos.Add(aparelho);
+            }
+        }
+
         var orcamento = 0m;
         foreach (var aparelho in parados)
         {
@@ -1282,9 +1294,19 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         }
 
         return (
-            parados.Count,
-            Dinheiro(parados.Sum(a => a.Custo + a.CustoPecas)),
-            Dinheiro(orcamento));
+            aptos,
+            (
+                parados.Count,
+                Dinheiro(parados.Sum(a => a.Custo + a.CustoPecas)),
+                Dinheiro(orcamento)));
+    }
+
+    private async Task<bool> TemOsAtivaAsync(AparelhoLojaData aparelho, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (aparelho.OsEntradaId is not > 0) return false;
+        var os = await _os.ObterPorBlingIdAsync(aparelho.OsEntradaId.Value);
+        return os is not null && !OsSituacaoHelper.EhFinalizada(os.Situacao);
     }
 
     private static decimal ValorOrcamentoDaOs(OsLocalData? os)
@@ -1314,14 +1336,13 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     }
 
     private async Task<List<AparelhoEstoqueMetricaDto>> RegistrarEListarMetricasAsync(
-        IReadOnlyList<AparelhoLojaData> estoque,
+        IReadOnlyList<AparelhoLojaData> aptos,
         IReadOnlyList<AparelhoOperacaoData> ativas,
         IReadOnlyDictionary<string, AparelhoLojaData> porId,
         IReadOnlyDictionary<string, decimal> pagos,
         (int Quantidade, decimal Custo, decimal Orcamento) assistencia,
         CancellationToken cancellationToken)
     {
-        var aptos = estoque.Where(a => a.Status == AparelhoLojaStatus.EmEstoque).ToList();
         var custo = Dinheiro(aptos.Sum(a => a.Custo + a.CustoPecas));
         var valorVenda = Dinheiro(aptos.Sum(a => a.ValorVenda));
         var lucroEstoque = Dinheiro(valorVenda - custo);

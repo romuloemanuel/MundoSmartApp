@@ -357,7 +357,7 @@ export class AcompanhamentoCaixaModal implements OnInit {
       case 'valorVenda': return Number(p.valorVenda) || 0;
       case 'lucroEstoque': return Number(p.lucroEstoque) || 0;
       case 'lucroRealizado': return Number(p.lucroRealizado) || 0;
-      case 'custoAssistencia': return Number(p.custoAssistencia) || 0;
+      case 'custoAssistencia': return (Number(p.custoAssistencia) || 0) + (Number(p.orcamentoAssistencia) || 0);
       case 'orcamentoAssistencia': return Number(p.orcamentoAssistencia) || 0;
       case 'capitalGiro':
         return (Number(p.saldoCaixa) || 0)

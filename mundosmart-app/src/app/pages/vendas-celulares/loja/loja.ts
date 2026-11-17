@@ -10,6 +10,7 @@ import { NovoClienteModal } from '../../../components/novo-cliente-modal/novo-cl
 import { AutocompleteCriavel, AutocompleteItem } from '../../../components/autocomplete-criavel/autocomplete-criavel';
 import { EditarAparelhoLojaModal } from './editar-aparelho-loja-modal';
 import { AcompanhamentoCaixaModal } from './acompanhamento-caixa-modal';
+import { ParadosAssistenciaModal } from './parados-assistencia-modal';
 import { GridAcao } from '../../../components/grid-acao/grid-acao';
 import { GridPaginator } from '../../../components/grid-paginator/grid-paginator';
 import { GridPaginationState } from '../../../utils/grid-pagination.state';
@@ -136,6 +137,7 @@ interface FichaEntrada {
     AutocompleteCriavel,
     EditarAparelhoLojaModal,
     AcompanhamentoCaixaModal,
+    ParadosAssistenciaModal,
     GridAcao,
     GridPaginator,
   ],
@@ -167,12 +169,12 @@ interface FichaEntrada {
           <span>{{ c.nome }}</span>
         </div>
       </div>
-      <p class="hint" *ngIf="financeiro">
+      <p class="hint" *ngIf="financeiro && isAdmin">
         Acompanhe o caixa e o valor dos aparelhos para decidir quanto do lucro reinvestir.
         O saldo de caixa é dinheiro vivo. O custo em estoque já está em celular. Só administrador vê esta tela.
       </p>
 
-      <div class="cards" *ngIf="painel && financeiro">
+      <div class="cards" *ngIf="painel && financeiro && isAdmin">
         <div class="card">
           <span>Valor de estoque</span>
           <strong>{{ dinheiro(painel.resumo.custoEstoque) }}</strong>
@@ -241,22 +243,17 @@ interface FichaEntrada {
             <small *ngIf="metricaEstoqueHoje?.deltaValorVenda != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaValorVenda ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaValorVenda ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaValorVenda) }} vs ontem</small>
             <small>Oscila com cadastro, compra e venda</small>
           </div>
-          <div class="card">
+          <button type="button" class="card card-clicavel" (click)="abrirParadosAssistencia()">
             <span>Parados na assistência</span>
-            <strong>{{ dinheiro(assistenciaAcompanhamento.custo) }}</strong>
-            <small *ngIf="metricaEstoqueHoje?.deltaCustoAssistencia != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaCustoAssistencia ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaCustoAssistencia ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaCustoAssistencia) }} vs ontem</small>
-            <small>{{ assistenciaAcompanhamento.quantidade }} {{ assistenciaAcompanhamento.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · custo da compra e das peças</small>
-          </div>
-          <div class="card">
-            <span>Orçamento na assistência</span>
-            <strong>{{ dinheiro(assistenciaAcompanhamento.orcamento) }}</strong>
-            <small *ngIf="metricaEstoqueHoje?.deltaOrcamentoAssistencia != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaOrcamentoAssistencia ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaOrcamentoAssistencia ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaOrcamentoAssistencia) }} vs ontem</small>
-            <small>Valor à vista das OS desses aparelhos</small>
-          </div>
+            <strong>{{ dinheiro(assistenciaAcompanhamento.total) }}</strong>
+            <small *ngIf="assistenciaAcompanhamento.delta != null" [class.valor-positivo]="assistenciaAcompanhamento.delta > 0" [class.valor-negativo]="assistenciaAcompanhamento.delta < 0">{{ textoDelta(assistenciaAcompanhamento.delta) }} vs ontem</small>
+            <small>Custo {{ dinheiro(assistenciaAcompanhamento.custo) }} + orçamento {{ dinheiro(assistenciaAcompanhamento.orcamento) }}</small>
+            <small>{{ assistenciaAcompanhamento.quantidade }} {{ assistenciaAcompanhamento.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · clique para ver a lista</small>
+          </button>
           <div class="card">
             <span>Capital de giro</span>
-            <strong>{{ dinheiro(caixaAcompanhamento.saldo + estoqueApto.custo + assistenciaAcompanhamento.custo + assistenciaAcompanhamento.orcamento) }}</strong>
-            <small>Caixa + aptos + parados + orçamento</small>
+            <strong>{{ dinheiro(caixaAcompanhamento.saldo + estoqueApto.custo + assistenciaAcompanhamento.total) }}</strong>
+            <small>Caixa + aptos + parados (custo e orçamento)</small>
           </div>
           <div class="card">
             <span>Lucro já realizado</span>
@@ -270,12 +267,12 @@ interface FichaEntrada {
         </div>
       </ng-container>
 
-      <h3 class="secao" *ngIf="financeiro">Por mês</h3>
-      <p class="hint" *ngIf="financeiro">
+      <h3 class="secao" *ngIf="financeiro && isAdmin">Por mês</h3>
+      <p class="hint" *ngIf="financeiro && isAdmin">
         Cada linha é um aparelho. O mês junta o dinheiro daquelas compras, trocas e vendas, sem repetir o valor quando vários aparelhos saem da mesma troca.
       </p>
-      <p class="hint" *ngIf="financeiro && !meses.length">Nenhuma unidade para o mês.</p>
-      <ng-container *ngIf="financeiro">
+      <p class="hint" *ngIf="financeiro && isAdmin && !meses.length">Nenhuma unidade para o mês.</p>
+      <ng-container *ngIf="financeiro && isAdmin">
       <section class="mes" *ngFor="let m of meses">
         <h3>{{ m.rotulo }}</h3>
         <p class="sub">
@@ -325,14 +322,14 @@ interface FichaEntrada {
       </section>
       </ng-container>
 
-      <h3 class="secao" *ngIf="financeiro">Transações</h3>
-      <p class="hint" *ngIf="financeiro">
+      <h3 class="secao" *ngIf="financeiro && isAdmin">Transações</h3>
+      <p class="hint" *ngIf="financeiro && isAdmin">
         Cada linha junta a compra, as trocas e as vendas dos aparelhos que saíram uns dos outros.
         Enquanto ainda houver aparelho na loja, o valor é o resultado até agora: o dinheiro das trocas e das vendas, sem contar a compra.
         O lucro final aparece quando não resta nenhum aparelho, e desconta a compra e o custo das peças.
       </p>
-      <p class="hint" *ngIf="financeiro && !cadeias.length">Nenhuma venda ou troca para acompanhar.</p>
-      <ng-container *ngIf="financeiro">
+      <p class="hint" *ngIf="financeiro && isAdmin && !cadeias.length">Nenhuma venda ou troca para acompanhar.</p>
+      <ng-container *ngIf="financeiro && isAdmin">
       <article class="cadeia" *ngFor="let c of cadeias" [class.aberta]="c.aberta" [class.fechada]="!c.aberta">
         <button type="button" class="cadeia-topo" (click)="alternarCadeia(c.id)">
           <strong>{{ c.titulo }}</strong>
@@ -398,8 +395,8 @@ interface FichaEntrada {
         </div>
       </ng-template>
 
-      <h3 *ngIf="vendedores.length && financeiro">Por vendedor</h3>
-      <table class="data-grid" *ngIf="vendedores.length && financeiro">
+      <h3 *ngIf="vendedores.length && financeiro && isAdmin">Por vendedor</h3>
+      <table class="data-grid" *ngIf="vendedores.length && financeiro && isAdmin">
         <thead>
           <tr>
             <th>Vendedor</th>
@@ -432,7 +429,7 @@ interface FichaEntrada {
         <div class="filtros-periodo">
           <button type="button" *ngFor="let p of periodos" [class.ativo]="periodoDias === p.dias" (click)="escolherPeriodo(p.dias)">{{ p.nome }}</button>
         </div>
-        <p class="hint">Clique no vendedor para filtrar o período. Cadastro até 4/11/2026 é estoque inicial e não mexe no caixa.</p>
+        <p class="hint" *ngIf="isAdmin">Clique no vendedor para filtrar o período. Cadastro até 4/11/2026 é estoque inicial e não mexe no caixa.</p>
         <details class="metricas-tx" *ngIf="isAdmin" open>
           <summary>O que cada métrica significa</summary>
           <dl>
@@ -451,22 +448,20 @@ interface FichaEntrada {
             <dt>Caixa (coluna)</dt>
             <dd>Movimento de dinheiro vivo desta linha: + recebido, − pago. Custo do aparelho aparece só como referência.</dd>
             <dt>Custo em estoque</dt>
-            <dd>Soma do custo (compra/avaliação + peças) dos aparelhos em estoque liberados para venda. Não entra no caixa nem no lucro do período.</dd>
+            <dd>Soma do custo (compra/avaliação + peças) dos aparelhos aptos para venda, sem ordem de serviço ativa. Quem está na assistência entra em Parados na assistência.</dd>
             <dt>Valor de venda em estoque</dt>
             <dd>Soma do preço de venda cadastrado desses mesmos aparelhos. Ainda não é dinheiro recebido.</dd>
             <dt>Lucro em estoque</dt>
             <dd>Valor de venda menos o custo dos aparelhos aptos. É o lucro bruto se vender tudo no preço cadastrado.</dd>
             <dt>Parados na assistência</dt>
-            <dd>Custo (compra + peças) dos aparelhos que ainda não estão liberados para venda.</dd>
-            <dt>Orçamento na assistência</dt>
-            <dd>Valor à vista da OS desses aparelhos.</dd>
+            <dd>Custo (compra + peças) mais o orçamento da OS dos aparelhos que ainda não estão liberados para venda.</dd>
             <dt>Lucro já realizado</dt>
             <dd>Soma do lucro dos aparelhos que já saíram (venda ou troca), em todo o histórico.</dd>
             <dt>Variação</dt>
             <dd>Diferença em relação ao dia anterior. O sistema guarda um ponto por dia.</dd>
           </dl>
         </details>
-        <table class="data-grid" *ngIf="resultadosPorVendedor.length">
+        <table class="data-grid" *ngIf="isAdmin && resultadosPorVendedor.length">
           <thead>
             <tr>
               <th>Vendedor</th>
@@ -497,7 +492,7 @@ interface FichaEntrada {
             </tr>
           </tbody>
         </table>
-        <div class="cards" *ngIf="resumoVendedor as r">
+        <div class="cards" *ngIf="isAdmin && resumoVendedor as r">
           <div class="card">
             <span>{{ r.nome }}</span>
             <strong>{{ r.vendas }} {{ r.vendas === 1 ? 'venda' : 'vendas' }}</strong>
@@ -546,7 +541,7 @@ interface FichaEntrada {
             <span>Custo em estoque</span>
             <strong>{{ dinheiro(estoqueApto.custo) }}</strong>
             <small *ngIf="metricaEstoqueHoje?.deltaCusto != null" [class.valor-positivo]="(metricaEstoqueHoje!.deltaCusto ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje!.deltaCusto ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje!.deltaCusto) }} vs ontem</small>
-            <small>Aparelhos aptos para venda agora · {{ estoqueApto.quantidade }} {{ estoqueApto.quantidade === 1 ? 'aparelho' : 'aparelhos' }}</small>
+            <small>Só aparelhos sem OS ativa, aptos para venda · {{ estoqueApto.quantidade }} {{ estoqueApto.quantidade === 1 ? 'aparelho' : 'aparelhos' }}</small>
           </div>
           <div class="card">
             <span>Valor de venda em estoque</span>
@@ -566,16 +561,12 @@ interface FichaEntrada {
             <small *ngIf="h.deltaLucroRealizado != null" [class.valor-positivo]="h.deltaLucroRealizado > 0" [class.valor-negativo]="h.deltaLucroRealizado < 0">{{ textoDelta(h.deltaLucroRealizado) }} vs ontem</small>
             <small>Aparelhos que já saíram (venda ou troca)</small>
           </div>
-          <div class="card">
+          <button type="button" class="card card-clicavel" (click)="abrirParadosAssistencia()">
             <span>Parados na assistência</span>
-            <strong>{{ dinheiro(assistenciaAcompanhamento.custo) }}</strong>
-            <small>{{ assistenciaAcompanhamento.quantidade }} {{ assistenciaAcompanhamento.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · custo da compra e das peças</small>
-          </div>
-          <div class="card">
-            <span>Orçamento na assistência</span>
-            <strong>{{ dinheiro(assistenciaAcompanhamento.orcamento) }}</strong>
-            <small>Valor à vista das OS desses aparelhos</small>
-          </div>
+            <strong>{{ dinheiro(assistenciaAcompanhamento.total) }}</strong>
+            <small>Custo {{ dinheiro(assistenciaAcompanhamento.custo) }} + orçamento {{ dinheiro(assistenciaAcompanhamento.orcamento) }}</small>
+            <small>{{ assistenciaAcompanhamento.quantidade }} {{ assistenciaAcompanhamento.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · clique para ver a lista</small>
+          </button>
         </div>
         <div class="acoes-transacoes">
           <button type="button" class="btn-tx" *ngIf="isAdmin" (click)="abrirAcompanhamento()">Ver gráficos do mês</button>
@@ -632,11 +623,11 @@ interface FichaEntrada {
               <label>Modelo</label>
               <input [(ngModel)]="filtroModeloTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroModeloTx" placeholder="ip 11, sm a54…" />
             </div>
-            <div class="form-group">
+            <div class="form-group" *ngIf="isAdmin">
               <label>Valor de</label>
               <input type="number" min="0" step="0.01" [(ngModel)]="filtroValorDeTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroValorDeTx" />
             </div>
-            <div class="form-group">
+            <div class="form-group" *ngIf="isAdmin">
               <label>Valor até</label>
               <input type="number" min="0" step="0.01" [(ngModel)]="filtroValorAteTx" (ngModelChange)="resetPaginaTransacoes()" name="filtroValorAteTx" />
             </div>
@@ -659,7 +650,7 @@ interface FichaEntrada {
                 <th>Vendedor</th>
                 <th>Pessoa</th>
                 <th title="Preço comercial: saída = dinheiro para a loja; entrada = investimento">Aparelhos</th>
-                <th title="Tamanho do negócio em caixa, ou o preço do aparelho se não houve caixa">Valor</th>
+                <th *ngIf="isAdmin" title="Tamanho do negócio em caixa, ou o preço do aparelho se não houve caixa">Valor</th>
                 <th *ngIf="isAdmin" title="Preço de saída menos custo e peças, em cada aparelho que saiu">Lucro</th>
                 <th *ngIf="isAdmin" title="Dinheiro vivo: + recebido, − pago">Caixa</th>
                 <th></th>
@@ -692,20 +683,20 @@ interface FichaEntrada {
                 </td>
                 <td>
                   <div class="grupo-aparelhos" *ngFor="let a of aparelhosSaiu(op)">
-                    <span class="valor-negativo">− {{ dinheiro(a.valor) }}</span>
+                    <span class="valor-negativo" *ngIf="isAdmin">− {{ dinheiro(a.valor) }}</span>
                     <span>saiu {{ textoAparelhoGrupo(a) }}</span>
-                    <span class="sub">preço para a loja</span>
+                    <span class="sub" *ngIf="isAdmin">preço para a loja</span>
                   </div>
                   <div class="grupo-aparelhos" *ngFor="let a of aparelhosEntrou(op)">
-                    <span class="valor-positivo">+ {{ dinheiro(a.valor) }}</span>
+                    <span class="valor-positivo" *ngIf="isAdmin">+ {{ dinheiro(a.valor) }}</span>
                     <span>entrou {{ textoAparelhoGrupo(a) }}</span>
-                    <span class="sub">investimento</span>
+                    <span class="sub" *ngIf="isAdmin">investimento</span>
                   </div>
                   <div class="sub" *ngIf="!aparelhosSaiu(op).length && !aparelhosEntrou(op).length">
                     {{ op.saidaResumo || op.entradaResumo || '—' }}
                   </div>
                 </td>
-                <td>{{ valorTransacao(op) ? dinheiro(valorTransacao(op)) : '—' }}</td>
+                <td *ngIf="isAdmin">{{ valorTransacao(op) ? dinheiro(valorTransacao(op)) : '—' }}</td>
                 <td *ngIf="isAdmin">
                   <ng-container *ngIf="aparelhosSaiu(op).length; else semLucroTx">
                     <div
@@ -740,7 +731,7 @@ interface FichaEntrada {
                       (acao)="abrirCadeiaDaOperacao(op)"
                     />
                     <app-grid-acao
-                      *ngIf="idCustoDaOperacao(op)"
+                      *ngIf="isAdmin && idCustoDaOperacao(op)"
                       tipo="editar"
                       titulo="Editar custo do aparelho"
                       [disabled]="salvando"
@@ -779,7 +770,7 @@ interface FichaEntrada {
             <label>Abrir um aparelho</label>
             <input [ngModel]="buscaCadeia" (ngModelChange)="onBuscaCadeia($event)" name="buscaCadeia" placeholder="Código, IMEI ou modelo" />
           </div>
-          <p class="hint">Cada bloco segue o aparelho da compra até a última saída. − é preço de saída (dinheiro para a loja). + é investimento do que entrou. Lucro só no que saiu.</p>
+          <p class="hint">{{ isAdmin ? 'Cada bloco segue o aparelho da compra até a última saída. − é preço de saída (dinheiro para a loja). + é investimento do que entrou. Lucro só no que saiu.' : 'Cada bloco segue o aparelho da compra até a última saída.' }}</p>
           <p class="hint" *ngIf="avisoCadeia">{{ avisoCadeia }}</p>
           <p class="hint" *ngIf="!carregando && !avisoCadeia && !cadeiasDoPeriodo.length">Nenhuma cadeia neste período{{ buscaVendedor ? ' para este vendedor' : '' }}. Cadeia só existe depois de uma troca ou venda.</p>
           <p class="hint" *ngIf="buscaCadeia.trim() && !avisoCadeia && !cadeiasDoPeriodo.length">Esse aparelho ainda não gerou troca nem venda.</p>
@@ -793,14 +784,14 @@ interface FichaEntrada {
               <div class="passo" *ngFor="let p of c.passos">
                 <p><strong>{{ p.data | date:'dd/MM/yyyy HH:mm':'UTC' }}</strong> · {{ rotuloTipo(p.tipo) }}<span *ngIf="p.vendedorNome"> · {{ p.vendedorNome }}</span><span *ngIf="p.pessoa"> · {{ p.pessoa }}</span></p>
                 <p *ngFor="let a of p.saiu">
-                  <span class="valor-negativo">− {{ dinheiro(a.valor) }}</span>
+                  <span class="valor-negativo" *ngIf="isAdmin">− {{ dinheiro(a.valor) }}</span>
                   saiu {{ textoAparelhoGrupo(a) }}
                   <span class="sub" *ngIf="isAdmin" [class.valor-positivo]="lucroDoAparelhoSaiu(a) >= 0" [class.valor-negativo]="lucroDoAparelhoSaiu(a) < 0">
                     · lucro {{ dinheiro(lucroDoAparelhoSaiu(a)) }}
                   </span>
                 </p>
                 <p *ngFor="let a of p.entrou">
-                  <span class="valor-positivo">+ {{ dinheiro(a.valor) }}</span>
+                  <span class="valor-positivo" *ngIf="isAdmin">+ {{ dinheiro(a.valor) }}</span>
                   entrou {{ textoAparelhoGrupo(a) }}
                 </p>
                 <p class="sub" *ngIf="isAdmin && (p.dinheiroEntrou || p.dinheiroSaiu)">
@@ -1653,12 +1644,12 @@ interface FichaEntrada {
           </div>
       </ng-container>
 
-      <h3 class="secao" *ngIf="financeiro && custosAssistencia.length">Custo de assistência por aparelho</h3>
-      <p class="hint" *ngIf="financeiro && custosAssistencia.length">
+      <h3 class="secao" *ngIf="financeiro && isAdmin && custosAssistencia.length">Custo de assistência por aparelho</h3>
+      <p class="hint" *ngIf="financeiro && isAdmin && custosAssistencia.length">
         O custo do aparelho é a compra mais o custo da peça. Uma compra de 1400 com bateria de 400 fica 1800.
         A mão de obra cobrada do cliente não entra nesse custo.
       </p>
-      <table class="data-grid" *ngIf="financeiro && custosAssistencia.length">
+      <table class="data-grid" *ngIf="financeiro && isAdmin && custosAssistencia.length">
         <thead>
           <tr>
             <th>Aparelho</th>
@@ -1696,13 +1687,13 @@ interface FichaEntrada {
         </tbody>
       </table>
 
-      <h3 class="secao" *ngIf="financeiro">Dinheiro do movimento</h3>
+      <h3 class="secao" *ngIf="financeiro && isAdmin">Dinheiro do movimento</h3>
       <p class="hint" *ngIf="financeiro && isAdmin">
         O percentual do desconto na assistência continua em
         <a routerLink="/configuracoes/bling">Configurações → Bling</a>.
         Vendas antigas já importadas do Bling seguem valendo na consulta de desconto.
       </p>
-      <table class="data-grid" *ngIf="financeiro && operacoes.length">
+      <table class="data-grid" *ngIf="financeiro && isAdmin && operacoes.length">
         <thead>
           <tr>
             <th>Data</th>
@@ -1806,6 +1797,12 @@ interface FichaEntrada {
       *ngIf="modalAcompanhamento"
       [historico]="historicoEstoque"
       (fechar)="fecharAcompanhamento()"
+    />
+
+    <app-parados-assistencia-modal
+      *ngIf="modalParadosAssistencia"
+      [aparelhos]="paradosNaAssistencia"
+      (fechar)="fecharParadosAssistencia()"
     />
 
     <div class="modal-backdrop" *ngIf="modalVendidos" (click)="fecharModalVendidos()">
@@ -2050,6 +2047,11 @@ interface FichaEntrada {
     }
     .card span, .card small { color: #64748b; font-size: 12px; }
     .card strong { font-size: 18px; color: #0d0d0d; }
+    button.card-clicavel {
+      cursor: pointer; font: inherit; text-align: left; color: inherit;
+      background: #fff; border: 1px solid #e2e8f0;
+    }
+    button.card-clicavel:hover { border-color: #93c5fd; box-shadow: 0 0 0 2px #dbeafe; }
     .acoes { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 4px; }
     .iniciar { margin: 0 0 8px; }
     .iniciar h3 { margin: 0 0 4px; font-size: 18px; }
@@ -2276,6 +2278,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   visaoTransacoes: VisaoTransacoes = 'lista';
   modalVendidos = false;
   modalAcompanhamento = false;
+  modalParadosAssistencia = false;
   filtroVendidosBusca = '';
   filtroVendidosData = '';
   filtroVendidosTipo: FiltroTipoVendidos = 'venda';
@@ -2429,14 +2432,18 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     return this.estoque.filter(a => a.status === 'em_estoque');
   }
 
-  /** Liberado para venda: mesmo recorte da lista de venda/troca (`em_estoque`, fora da assistência). */
+  /** Liberado para venda: `em_estoque` e sem OS ativa. */
   get estoqueAptoParaVenda(): { quantidade: number; custo: number; valorVenda: number; lucro: number } {
     const itens = this.disponiveis;
     const arredondar = (n: number) => Math.round(n * 100) / 100;
-    const custo = arredondar(itens.reduce((s, a) => s + this.custoTotalDe(a), 0));
+    const custoLocal = arredondar(itens.reduce((s, a) => s + this.custoTotalDe(a), 0));
     const valorVenda = arredondar(itens.reduce((s, a) => s + (Number(a.valorVenda) || 0), 0));
+    const custo = this.painel?.resumo
+      ? arredondar(Number(this.painel.resumo.custoEstoque) || 0)
+      : custoLocal;
+    const quantidadeApi = Number(this.painel?.resumo?.emEstoque);
     return {
-      quantidade: itens.length,
+      quantidade: this.painel?.resumo && Number.isFinite(quantidadeApi) ? quantidadeApi : itens.length,
       custo,
       valorVenda,
       lucro: arredondar(valorVenda - custo),
@@ -2460,13 +2467,26 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     };
   }
 
-  get assistenciaAcompanhamento(): { quantidade: number; custo: number; orcamento: number } {
+  get paradosNaAssistencia(): AparelhoLojaItem[] {
+    return this.estoque.filter(a => a.status === 'em_assistencia');
+  }
+
+  get assistenciaAcompanhamento(): { quantidade: number; custo: number; orcamento: number; total: number; delta: number | null } {
     const r = this.painel?.resumo;
     const h = this.metricaEstoqueHoje;
+    const custo = Number(r?.custoAssistencia ?? h?.custoAssistencia) || 0;
+    const orcamento = Number(r?.orcamentoAssistencia ?? h?.orcamentoAssistencia) || 0;
+    const deltaCusto = h?.deltaCustoAssistencia;
+    const deltaOrcamento = h?.deltaOrcamentoAssistencia;
+    const delta = deltaCusto == null && deltaOrcamento == null
+      ? null
+      : (Number(deltaCusto) || 0) + (Number(deltaOrcamento) || 0);
     return {
       quantidade: Number(r?.emAssistencia) || 0,
-      custo: Number(r?.custoAssistencia ?? h?.custoAssistencia) || 0,
-      orcamento: Number(r?.orcamentoAssistencia ?? h?.orcamentoAssistencia) || 0,
+      custo,
+      orcamento,
+      total: Math.round((custo + orcamento) * 100) / 100,
+      delta,
     };
   }
 
@@ -2547,7 +2567,11 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     if (this.tela === 'venda') return 'Busque pelo código que o sistema gerou na entrada, ou escolha marca e modelo.';
     if (this.tela === 'troca') return 'O aparelho que sai se busca pelo código das costas. O que entra ganha um código novo na hora.';
     if (this.tela === 'estoque') return 'Clique na linha para ver o cadastro. Editar abre uma janela. Compra, venda e troca ficam nos botões acima.';
-    if (this.tela === 'transacoes') return 'Caixa é dinheiro vivo. Lucro é só no aparelho que saiu. Preço de entrada é investimento.';
+    if (this.tela === 'transacoes') {
+      return this.isAdmin
+        ? 'Caixa é dinheiro vivo. Lucro é só no aparelho que saiu. Preço de entrada é investimento.'
+        : 'Lista de compras, vendas e trocas do período.';
+    }
     return 'Caixa que entrou e valor dos aparelhos no tempo. Use o saldo de caixa para reinvestir parte do lucro.';
   }
 
@@ -3232,11 +3256,23 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape')
   fecharModalVendidosComEsc(): void {
+    if (this.modalParadosAssistencia) {
+      this.fecharParadosAssistencia();
+      return;
+    }
     if (this.modalAcompanhamento) {
       this.fecharAcompanhamento();
       return;
     }
     if (this.modalVendidos) this.fecharModalVendidos();
+  }
+
+  abrirParadosAssistencia(): void {
+    this.modalParadosAssistencia = true;
+  }
+
+  fecharParadosAssistencia(): void {
+    this.modalParadosAssistencia = false;
   }
 
   abrirAcompanhamento(): void {
