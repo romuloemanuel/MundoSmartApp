@@ -199,6 +199,8 @@ public class AparelhoLojaController : ControllerBase
         painel.Resumo.SaldoCaixa = 0;
         painel.Resumo.CustoPecas = 0;
         painel.Resumo.CustoMaoDeObra = 0;
+        painel.Resumo.CustoAssistencia = 0;
+        painel.Resumo.OrcamentoAssistencia = 0;
         foreach (var vendedor in painel.Resumo.PorVendedor)
         {
             vendedor.DinheiroRecebido = 0;
@@ -210,6 +212,7 @@ public class AparelhoLojaController : ControllerBase
         foreach (var aparelho in painel.Estoque.Concat(painel.CustosAssistencia))
             ZerarCusto(aparelho);
         painel.CustosAssistencia = [];
+        painel.HistoricoEstoque = [];
         foreach (var cadeia in painel.Cadeias)
             ZerarDinheiroDaCadeia(cadeia);
         painel.Meses = [];

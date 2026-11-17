@@ -256,6 +256,27 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Painel_grava_custo_venda_e_lucro_do_estoque_apto()
+    {
+        var imei = NovoImei();
+        var cliente = await ClienteComDocumento();
+        var id = await IdComprado(imei, 950);
+        var aberto = await Get("/api/aparelhos-loja");
+        var hoje = aberto["historicoEstoque"]!.AsArray()[0]!.AsObject();
+        Assert.True(Num(hoje["custo"]) >= 950m);
+        Assert.True(Num(hoje["valorVenda"]) >= 10000m);
+        Assert.Equal(Num(hoje["valorVenda"]) - Num(hoje["custo"]), Num(hoje["lucroEstoque"]));
+        Assert.True(hoje.ContainsKey("caixaEntrou"));
+        Assert.True(hoje.ContainsKey("saldoCaixa"));
+        Assert.True(hoje.ContainsKey("custoAssistencia"));
+        Assert.True(hoje.ContainsKey("orcamentoAssistencia"));
+        await Post("/api/aparelhos-loja/venda", Venda(id, cliente, 1500));
+        var depois = await Get("/api/aparelhos-loja");
+        var ponto = depois["historicoEstoque"]!.AsArray()[0]!.AsObject();
+        Assert.True(Num(ponto["lucroRealizado"]) >= 550m);
+    }
+
+    [Fact]
     public async Task Compra_entra_no_estoque_sem_desconto_e_o_caixa_sai_o_valor_pago()
     {
         var imei = NovoImei();

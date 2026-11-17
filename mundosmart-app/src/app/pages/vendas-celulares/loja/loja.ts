@@ -20,6 +20,7 @@ import {
   AparelhoCadeiaUnidade,
   AparelhoLojaItem,
   AparelhoMovimentoLinha,
+  AparelhoEstoqueMetrica,
   AparelhoLojaPainel,
   AparelhoLojaService,
   AparelhoOperacao,
@@ -165,8 +166,8 @@ interface FichaEntrada {
         </div>
       </div>
       <p class="hint" *ngIf="financeiro">
-        Valor de estoque e o dinheiro que entrou e saiu. Esta parte fica só para administrador.
-        A transação de uma troca segue até o último aparelho ser vendido.
+        Acompanhe o caixa e o valor dos aparelhos para decidir quanto do lucro reinvestir.
+        O saldo de caixa é dinheiro vivo. O custo em estoque já está em celular. Só administrador vê esta tela.
       </p>
 
       <div class="cards" *ngIf="painel && financeiro">
@@ -206,6 +207,106 @@ interface FichaEntrada {
           <small>Valor de saída menos o custo do celular e das peças</small>
         </div>
       </div>
+
+      <ng-container *ngIf="financeiro && isAdmin && estoqueAptoParaVenda as estoqueApto">
+        <h3 class="secao">Caixa e estoque no tempo</h3>
+        <p class="hint">
+          Cada dia guarda um ponto. Caixa que entrou sobe nas vendas. Custo e valor de venda oscilam quando entra ou sai aparelho.
+          Capital de giro é saldo de caixa, custo dos aptos e o que está parado na assistência (aparelho + orçamento).
+        </p>
+        <div class="cards">
+          <div class="card">
+            <span>Caixa que entrou</span>
+            <strong class="valor-positivo">{{ dinheiro(caixaAcompanhamento.entrou) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaCaixaEntrou != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaCaixaEntrou ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaCaixaEntrou ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaCaixaEntrou) }} vs ontem</small>
+            <small>Vendas e diferença de troca a favor da loja</small>
+          </div>
+          <div class="card">
+            <span>Saldo de caixa</span>
+            <strong [class.valor-positivo]="caixaAcompanhamento.saldo >= 0" [class.valor-negativo]="caixaAcompanhamento.saldo < 0">{{ dinheiro(caixaAcompanhamento.saldo) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaSaldoCaixa != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaSaldoCaixa ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaSaldoCaixa ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaSaldoCaixa) }} vs ontem</small>
+            <small>Dinheiro vivo para reinvestir</small>
+          </div>
+          <div class="card">
+            <span>Custo em estoque</span>
+            <strong>{{ dinheiro(estoqueApto.custo) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaCusto != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaCusto ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaCusto ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaCusto) }} vs ontem</small>
+            <small>{{ estoqueApto.quantidade }} {{ estoqueApto.quantidade === 1 ? 'aparelho apto' : 'aparelhos aptos' }} · já reinvestido em celular</small>
+          </div>
+          <div class="card">
+            <span>Valor de venda em estoque</span>
+            <strong>{{ dinheiro(estoqueApto.valorVenda) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaValorVenda != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaValorVenda ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaValorVenda ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaValorVenda) }} vs ontem</small>
+            <small>Oscila com cadastro, compra e venda</small>
+          </div>
+          <div class="card">
+            <span>Parados na assistência</span>
+            <strong>{{ dinheiro(assistenciaAcompanhamento.custo) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaCustoAssistencia != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaCustoAssistencia ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaCustoAssistencia ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaCustoAssistencia) }} vs ontem</small>
+            <small>{{ assistenciaAcompanhamento.quantidade }} {{ assistenciaAcompanhamento.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · custo da compra e das peças</small>
+          </div>
+          <div class="card">
+            <span>Orçamento na assistência</span>
+            <strong>{{ dinheiro(assistenciaAcompanhamento.orcamento) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaOrcamentoAssistencia != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaOrcamentoAssistencia ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaOrcamentoAssistencia ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaOrcamentoAssistencia) }} vs ontem</small>
+            <small>Valor à vista das OS desses aparelhos</small>
+          </div>
+          <div class="card">
+            <span>Capital de giro</span>
+            <strong>{{ dinheiro(caixaAcompanhamento.saldo + estoqueApto.custo + assistenciaAcompanhamento.custo + assistenciaAcompanhamento.orcamento) }}</strong>
+            <small>Caixa + aptos + parados + orçamento</small>
+          </div>
+          <div class="card">
+            <span>Lucro já realizado</span>
+            <strong [class.valor-positivo]="(metricaEstoqueHoje?.lucroRealizado ?? lucroVendasAdmin?.lucro ?? 0) >= 0" [class.valor-negativo]="(metricaEstoqueHoje?.lucroRealizado ?? lucroVendasAdmin?.lucro ?? 0) < 0">{{ dinheiro(metricaEstoqueHoje?.lucroRealizado ?? lucroVendasAdmin?.lucro ?? 0) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaLucroRealizado != null" [class.valor-positivo]="(metricaEstoqueHoje?.deltaLucroRealizado ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje?.deltaLucroRealizado ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje?.deltaLucroRealizado) }} vs ontem</small>
+            <small>Parte disto pode voltar para o estoque</small>
+          </div>
+        </div>
+        <div class="historico-estoque" *ngIf="historicoEstoque.length">
+          <p class="hint" *ngIf="historicoEstoque.length === 1">O primeiro ponto é hoje. A partir de amanhã a tabela mostra a oscilação dia a dia.</p>
+          <div class="tabela-scroll">
+            <table class="data-grid">
+              <thead>
+                <tr>
+                  <th>Dia</th>
+                  <th>Qtd</th>
+                  <th>Caixa entrou</th>
+                  <th>Δ caixa</th>
+                  <th>Saldo caixa</th>
+                  <th>Δ saldo</th>
+                  <th>Custo estoque</th>
+                  <th>Δ custo</th>
+                  <th>Valor venda</th>
+                  <th>Δ venda</th>
+                  <th>Lucro estoque</th>
+                  <th>Lucro realizado</th>
+                  <th>Parados AT</th>
+                  <th>Orçamento AT</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let d of historicoEstoque">
+                  <td>{{ dataCurta(d.dia) }}</td>
+                  <td>{{ d.quantidade }}</td>
+                  <td>{{ dinheiro(d.caixaEntrou) }}</td>
+                  <td [class.valor-positivo]="(d.deltaCaixaEntrou ?? 0) > 0" [class.valor-negativo]="(d.deltaCaixaEntrou ?? 0) < 0">{{ textoDelta(d.deltaCaixaEntrou) }}</td>
+                  <td>{{ dinheiro(d.saldoCaixa) }}</td>
+                  <td [class.valor-positivo]="(d.deltaSaldoCaixa ?? 0) > 0" [class.valor-negativo]="(d.deltaSaldoCaixa ?? 0) < 0">{{ textoDelta(d.deltaSaldoCaixa) }}</td>
+                  <td>{{ dinheiro(d.custo) }}</td>
+                  <td [class.valor-positivo]="(d.deltaCusto ?? 0) > 0" [class.valor-negativo]="(d.deltaCusto ?? 0) < 0">{{ textoDelta(d.deltaCusto) }}</td>
+                  <td>{{ dinheiro(d.valorVenda) }}</td>
+                  <td [class.valor-positivo]="(d.deltaValorVenda ?? 0) > 0" [class.valor-negativo]="(d.deltaValorVenda ?? 0) < 0">{{ textoDelta(d.deltaValorVenda) }}</td>
+                  <td>{{ dinheiro(d.lucroEstoque) }}</td>
+                  <td>{{ dinheiro(d.lucroRealizado) }}</td>
+                  <td>{{ dinheiro(d.custoAssistencia) }}</td>
+                  <td>{{ dinheiro(d.orcamentoAssistencia) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </ng-container>
 
       <h3 class="secao" *ngIf="financeiro">Por mês</h3>
       <p class="hint" *ngIf="financeiro">
@@ -391,6 +492,16 @@ interface FichaEntrada {
             <dd>Soma do custo (compra/avaliação + peças) dos aparelhos em estoque liberados para venda. Não entra no caixa nem no lucro do período.</dd>
             <dt>Valor de venda em estoque</dt>
             <dd>Soma do preço de venda cadastrado desses mesmos aparelhos. Ainda não é dinheiro recebido.</dd>
+            <dt>Lucro em estoque</dt>
+            <dd>Valor de venda menos o custo dos aparelhos aptos. É o lucro bruto se vender tudo no preço cadastrado.</dd>
+            <dt>Parados na assistência</dt>
+            <dd>Custo (compra + peças) dos aparelhos que ainda não estão liberados para venda.</dd>
+            <dt>Orçamento na assistência</dt>
+            <dd>Valor à vista da OS desses aparelhos.</dd>
+            <dt>Lucro já realizado</dt>
+            <dd>Soma do lucro dos aparelhos que já saíram (venda ou troca), em todo o histórico.</dd>
+            <dt>Variação</dt>
+            <dd>Diferença em relação ao dia anterior. O sistema guarda um ponto por dia.</dd>
           </dl>
         </details>
         <table class="data-grid" *ngIf="resultadosPorVendedor.length">
@@ -472,14 +583,42 @@ interface FichaEntrada {
           <div class="card">
             <span>Custo em estoque</span>
             <strong>{{ dinheiro(estoqueApto.custo) }}</strong>
-            <small>Aparelhos aptos para venda agora · {{ estoqueApto.quantidade }} {{ estoqueApto.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · não entra no caixa nem no lucro do período</small>
+            <small *ngIf="metricaEstoqueHoje?.deltaCusto != null" [class.valor-positivo]="(metricaEstoqueHoje!.deltaCusto ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje!.deltaCusto ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje!.deltaCusto) }} vs ontem</small>
+            <small>Aparelhos aptos para venda agora · {{ estoqueApto.quantidade }} {{ estoqueApto.quantidade === 1 ? 'aparelho' : 'aparelhos' }}</small>
           </div>
           <div class="card">
             <span>Valor de venda em estoque</span>
             <strong>{{ dinheiro(estoqueApto.valorVenda) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaValorVenda != null" [class.valor-positivo]="(metricaEstoqueHoje!.deltaValorVenda ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje!.deltaValorVenda ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje!.deltaValorVenda) }} vs ontem</small>
             <small>Preço de venda dos mesmos aparelhos · ainda não saíram da loja</small>
           </div>
+          <div class="card">
+            <span>Lucro em estoque</span>
+            <strong [class.valor-positivo]="estoqueApto.lucro >= 0" [class.valor-negativo]="estoqueApto.lucro < 0">{{ dinheiro(estoqueApto.lucro) }}</strong>
+            <small *ngIf="metricaEstoqueHoje?.deltaLucroEstoque != null" [class.valor-positivo]="(metricaEstoqueHoje!.deltaLucroEstoque ?? 0) > 0" [class.valor-negativo]="(metricaEstoqueHoje!.deltaLucroEstoque ?? 0) < 0">{{ textoDelta(metricaEstoqueHoje!.deltaLucroEstoque) }} vs ontem</small>
+            <small>Venda cadastrada menos o custo · se vender tudo neste preço</small>
+          </div>
+          <div class="card" *ngIf="metricaEstoqueHoje as h">
+            <span>Lucro já realizado</span>
+            <strong [class.valor-positivo]="h.lucroRealizado >= 0" [class.valor-negativo]="h.lucroRealizado < 0">{{ dinheiro(h.lucroRealizado) }}</strong>
+            <small *ngIf="h.deltaLucroRealizado != null" [class.valor-positivo]="h.deltaLucroRealizado > 0" [class.valor-negativo]="h.deltaLucroRealizado < 0">{{ textoDelta(h.deltaLucroRealizado) }} vs ontem</small>
+            <small>Aparelhos que já saíram (venda ou troca)</small>
+          </div>
+          <div class="card">
+            <span>Parados na assistência</span>
+            <strong>{{ dinheiro(assistenciaAcompanhamento.custo) }}</strong>
+            <small>{{ assistenciaAcompanhamento.quantidade }} {{ assistenciaAcompanhamento.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · custo da compra e das peças</small>
+          </div>
+          <div class="card">
+            <span>Orçamento na assistência</span>
+            <strong>{{ dinheiro(assistenciaAcompanhamento.orcamento) }}</strong>
+            <small>Valor à vista das OS desses aparelhos</small>
+          </div>
         </div>
+        <p class="hint" *ngIf="isAdmin">
+          <a routerLink="/vendas-celulares/loja/financeiro">Acompanhar caixa e estoque no tempo</a>
+          — caixa que entrou, valor dos aparelhos e lucro, para reinvestir.
+        </p>
         <div class="acoes-transacoes">
           <button
             type="button"
@@ -1865,6 +2004,10 @@ interface FichaEntrada {
     .metricas-tx dl { display: grid; grid-template-columns: 200px 1fr; gap: 6px 12px; margin: 10px 0 0; font-size: 13px; }
     .metricas-tx dt { color: #0f172a; font-weight: 700; }
     .metricas-tx dd { margin: 0; color: #475569; }
+    .historico-estoque { max-width: 1100px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+    .historico-estoque summary { cursor: pointer; font-weight: 700; color: #334155; font-size: 13px; }
+    .historico-estoque table { margin: 10px 0 0; }
+    .tabela-scroll { overflow-x: auto; }
     .codigo-etiqueta, .codigo-faixa { grid-column: 1 / -1; }
     .codigo-etiqueta { font-size: 48px; font-weight: 800; letter-spacing: 1px; margin: 0 0 8px; line-height: 1; }
     .codigo-banner { background: #0f172a; color: #fff; border-radius: 12px; padding: 16px 18px; margin: 0 0 16px; max-width: 920px; }
@@ -2321,14 +2464,50 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
   }
 
   /** Liberado para venda: mesmo recorte da lista de venda/troca (`em_estoque`, fora da assistência). */
-  get estoqueAptoParaVenda(): { quantidade: number; custo: number; valorVenda: number } {
+  get estoqueAptoParaVenda(): { quantidade: number; custo: number; valorVenda: number; lucro: number } {
     const itens = this.disponiveis;
     const arredondar = (n: number) => Math.round(n * 100) / 100;
+    const custo = arredondar(itens.reduce((s, a) => s + this.custoTotalDe(a), 0));
+    const valorVenda = arredondar(itens.reduce((s, a) => s + (Number(a.valorVenda) || 0), 0));
     return {
       quantidade: itens.length,
-      custo: arredondar(itens.reduce((s, a) => s + this.custoTotalDe(a), 0)),
-      valorVenda: arredondar(itens.reduce((s, a) => s + (Number(a.valorVenda) || 0), 0)),
+      custo,
+      valorVenda,
+      lucro: arredondar(valorVenda - custo),
     };
+  }
+
+  get historicoEstoque(): AparelhoEstoqueMetrica[] {
+    return this.painel?.historicoEstoque ?? [];
+  }
+
+  get metricaEstoqueHoje(): AparelhoEstoqueMetrica | null {
+    return this.historicoEstoque[0] ?? null;
+  }
+
+  get caixaAcompanhamento(): { entrou: number; saiu: number; saldo: number } {
+    const r = this.painel?.resumo;
+    return {
+      entrou: Number(r?.dinheiroRecebido) || 0,
+      saiu: Number(r?.dinheiroPago) || 0,
+      saldo: Number(r?.saldoCaixa) || 0,
+    };
+  }
+
+  get assistenciaAcompanhamento(): { quantidade: number; custo: number; orcamento: number } {
+    const r = this.painel?.resumo;
+    const h = this.metricaEstoqueHoje;
+    return {
+      quantidade: Number(r?.emAssistencia) || 0,
+      custo: Number(r?.custoAssistencia ?? h?.custoAssistencia) || 0,
+      orcamento: Number(r?.orcamentoAssistencia ?? h?.orcamentoAssistencia) || 0,
+    };
+  }
+
+  textoDelta(valor?: number | null): string {
+    if (valor == null) return '—';
+    const prefixo = valor > 0 ? '+' : '';
+    return `${prefixo}${this.dinheiro(valor)}`;
   }
 
   get disponiveisPorMarca(): { marca: string; qtd: number }[] {
@@ -2394,7 +2573,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     if (this.tela === 'troca') return 'Troca';
     if (this.tela === 'estoque') return 'Estoque';
     if (this.tela === 'transacoes') return 'Transações';
-    return 'Financeiro dos aparelhos';
+    return 'Caixa e estoque';
   }
 
   get dicaTela(): string {
@@ -2403,7 +2582,7 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
     if (this.tela === 'troca') return 'O aparelho que sai se busca pelo código das costas. O que entra ganha um código novo na hora.';
     if (this.tela === 'estoque') return 'Clique na linha para ver o cadastro. Editar abre uma janela. Compra, venda e troca ficam nos botões acima.';
     if (this.tela === 'transacoes') return 'Caixa é dinheiro vivo. Lucro é só no aparelho que saiu. Preço de entrada é investimento.';
-    return 'Valor de estoque e o dinheiro que entrou e saiu. Esta parte fica só para administrador.';
+    return 'Caixa que entrou e valor dos aparelhos no tempo. Use o saldo de caixa para reinvestir parte do lucro.';
   }
 
   get transacoesFiltradas(): AparelhoOperacao[] {

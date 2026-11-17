@@ -35,6 +35,8 @@ public interface IAparelhoLojaRepository
     Task InserirSessaoFotosAsync(AparelhoFotoSessaoData item, CancellationToken cancellationToken = default);
     Task SalvarSessaoFotosAsync(AparelhoFotoSessaoData item, CancellationToken cancellationToken = default);
     Task<AparelhoFotoSessaoData?> ObterSessaoFotosAsync(string token, CancellationToken cancellationToken = default);
+    Task SalvarMetricaDiaAsync(AparelhoLojaMetricaDiaData item, CancellationToken cancellationToken = default);
+    Task<List<AparelhoLojaMetricaDiaData>> ListarMetricasAsync(int limite, CancellationToken cancellationToken = default);
 }
 
 public class AparelhoLojaRepository : IAparelhoLojaRepository
@@ -43,6 +45,7 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
     private readonly IMongoCollection<AparelhoOperacaoData> _operacoes;
     private readonly IMongoCollection<AparelhoListaPrecoData> _lista;
     private readonly IMongoCollection<AparelhoFotoSessaoData> _sessoes;
+    private readonly IMongoCollection<AparelhoLojaMetricaDiaData> _metricas;
 
     public AparelhoLojaRepository(MongoDbService mongo)
     {
@@ -50,6 +53,7 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
         _operacoes = mongo.GetCollection<AparelhoOperacaoData>("aparelho_operacoes");
         _lista = mongo.GetCollection<AparelhoListaPrecoData>("aparelho_lista_precos");
         _sessoes = mongo.GetCollection<AparelhoFotoSessaoData>("aparelho_foto_sessoes");
+        _metricas = mongo.GetCollection<AparelhoLojaMetricaDiaData>("aparelho_loja_metricas");
     }
 
     public async Task EnsureIndexesAsync(CancellationToken cancellationToken = default)
@@ -79,6 +83,12 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
                     .Ascending(x => x.Condicao)
                     .Ascending(x => x.ConfiguracaoChave),
                 new CreateIndexOptions { Unique = true, Name = "modelo_condicao_config" }),
+            cancellationToken: cancellationToken);
+
+        await _metricas.Indexes.CreateOneAsync(
+            new CreateIndexModel<AparelhoLojaMetricaDiaData>(
+                Builders<AparelhoLojaMetricaDiaData>.IndexKeys.Ascending(x => x.Dia),
+                new CreateIndexOptions { Unique = true, Name = "dia" }),
             cancellationToken: cancellationToken);
     }
 
@@ -231,4 +241,27 @@ public class AparelhoLojaRepository : IAparelhoLojaRepository
 
     public Task<AparelhoFotoSessaoData?> ObterSessaoFotosAsync(string token, CancellationToken cancellationToken = default) =>
         _sessoes.Find(x => x.Token == token).FirstOrDefaultAsync(cancellationToken)!;
+
+    public async Task SalvarMetricaDiaAsync(AparelhoLojaMetricaDiaData item, CancellationToken cancellationToken = default)
+    {
+        var existente = await _metricas.Find(x => x.Dia == item.Dia).FirstOrDefaultAsync(cancellationToken);
+        if (existente is null)
+        {
+            await _metricas.InsertOneAsync(item, cancellationToken: cancellationToken);
+            return;
+        }
+
+        item.Id = existente.Id;
+        await _metricas.ReplaceOneAsync(x => x.Id == existente.Id, item, cancellationToken: cancellationToken);
+    }
+
+    public async Task<List<AparelhoLojaMetricaDiaData>> ListarMetricasAsync(int limite, CancellationToken cancellationToken = default)
+    {
+        var recentes = await _metricas.Find(FilterDefinition<AparelhoLojaMetricaDiaData>.Empty)
+            .SortByDescending(x => x.Dia)
+            .Limit(Math.Max(1, limite))
+            .ToListAsync(cancellationToken);
+        recentes.Reverse();
+        return recentes;
+    }
 }

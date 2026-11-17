@@ -89,7 +89,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
               <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Vendas PayMobi</a>
               <a *ngIf="appAuth.isAdmin()" routerLink="/paymobi/cobranca" routerLinkActive="active" (click)="aoClicarItemCelulares()">Gerenciamento de cobrança</a>
               <a routerLink="/vendas-celulares/iniciar-paymobi" routerLinkActive="active" (click)="aoClicarItemCelulares()">Iniciar uma Venda Paymobi</a>
-              <a *ngIf="appAuth.isAdmin()" routerLink="/vendas-celulares/loja/financeiro" routerLinkActive="active" (click)="aoClicarItemCelulares()">Financeiro dos aparelhos</a>
+              <a *ngIf="appAuth.isAdmin()" routerLink="/vendas-celulares/loja/financeiro" routerLinkActive="active" (click)="aoClicarItemCelulares()">Caixa e estoque</a>
               <a routerLink="/vendas-celulares/consultar-desconto" routerLinkActive="active" (click)="aoClicarItemCelulares()">Consultar Cliente Desconto</a>
             </div>
           </div>

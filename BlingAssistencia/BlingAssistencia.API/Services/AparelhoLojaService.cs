@@ -1222,14 +1222,17 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             .Where(a => !string.IsNullOrWhiteSpace(a.Id))
             .ToDictionary(a => a.Id!);
         var pagos = ValorPagoPorAparelho(operacoes);
+        var assistencia = await TotaisAssistenciaAsync(estoque, cancellationToken);
 
         return new AparelhoLojaPainelDto
         {
             Resumo = new AparelhoLojaResumoDto
             {
                 EmEstoque = estoque.Count(a => a.Status == AparelhoLojaStatus.EmEstoque),
-                EmAssistencia = estoque.Count(a => a.Status == AparelhoLojaStatus.EmAssistencia),
+                EmAssistencia = assistencia.Quantidade,
                 CustoEstoque = estoque.Sum(a => a.Custo + a.CustoPecas),
+                CustoAssistencia = assistencia.Custo,
+                OrcamentoAssistencia = assistencia.Orcamento,
                 DinheiroRecebido = ativas.Sum(op => op.DinheiroRecebido),
                 DinheiroPago = ativas.Where(op => !EhEstoqueInicial(op)).Sum(op => op.DinheiroPago),
                 SaldoCaixa = ativas.Sum(op => op.DinheiroRecebido) - ativas.Where(op => !EhEstoqueInicial(op)).Sum(op => op.DinheiroPago),
@@ -1260,7 +1263,130 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 AtualizadoEm = p.AtualizadoEm,
             }).ToList(),
             VendedoresCadastrados = cadastro.Cadastrados(),
+            HistoricoEstoque = await RegistrarEListarMetricasAsync(estoque, ativas, porId, pagos, assistencia, cancellationToken),
         };
+    }
+
+    private async Task<(int Quantidade, decimal Custo, decimal Orcamento)> TotaisAssistenciaAsync(
+        IReadOnlyList<AparelhoLojaData> estoque,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var parados = estoque.Where(a => a.Status == AparelhoLojaStatus.EmAssistencia).ToList();
+        var orcamento = 0m;
+        foreach (var aparelho in parados)
+        {
+            if (aparelho.OsEntradaId is not > 0) continue;
+            var os = await _os.ObterPorBlingIdAsync(aparelho.OsEntradaId.Value);
+            orcamento += ValorOrcamentoDaOs(os);
+        }
+
+        return (
+            parados.Count,
+            Dinheiro(parados.Sum(a => a.Custo + a.CustoPecas)),
+            Dinheiro(orcamento));
+    }
+
+    private static decimal ValorOrcamentoDaOs(OsLocalData? os)
+    {
+        if (os is null) return 0;
+        var total = PrimeiroValorPositivo(os.ValorAVista, os.ValorTotalAcordado, os.ValorTotal);
+        if (total > 0) return total;
+        var linhas = 0m;
+        foreach (var item in os.Itens ?? [])
+        {
+            var qtd = item.Quantidade <= 0 ? 1 : item.Quantidade;
+            var linha = item.ValorAcontado is > 0 ? item.ValorAcontado.Value : item.ValorUnitario * qtd;
+            if (linha > 0) linhas += linha;
+        }
+
+        return linhas;
+    }
+
+    private static decimal PrimeiroValorPositivo(params decimal?[] valores)
+    {
+        foreach (var valor in valores)
+        {
+            if (valor is > 0) return valor.Value;
+        }
+
+        return 0;
+    }
+
+    private async Task<List<AparelhoEstoqueMetricaDto>> RegistrarEListarMetricasAsync(
+        IReadOnlyList<AparelhoLojaData> estoque,
+        IReadOnlyList<AparelhoOperacaoData> ativas,
+        IReadOnlyDictionary<string, AparelhoLojaData> porId,
+        IReadOnlyDictionary<string, decimal> pagos,
+        (int Quantidade, decimal Custo, decimal Orcamento) assistencia,
+        CancellationToken cancellationToken)
+    {
+        var aptos = estoque.Where(a => a.Status == AparelhoLojaStatus.EmEstoque).ToList();
+        var custo = Dinheiro(aptos.Sum(a => a.Custo + a.CustoPecas));
+        var valorVenda = Dinheiro(aptos.Sum(a => a.ValorVenda));
+        var lucroEstoque = Dinheiro(valorVenda - custo);
+        var lucroRealizado = Dinheiro(ativas
+            .Where(op => op.Saida is not null && op.Tipo is AparelhoOperacaoTipo.Venda or AparelhoOperacaoTipo.Troca)
+            .Sum(op =>
+            {
+                var item = ItemDaCadeia(op.Saida!, porId, pagos, ehSaida: true);
+                return item.Valor - item.CustoTotal;
+            }));
+        var caixaEntrou = Dinheiro(ativas.Sum(op => op.DinheiroRecebido));
+        var caixaSaiu = Dinheiro(ativas.Where(op => !EhEstoqueInicial(op)).Sum(op => op.DinheiroPago));
+        var saldoCaixa = Dinheiro(caixaEntrou - caixaSaiu);
+        var agora = HorarioBrasil.Agora;
+        await _repo.SalvarMetricaDiaAsync(new AparelhoLojaMetricaDiaData
+        {
+            Dia = DateTime.SpecifyKind(agora.Date, DateTimeKind.Utc),
+            Quantidade = aptos.Count,
+            Custo = custo,
+            ValorVenda = valorVenda,
+            LucroEstoque = lucroEstoque,
+            LucroRealizado = lucroRealizado,
+            CaixaEntrou = caixaEntrou,
+            CaixaSaiu = caixaSaiu,
+            SaldoCaixa = saldoCaixa,
+            QuantidadeAssistencia = assistencia.Quantidade,
+            CustoAssistencia = assistencia.Custo,
+            OrcamentoAssistencia = assistencia.Orcamento,
+            AtualizadoEm = agora,
+        }, cancellationToken);
+
+        var pontos = await _repo.ListarMetricasAsync(60, cancellationToken);
+        var saida = new List<AparelhoEstoqueMetricaDto>(pontos.Count);
+        AparelhoLojaMetricaDiaData? anterior = null;
+        foreach (var ponto in pontos)
+        {
+            saida.Add(new AparelhoEstoqueMetricaDto
+            {
+                Dia = ponto.Dia,
+                Quantidade = ponto.Quantidade,
+                Custo = ponto.Custo,
+                ValorVenda = ponto.ValorVenda,
+                LucroEstoque = ponto.LucroEstoque,
+                LucroRealizado = ponto.LucroRealizado,
+                CaixaEntrou = ponto.CaixaEntrou,
+                CaixaSaiu = ponto.CaixaSaiu,
+                SaldoCaixa = ponto.SaldoCaixa,
+                DeltaCusto = anterior is null ? null : Dinheiro(ponto.Custo - anterior.Custo),
+                DeltaValorVenda = anterior is null ? null : Dinheiro(ponto.ValorVenda - anterior.ValorVenda),
+                DeltaLucroEstoque = anterior is null ? null : Dinheiro(ponto.LucroEstoque - anterior.LucroEstoque),
+                DeltaLucroRealizado = anterior is null ? null : Dinheiro(ponto.LucroRealizado - anterior.LucroRealizado),
+                DeltaCaixaEntrou = anterior is null ? null : Dinheiro(ponto.CaixaEntrou - anterior.CaixaEntrou),
+                DeltaCaixaSaiu = anterior is null ? null : Dinheiro(ponto.CaixaSaiu - anterior.CaixaSaiu),
+                DeltaSaldoCaixa = anterior is null ? null : Dinheiro(ponto.SaldoCaixa - anterior.SaldoCaixa),
+                QuantidadeAssistencia = ponto.QuantidadeAssistencia,
+                CustoAssistencia = ponto.CustoAssistencia,
+                OrcamentoAssistencia = ponto.OrcamentoAssistencia,
+                DeltaCustoAssistencia = anterior is null ? null : Dinheiro(ponto.CustoAssistencia - anterior.CustoAssistencia),
+                DeltaOrcamentoAssistencia = anterior is null ? null : Dinheiro(ponto.OrcamentoAssistencia - anterior.OrcamentoAssistencia),
+            });
+            anterior = ponto;
+        }
+
+        saida.Reverse();
+        return saida;
     }
 
     private async Task<List<AparelhoCadeiaDto>> MontarCadeiasAsync(

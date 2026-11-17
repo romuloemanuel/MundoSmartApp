@@ -442,3 +442,59 @@ public class AparelhoListaPrecoData
     [BsonElement("atualizadoEm")]
     public DateTime AtualizadoEm { get; set; }
 }
+
+/// <summary>Foto do dia: custo, venda e lucro dos aparelhos aptos, mais o lucro já realizado.</summary>
+public class AparelhoLojaMetricaDiaData
+{
+    [BsonId]
+    [BsonRepresentation(BsonType.ObjectId)]
+    public string? Id { get; set; }
+
+    [BsonElement("dia")]
+    public DateTime Dia { get; set; }
+
+    [BsonElement("quantidade")]
+    public int Quantidade { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("custo")]
+    public decimal Custo { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("valorVenda")]
+    public decimal ValorVenda { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("lucroEstoque")]
+    public decimal LucroEstoque { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("lucroRealizado")]
+    public decimal LucroRealizado { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("caixaEntrou")]
+    public decimal CaixaEntrou { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("caixaSaiu")]
+    public decimal CaixaSaiu { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("saldoCaixa")]
+    public decimal SaldoCaixa { get; set; }
+
+    [BsonElement("quantidadeAssistencia")]
+    public int QuantidadeAssistencia { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("custoAssistencia")]
+    public decimal CustoAssistencia { get; set; }
+
+    [BsonRepresentation(BsonType.Decimal128)]
+    [BsonElement("orcamentoAssistencia")]
+    public decimal OrcamentoAssistencia { get; set; }
+
+    [BsonElement("atualizadoEm")]
+    public DateTime AtualizadoEm { get; set; }
+}

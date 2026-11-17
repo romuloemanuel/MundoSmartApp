@@ -249,6 +249,8 @@ public class AparelhoLojaResumoDto
     public int Trocas { get; set; }
     public decimal CustoPecas { get; set; }
     public decimal CustoMaoDeObra { get; set; }
+    public decimal CustoAssistencia { get; set; }
+    public decimal OrcamentoAssistencia { get; set; }
     public List<AparelhoVendedorResumoDto> PorVendedor { get; set; } = [];
 }
 
@@ -397,8 +399,34 @@ public class AparelhoLojaPainelDto
     public List<AparelhoCadeiaMesDto> Meses { get; set; } = [];
     public List<AparelhoListaPrecoDto> Lista { get; set; } = [];
     public List<AparelhoVendedorCadastroDto> VendedoresCadastrados { get; set; } = [];
+    public List<AparelhoEstoqueMetricaDto> HistoricoEstoque { get; set; } = [];
     public decimal DescontoVendaMaxPercentual { get; set; }
     public decimal AcrescimoFinanciadoraMaxPercentual { get; set; }
+}
+
+public class AparelhoEstoqueMetricaDto
+{
+    public DateTime Dia { get; set; }
+    public int Quantidade { get; set; }
+    public decimal Custo { get; set; }
+    public decimal ValorVenda { get; set; }
+    public decimal LucroEstoque { get; set; }
+    public decimal LucroRealizado { get; set; }
+    public decimal CaixaEntrou { get; set; }
+    public decimal CaixaSaiu { get; set; }
+    public decimal SaldoCaixa { get; set; }
+    public decimal? DeltaCusto { get; set; }
+    public decimal? DeltaValorVenda { get; set; }
+    public decimal? DeltaLucroEstoque { get; set; }
+    public decimal? DeltaLucroRealizado { get; set; }
+    public decimal? DeltaCaixaEntrou { get; set; }
+    public decimal? DeltaCaixaSaiu { get; set; }
+    public decimal? DeltaSaldoCaixa { get; set; }
+    public int QuantidadeAssistencia { get; set; }
+    public decimal CustoAssistencia { get; set; }
+    public decimal OrcamentoAssistencia { get; set; }
+    public decimal? DeltaCustoAssistencia { get; set; }
+    public decimal? DeltaOrcamentoAssistencia { get; set; }
 }
 
 public class AparelhoVendedorCadastroDto

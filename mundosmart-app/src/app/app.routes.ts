@@ -217,7 +217,7 @@ export const routes: Routes = [
         canActivate: [adminGuard],
         loadComponent: () =>
           import('./pages/vendas-celulares/loja/loja').then(m => m.AparelhosLojaPage),
-        title: 'Financeiro dos aparelhos',
+        title: 'Caixa e estoque',
         data: { financeiro: true },
       },
       {

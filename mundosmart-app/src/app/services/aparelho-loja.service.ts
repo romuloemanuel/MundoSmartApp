@@ -142,6 +142,8 @@ export interface AparelhoLojaResumo {
   trocas: number;
   custoPecas?: number;
   custoMaoDeObra?: number;
+  custoAssistencia?: number;
+  orcamentoAssistencia?: number;
   porVendedor?: AparelhoVendedorResumo[];
 }
 
@@ -238,6 +240,30 @@ export interface AparelhoCadeiaMes {
   unidades: AparelhoCadeiaUnidade[];
 }
 
+export interface AparelhoEstoqueMetrica {
+  dia: string;
+  quantidade: number;
+  custo: number;
+  valorVenda: number;
+  lucroEstoque: number;
+  lucroRealizado: number;
+  caixaEntrou?: number;
+  caixaSaiu?: number;
+  saldoCaixa?: number;
+  deltaCusto?: number | null;
+  deltaValorVenda?: number | null;
+  deltaLucroEstoque?: number | null;
+  deltaLucroRealizado?: number | null;
+  deltaCaixaEntrou?: number | null;
+  deltaCaixaSaiu?: number | null;
+  deltaSaldoCaixa?: number | null;
+  quantidadeAssistencia?: number;
+  custoAssistencia?: number;
+  orcamentoAssistencia?: number;
+  deltaCustoAssistencia?: number | null;
+  deltaOrcamentoAssistencia?: number | null;
+}
+
 export interface AparelhoLojaPainel {
   resumo: AparelhoLojaResumo;
   estoque: AparelhoLojaItem[];
@@ -247,6 +273,7 @@ export interface AparelhoLojaPainel {
   cadeias?: AparelhoCadeia[];
   meses?: AparelhoCadeiaMes[];
   vendedoresCadastrados?: AparelhoVendedorCadastro[];
+  historicoEstoque?: AparelhoEstoqueMetrica[];
   descontoVendaMaxPercentual?: number;
   acrescimoFinanciadoraMaxPercentual?: number;
 }
