@@ -224,6 +224,38 @@ public class LojaRegrasTests
     }
 
     [Fact]
+    public async Task Cadastro_altera_o_valor_cobrado_depois_da_venda()
+    {
+        var imei = NovoImei();
+        var cliente = await ClienteComDocumento();
+        var id = await IdComprado(imei, 1000);
+        await Post("/api/aparelhos-loja/venda", Venda(id, cliente, 800));
+        var editado = await Put($"/api/aparelhos-loja/{id}/cadastro", new
+        {
+            imei,
+            marca = "Apple",
+            modelo = "iPhone 13",
+            cor = "Preto",
+            configuracao = "128GB",
+            condicao = "usado",
+            valorVenda = 1500m,
+            valorMinimoVenda = 2000m,
+            valorPago = 900m,
+            bateriaPerfeita = true,
+        });
+        var venda = ExigirOperacao(editado, imei, "venda");
+        var saido = venda["saiu"]!.AsArray()[0]!.AsObject();
+        Assert.Equal(1500m, Num(saido["valor"]));
+        Assert.Equal(900m, Num(saido["custo"]));
+        Assert.Equal(600m, Num(saido["valor"]) - Num(saido["custo"]));
+        Assert.Equal(1500m, Num(venda["precoSaida"]));
+        Assert.Equal(1500m, Num(venda["dinheiroRecebido"]));
+        var ficha = await Get($"/api/aparelhos-loja/{id}");
+        Assert.Equal(1500m, Num(ficha["valorVenda"]));
+        Assert.Equal(900m, Num(ficha["custo"]));
+    }
+
+    [Fact]
     public async Task Compra_entra_no_estoque_sem_desconto_e_o_caixa_sai_o_valor_pago()
     {
         var imei = NovoImei();

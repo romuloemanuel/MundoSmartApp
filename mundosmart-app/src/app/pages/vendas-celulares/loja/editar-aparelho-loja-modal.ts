@@ -32,7 +32,7 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
         <div class="modal-body">
           <p class="codigo-etiqueta" *ngIf="aparelho.codigo">{{ aparelho.codigo }}</p>
           <p class="hint">{{ aparelho.marca }} {{ aparelho.modelo }}{{ aparelho.cor ? ' · ' + aparelho.cor : '' }}. Este código o sistema gerou na entrada e não muda.</p>
-          <p class="hint" *ngIf="aparelho.status === 'vendido'">Este aparelho já saiu. O valor pago continua no custo da venda e no caixa.</p>
+          <p class="hint" *ngIf="aparelho.status === 'vendido'">Este aparelho já saiu. Valor pago atualiza o custo. Valor cobrado na venda atualiza a transação e o lucro (venda − pago).</p>
           <div class="form-row">
             <div class="form-group">
               <label>Marca</label>
@@ -85,7 +85,7 @@ import { OsFotoCategoriaId } from '../../../config/os-foto-categoria.config';
               <p class="hint">Preço do fornecedor para comprar outro igual.</p>
             </div>
             <div class="form-group">
-              <label>Valor de venda</label>
+              <label>{{ aparelho.status === 'vendido' ? 'Valor cobrado na venda' : 'Valor de venda' }}</label>
               <input data-campo="valorVenda" type="number" min="0" step="0.01" (input)="definirVenda($event)" />
             </div>
             <div class="form-group">
@@ -685,18 +685,23 @@ export class EditarAparelhoLojaModal implements OnInit, OnDestroy {
     }
     const valorPago = Number(this.valorPago);
     const valorVenda = Number(this.valorVenda);
-    const valorMinimo = Number(this.valorMinimo);
+    let valorMinimo = Number(this.valorMinimo);
     if (!(valorPago > 0)) {
       avisarErroUsuario('Informe o valor pago.');
       return;
     }
     if (!(valorVenda > 0) || !(valorMinimo > 0)) {
-      avisarErroUsuario('Informe o valor de venda e o mínimo.');
+      avisarErroUsuario(this.aparelho.status === 'vendido'
+        ? 'Informe o valor cobrado na venda e o mínimo.'
+        : 'Informe o valor de venda e o mínimo.');
       return;
     }
     if (valorMinimo > valorVenda) {
-      avisarErroUsuario('O valor mínimo não pode passar do valor de venda.');
-      return;
+      if (this.aparelho.status === 'vendido') valorMinimo = valorVenda;
+      else {
+        avisarErroUsuario('O valor mínimo não pode passar do valor de venda.');
+        return;
+      }
     }
     if (this.ehIphone && this.bateriaPerfeita !== 'sim' && this.bateriaPerfeita !== 'nao') {
       avisarErroUsuario('Informe se a saúde da bateria do iPhone está em perfeitas condições.');

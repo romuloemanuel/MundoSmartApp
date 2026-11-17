@@ -959,7 +959,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         if (aparelho.Status is not (AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia or AparelhoLojaStatus.Vendido))
             throw new InvalidOperationException("Esse aparelho já saiu. O cadastro não pode mais ser alterado.");
 
-        var entrada = await NormalizarEntradaAsync(pedido, cancellationToken, aparelho.Id);
+        var entrada = await NormalizarEntradaAsync(pedido, cancellationToken, aparelho.Id, aparelho.Status == AparelhoLojaStatus.Vendido);
         if (entrada.Cor.Length == 0)
             throw new InvalidOperationException("Informe a cor do aparelho.");
         if (entrada.Configuracao.Length == 0)
@@ -989,6 +989,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             await AplicarValorPagoAsync(aparelho, pedido.ValorPago.Value, cancellationToken);
         if (pedido.ValorParaCompra is not null)
             aparelho.ValorParaCompra = pedido.ValorParaCompra.Value > 0 ? Dinheiro(pedido.ValorParaCompra.Value) : 0;
+        if (aparelho.Status == AparelhoLojaStatus.Vendido)
+            await AplicarPrecoCobradoNaSaidaAsync(aparelho, entrada.ValorVenda, cancellationToken);
         await AssociarOsAsync(aparelho, entrada, exigirAberta: false, cancellationToken);
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
         return await MontarPainelAsync(cancellationToken);
@@ -1021,21 +1023,13 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
                 {
                     operacao.DinheiroPago = pago;
                     operacao.ValorAvaliado = pago;
-                    if (operacao.Entrada is not null)
-                    {
-                        operacao.Entrada.Preco = pago;
-                        operacao.Entrada.Custo = pago;
-                    }
-
+                    AtualizarMovimentoDeEntrada(operacao, aparelho.Id, pago);
                     await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
                 }
                 else if (operacao.Tipo == AparelhoOperacaoTipo.Troca)
                 {
-                    var movimento = MovimentosDaEntrada(operacao).FirstOrDefault(m => m.AparelhoId == aparelho.Id);
-                    if (movimento is not null)
+                    if (AtualizarMovimentoDeEntrada(operacao, aparelho.Id, pago))
                     {
-                        movimento.Preco = pago;
-                        movimento.Custo = pago;
                         operacao.ValorAvaliado = Dinheiro(MovimentosDaEntrada(operacao).Sum(m => m.Preco));
                         await _repo.SalvarOperacaoAsync(operacao, cancellationToken);
                     }
@@ -1043,17 +1037,71 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             }
         }
 
-        if (string.IsNullOrWhiteSpace(aparelho.OperacaoSaidaId))
-            return;
-
-        var saidaOp = await _repo.ObterOperacaoAsync(aparelho.OperacaoSaidaId, cancellationToken);
-        if (saidaOp is not { Status: AparelhoOperacaoStatus.Ativa } || saidaOp.Saida is null)
-            return;
-        if (!string.Equals(saidaOp.Saida.AparelhoId, aparelho.Id, StringComparison.Ordinal))
+        var saidaOp = await OperacaoDeSaidaAsync(aparelho, cancellationToken);
+        if (saidaOp?.Saida is null)
             return;
 
         saidaOp.Saida.Custo = Dinheiro(pago + aparelho.CustoPecas);
         await _repo.SalvarOperacaoAsync(saidaOp, cancellationToken);
+    }
+
+    private async Task AplicarPrecoCobradoNaSaidaAsync(
+        AparelhoLojaData aparelho,
+        decimal informado,
+        CancellationToken cancellationToken)
+    {
+        var preco = Dinheiro(informado);
+        if (preco <= 0)
+            throw new InvalidOperationException("Informe o valor cobrado na venda.");
+
+        aparelho.PrecoVenda = preco;
+        aparelho.ValorVenda = preco;
+        var saidaOp = await OperacaoDeSaidaAsync(aparelho, cancellationToken);
+        if (saidaOp?.Saida is null)
+            return;
+
+        saidaOp.PrecoSaida = preco;
+        saidaOp.Saida.Preco = preco;
+        if (VendaCaixaSeguePreco(saidaOp))
+            saidaOp.DinheiroRecebido = preco;
+        await _repo.SalvarOperacaoAsync(saidaOp, cancellationToken);
+    }
+
+    private async Task<AparelhoOperacaoData?> OperacaoDeSaidaAsync(
+        AparelhoLojaData aparelho,
+        CancellationToken cancellationToken)
+    {
+        bool EhSaidaDeste(AparelhoOperacaoData? op) =>
+            op is { Status: AparelhoOperacaoStatus.Ativa, Saida: not null }
+            && string.Equals(op.Saida.AparelhoId, aparelho.Id, StringComparison.Ordinal);
+
+        if (!string.IsNullOrWhiteSpace(aparelho.OperacaoSaidaId))
+        {
+            var peloId = await _repo.ObterOperacaoAsync(aparelho.OperacaoSaidaId, cancellationToken);
+            if (EhSaidaDeste(peloId))
+                return peloId;
+        }
+
+        var ativas = await _repo.ListarOperacoesAtivasAsync(cancellationToken);
+        return ativas.FirstOrDefault(EhSaidaDeste);
+    }
+
+    private static bool AtualizarMovimentoDeEntrada(AparelhoOperacaoData operacao, string aparelhoId, decimal pago)
+    {
+        var alterou = false;
+        void Patch(AparelhoMovimentoData? movimento)
+        {
+            if (movimento is null || !string.Equals(movimento.AparelhoId, aparelhoId, StringComparison.Ordinal))
+                return;
+            movimento.Preco = pago;
+            movimento.Custo = pago;
+            alterou = true;
+        }
+
+        Patch(operacao.Entrada);
+        foreach (var movimento in operacao.Entradas ?? [])
+            Patch(movimento);
+        return alterou;
     }
 
     private static void ExigirImeiParaSair(AparelhoLojaData aparelho)
@@ -1065,7 +1113,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     private async Task<AparelhoEntradaRequest> NormalizarEntradaAsync(
         AparelhoEntradaRequest? bruto,
         CancellationToken cancellationToken,
-        string? ignorarId = null)
+        string? ignorarId = null,
+        bool jaVendido = false)
     {
         if (bruto is null)
             throw new InvalidOperationException("Informe os dados do aparelho.");
@@ -1097,8 +1146,10 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             Cor = Texto(bruto.Cor),
             Configuracao = Texto(bruto.Configuracao),
             Condicao = condicao,
-            ValorVenda = ExigirValorDeVenda(bruto.ValorVenda, bruto.ValorMinimoVenda),
-            ValorMinimoVenda = Dinheiro(bruto.ValorMinimoVenda),
+            ValorVenda = jaVendido ? ExigirValorCobrado(bruto.ValorVenda) : ExigirValorDeVenda(bruto.ValorVenda, bruto.ValorMinimoVenda),
+            ValorMinimoVenda = jaVendido
+                ? MinimoDoVendido(bruto.ValorVenda, bruto.ValorMinimoVenda)
+                : Dinheiro(bruto.ValorMinimoVenda),
             Observacoes = Texto(bruto.Observacoes),
             AlertaPermanente = Limitar(Texto(bruto.AlertaPermanente), 400),
             SaudeBateria = bruto.SaudeBateria,
@@ -1308,7 +1359,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         IReadOnlyDictionary<string, decimal> pagos)
     {
         var entrou = MovimentosDaEntrada(op).Select(m => ItemDaCadeia(m, porId, pagos)).ToList();
-        var saiu = op.Saida is null ? [] : new List<AparelhoCadeiaItemDto> { ItemDaCadeia(op.Saida, porId, pagos) };
+        var saiu = op.Saida is null ? [] : new List<AparelhoCadeiaItemDto> { ItemDaCadeia(op.Saida, porId, pagos, ehSaida: true) };
         var telefone = Texto(cliente?.Celular);
         if (telefone.Length == 0) telefone = Texto(cliente?.Telefone);
         return new AparelhoCadeiaPassoDto
@@ -1328,9 +1379,9 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             VendedorNome = cadastro.Nome(op.VendedorId, op.VendedorNome),
             Entrou = entrou,
             Saiu = saiu,
-            DinheiroEntrou = op.DinheiroRecebido,
+            DinheiroEntrou = CaixaRecebidoDaOperacao(op, porId),
             DinheiroSaiu = op.DinheiroPago,
-            Resultado = Dinheiro(op.DinheiroRecebido - op.DinheiroPago),
+            Resultado = Dinheiro(CaixaRecebidoDaOperacao(op, porId) - op.DinheiroPago),
         };
     }
 
@@ -1353,13 +1404,16 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     private static AparelhoCadeiaItemDto ItemDaCadeia(
         AparelhoMovimentoData m,
         IReadOnlyDictionary<string, AparelhoLojaData> porId,
-        IReadOnlyDictionary<string, decimal> pagos)
+        IReadOnlyDictionary<string, decimal> pagos,
+        bool ehSaida = false)
     {
         porId.TryGetValue(m.AparelhoId ?? "", out var aparelho);
         var pecas = aparelho?.CustoPecas ?? 0;
         var pago = 0m;
         if (!string.IsNullOrWhiteSpace(m.AparelhoId))
             pagos.TryGetValue(m.AparelhoId, out pago);
+        if (aparelho is { Custo: > 0 })
+            pago = aparelho.Custo;
         var custo = pago > 0 ? pago : m.Custo;
         var custoTotal = pago > 0
             ? Dinheiro(pago + pecas)
@@ -1376,8 +1430,40 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
             Custo = custo,
             CustoPecas = pecas,
             CustoTotal = custoTotal,
-            Valor = m.Preco,
+            Valor = ehSaida ? PrecoCobradoDaSaida(aparelho, m.Preco) : m.Preco,
         };
+    }
+
+    private static decimal PrecoCobradoDaSaida(AparelhoLojaData? aparelho, decimal snapshot) =>
+        aparelho is { PrecoVenda: > 0 } ? aparelho.PrecoVenda : snapshot;
+
+    private static decimal PrecoSaidaDaOperacao(
+        AparelhoOperacaoData op,
+        IReadOnlyDictionary<string, AparelhoLojaData> porId)
+    {
+        if (op.Saida is not null
+            && porId.TryGetValue(op.Saida.AparelhoId ?? "", out var aparelho)
+            && aparelho.PrecoVenda > 0)
+            return aparelho.PrecoVenda;
+        return op.PrecoSaida;
+    }
+
+    private static decimal CaixaRecebidoDaOperacao(
+        AparelhoOperacaoData op,
+        IReadOnlyDictionary<string, AparelhoLojaData> porId)
+    {
+        if (!VendaCaixaSeguePreco(op))
+            return op.DinheiroRecebido;
+        var cobrado = PrecoSaidaDaOperacao(op, porId);
+        return cobrado > 0 ? cobrado : op.DinheiroRecebido;
+    }
+
+    private static bool VendaCaixaSeguePreco(AparelhoOperacaoData op)
+    {
+        if (op.Tipo != AparelhoOperacaoTipo.Venda)
+            return false;
+        var forma = (op.FormaNegociacao ?? "").Trim().ToLowerInvariant();
+        return forma is "" or "avista" or "pix" or "dinheiro";
     }
 
     private static List<AparelhoMovimentoLinhaDto> MontarMovimentos(
@@ -1407,7 +1493,8 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
     {
         porId.TryGetValue(movimento.AparelhoId ?? "", out var aparelho);
         var codigo = string.IsNullOrWhiteSpace(movimento.Codigo) ? aparelho?.Codigo ?? "" : movimento.Codigo;
-        var valor = Dinheiro(movimento.Preco);
+        var bruto = sentido == "saida" ? PrecoCobradoDaSaida(aparelho, movimento.Preco) : movimento.Preco;
+        var valor = Dinheiro(bruto);
         return new AparelhoMovimentoLinhaDto
         {
             Data = op.Data,
@@ -1653,7 +1740,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         Cor = a.Cor,
         Configuracao = a.Configuracao,
         Condicao = a.Condicao,
-        ValorVenda = a.ValorVenda,
+        ValorVenda = a.Status == AparelhoLojaStatus.Vendido && a.PrecoVenda > 0 ? a.PrecoVenda : a.ValorVenda,
         ValorMinimoVenda = a.ValorMinimoVenda,
         ValorPago = a.Custo,
         ValorParaCompra = a.ValorParaCompra,
@@ -1720,10 +1807,10 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         EntradaResumo = ResumoEntradas(op),
         SaidaResumo = ResumoMovimento(op.Saida),
         Entrou = MovimentosDaEntrada(op).Select(m => ItemDaCadeia(m, porId, pagos)).ToList(),
-        Saiu = op.Saida is null ? [] : [ItemDaCadeia(op.Saida, porId, pagos)],
+        Saiu = op.Saida is null ? [] : [ItemDaCadeia(op.Saida, porId, pagos, ehSaida: true)],
         ValorAvaliado = op.ValorAvaliado,
-        PrecoSaida = op.PrecoSaida,
-        DinheiroRecebido = op.DinheiroRecebido,
+        PrecoSaida = PrecoSaidaDaOperacao(op, porId),
+        DinheiroRecebido = CaixaRecebidoDaOperacao(op, porId),
         DinheiroPago = op.DinheiroPago,
         FormaNegociacao = string.IsNullOrWhiteSpace(op.FormaNegociacao) ? "avista" : op.FormaNegociacao,
         FinanciadoraNome = op.FinanciadoraNome,
@@ -2007,6 +2094,23 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         if (piso > preco)
             throw new InvalidOperationException("O valor mínimo para venda não pode passar do valor de venda.");
         return preco;
+    }
+
+    private decimal ExigirValorCobrado(decimal venda)
+    {
+        var preco = Dinheiro(venda);
+        if (preco <= 0)
+            throw new InvalidOperationException("Informe o valor cobrado na venda.");
+        return preco;
+    }
+
+    private decimal MinimoDoVendido(decimal venda, decimal minimo)
+    {
+        var preco = ExigirValorCobrado(venda);
+        var piso = Dinheiro(minimo);
+        if (piso <= 0 || piso > preco)
+            return preco;
+        return piso;
     }
 
     private static void ExigirAcimaDoMinimo(AparelhoLojaData aparelho, decimal tabela, decimal desconto, decimal precoInformado)

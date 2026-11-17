@@ -387,6 +387,10 @@ interface FichaEntrada {
             <dd>Só no aparelho que saiu: preço de saída menos custo (compra/avaliação + peças). A soma do recorte está no card.</dd>
             <dt>Caixa (coluna)</dt>
             <dd>Movimento de dinheiro vivo desta linha: + recebido, − pago. Custo do aparelho aparece só como referência.</dd>
+            <dt>Custo em estoque</dt>
+            <dd>Soma do custo (compra/avaliação + peças) dos aparelhos em estoque liberados para venda. Não entra no caixa nem no lucro do período.</dd>
+            <dt>Valor de venda em estoque</dt>
+            <dd>Soma do preço de venda cadastrado desses mesmos aparelhos. Ainda não é dinheiro recebido.</dd>
           </dl>
         </details>
         <table class="data-grid" *ngIf="resultadosPorVendedor.length">
@@ -464,21 +468,40 @@ interface FichaEntrada {
             <small>Lucro dividido pelo preço de saída. Custo no recorte: {{ dinheiro(lucro.custo) }}</small>
           </div>
         </div>
-        <div class="acoes-lucro" *ngIf="isAdmin">
-          <button type="button" class="btn-lucro-vendidos" (click)="abrirModalVendidos()">
-            <strong>Ver lucro de cada aparelho</strong>
-            <span>Abre uma janela com valor de venda, valor pago, lucro (venda − pago) e o percentual.</span>
-          </button>
+        <div class="cards" *ngIf="isAdmin && estoqueAptoParaVenda as estoqueApto">
+          <div class="card">
+            <span>Custo em estoque</span>
+            <strong>{{ dinheiro(estoqueApto.custo) }}</strong>
+            <small>Aparelhos aptos para venda agora · {{ estoqueApto.quantidade }} {{ estoqueApto.quantidade === 1 ? 'aparelho' : 'aparelhos' }} · não entra no caixa nem no lucro do período</small>
+          </div>
+          <div class="card">
+            <span>Valor de venda em estoque</span>
+            <strong>{{ dinheiro(estoqueApto.valorVenda) }}</strong>
+            <small>Preço de venda dos mesmos aparelhos · ainda não saíram da loja</small>
+          </div>
         </div>
-        <div class="modos visoes">
-          <button type="button" [class.ativo]="visaoTransacoes === 'lista'" (click)="visaoTransacoes = 'lista'">
-            <strong>Transações</strong>
-            <span>Uma linha por negócio. Troca com um ou dois aparelhos fica agrupada.</span>
-          </button>
-          <button type="button" [class.ativo]="visaoTransacoes === 'cadeia'" (click)="abrirVisaoCadeia()">
-            <strong>Cadeia da troca</strong>
-            <span>Do aparelho inicial até o último sair da loja.</span>
-          </button>
+        <div class="acoes-transacoes">
+          <button
+            type="button"
+            class="btn-tx btn-tx-lucro"
+            *ngIf="isAdmin"
+            (click)="abrirModalVendidos()"
+            title="Abre uma janela com valor de venda, valor pago, lucro (venda − pago) e o percentual."
+          >Ver lucro de cada aparelho</button>
+          <button
+            type="button"
+            class="btn-tx"
+            [class.ativo]="visaoTransacoes === 'lista'"
+            (click)="visaoTransacoes = 'lista'"
+            title="Uma linha por negócio. Troca com um ou dois aparelhos fica agrupada."
+          >Transações</button>
+          <button
+            type="button"
+            class="btn-tx"
+            [class.ativo]="visaoTransacoes === 'cadeia'"
+            (click)="abrirVisaoCadeia()"
+            title="Do aparelho inicial até o último sair da loja."
+          >Cadeia da troca</button>
         </div>
 
         <ng-container *ngIf="visaoTransacoes === 'lista'">
@@ -1839,7 +1862,7 @@ interface FichaEntrada {
     .hint { color: #64748b; font-size: 13px; margin: 0 0 14px; max-width: 820px; line-height: 1.45; }
     .metricas-tx { max-width: 920px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
     .metricas-tx summary { cursor: pointer; font-weight: 700; color: #334155; font-size: 13px; }
-    .metricas-tx dl { display: grid; grid-template-columns: 160px 1fr; gap: 6px 12px; margin: 10px 0 0; font-size: 13px; }
+    .metricas-tx dl { display: grid; grid-template-columns: 200px 1fr; gap: 6px 12px; margin: 10px 0 0; font-size: 13px; }
     .metricas-tx dt { color: #0f172a; font-weight: 700; }
     .metricas-tx dd { margin: 0; color: #475569; }
     .codigo-etiqueta, .codigo-faixa { grid-column: 1 / -1; }
@@ -1933,15 +1956,19 @@ interface FichaEntrada {
     .modos button span, .modos a span { color: #dbeafe; font-size: 13px; font-weight: 500; line-height: 1.35; }
     .modos button.ativo, .modos a.ativo { background: #1e3a8a; outline: 3px solid #93c5fd; }
     .modos.visoes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .acoes-lucro { margin: 0 0 14px; }
-    .btn-lucro-vendidos {
-      display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
-      background: #0f172a; color: #fff; border: 0; border-radius: 12px;
-      padding: 14px 16px; cursor: pointer; text-align: left; max-width: 520px;
+    .acoes-transacoes {
+      display: flex; flex-wrap: nowrap; gap: 8px; align-items: center;
+      margin: 0 0 14px; overflow-x: auto;
     }
-    .btn-lucro-vendidos:hover { background: #1e293b; }
-    .btn-lucro-vendidos strong { font-size: 16px; }
-    .btn-lucro-vendidos span { color: #cbd5e1; font-size: 13px; font-weight: 500; line-height: 1.35; }
+    .acoes-transacoes .btn-tx {
+      flex: 0 0 auto; padding: 6px 12px; font-size: 13px; font-weight: 600; line-height: 1.2;
+      background: #2563eb; color: #fff; border: none; border-radius: 8px; cursor: pointer;
+      white-space: nowrap;
+    }
+    .acoes-transacoes .btn-tx:hover { background: #1d4ed8; }
+    .acoes-transacoes .btn-tx.ativo { background: #1e3a8a; outline: 2px solid #93c5fd; }
+    .acoes-transacoes .btn-tx-lucro { background: #0f172a; }
+    .acoes-transacoes .btn-tx-lucro:hover { background: #1e293b; }
     .modal-vendidos { max-width: 1180px; }
     .busca-vendidos { align-items: flex-end; }
     .busca-vendidos .secundario { margin-bottom: 2px; }
@@ -1958,7 +1985,10 @@ interface FichaEntrada {
     .etapa { margin: 16px 0 8px; font-size: 13px; font-weight: 700; color: #0f172a; }
     .mais { margin: 8px 0 12px; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; background: #f8fafc; }
     .mais summary { cursor: pointer; font-size: 13px; font-weight: 600; color: #334155; }
-    @media (max-width: 720px) { .modos { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) {
+      .modos { grid-template-columns: 1fr; }
+      .acoes-transacoes { flex-wrap: wrap; }
+    }
     .secundario { background: #fff; color: #0d0d0d; border: 1px solid #cbd5e1; }
     .secundario:hover { background: #f8fafc; color: #0d0d0d; }
     .painel {
@@ -2288,6 +2318,17 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   get disponiveis(): AparelhoLojaItem[] {
     return this.estoque.filter(a => a.status === 'em_estoque');
+  }
+
+  /** Liberado para venda: mesmo recorte da lista de venda/troca (`em_estoque`, fora da assistência). */
+  get estoqueAptoParaVenda(): { quantidade: number; custo: number; valorVenda: number } {
+    const itens = this.disponiveis;
+    const arredondar = (n: number) => Math.round(n * 100) / 100;
+    return {
+      quantidade: itens.length,
+      custo: arredondar(itens.reduce((s, a) => s + this.custoTotalDe(a), 0)),
+      valorVenda: arredondar(itens.reduce((s, a) => s + (Number(a.valorVenda) || 0), 0)),
+    };
   }
 
   get disponiveisPorMarca(): { marca: string; qtd: number }[] {
@@ -3572,11 +3613,6 @@ export class AparelhosLojaPage implements OnInit, OnDestroy {
 
   abrirEdicaoPorId(id?: string | null): void {
     if (!id || this.salvando) return;
-    const local = this.estoque.find(a => a.id === id) || this.custosAssistencia.find(a => a.id === id);
-    if (local) {
-      this.abrirEdicao(local);
-      return;
-    }
     this.salvando = true;
     this.api.obter(id).subscribe({
       next: aparelho => {
