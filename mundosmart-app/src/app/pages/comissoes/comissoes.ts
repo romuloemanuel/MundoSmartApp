@@ -68,6 +68,39 @@ import { LOJAS_OS_FILTRO, labelLojaOs, siglaLojaOs } from '../../config/os-loja.
       color: #0f172a;
       cursor: pointer;
     }
+    .kpis-comissao {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .kpi {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 14px 16px;
+      background: #fff;
+      border: 1px solid #bae6fd;
+      border-radius: 10px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .kpi span {
+      font-size: 12px;
+      font-weight: 600;
+      color: #0369a1;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .kpi strong {
+      font-size: 22px;
+      font-weight: 700;
+      color: #0c4a6e;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi small {
+      font-size: 11px;
+      color: #64748b;
+    }
     .resumo-geral {
       display: flex;
       flex-wrap: wrap;
@@ -195,6 +228,11 @@ import { LOJAS_OS_FILTRO, labelLojaOs, siglaLojaOs } from '../../config/os-loja.
       color: #0f172a;
       font-variant-numeric: tabular-nums;
     }
+    .resumo-card .linha.media {
+      margin-top: 2px;
+      color: #0369a1;
+    }
+    .resumo-card .linha.media strong { color: #0369a1; }
     .resumo-card .liquido {
       margin-top: 8px;
       padding-top: 8px;
@@ -332,6 +370,11 @@ export class ComissoesPage implements OnInit {
   @HostListener('document:keydown.escape')
   fecharModalTecla(): void {
     if (this.modalPrevisao) this.fecharModalPrevisao();
+  }
+
+  mediaPorOs(total?: number | null, quantidade?: number | null): number | null {
+    if (!quantidade) return null;
+    return (total ?? 0) / quantidade;
   }
 
   formatarMoeda(v?: number | null): string {

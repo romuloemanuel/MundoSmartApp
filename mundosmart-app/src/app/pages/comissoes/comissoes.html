@@ -62,9 +62,27 @@
   <p *ngIf="carregando">Carregando...</p>
 
   <ng-container *ngIf="relatorio && !carregando">
+    <div class="kpis-comissao">
+      <article class="kpi">
+        <span>OS finalizadas</span>
+        <strong>{{ relatorio.quantidadeOs }}</strong>
+        <small>Conclu&iacute;das no per&iacute;odo</small>
+      </article>
+      <article class="kpi">
+        <span>Valor m&eacute;dio por OS l&iacute;quido</span>
+        <strong>{{ formatarMoeda(mediaPorOs(relatorio.totalLiquido, relatorio.quantidadeOs)) }}</strong>
+        <small>L&iacute;quido &divide; OS finalizadas</small>
+      </article>
+      <article class="kpi">
+        <span>Valor m&eacute;dio por OS bruto</span>
+        <strong>{{ formatarMoeda(mediaPorOs(relatorio.totalValor, relatorio.quantidadeOs)) }}</strong>
+        <small>Valor total &divide; OS finalizadas</small>
+      </article>
+    </div>
+
     <div class="resumo-geral">
       <span>Escopo: <strong>{{ rotuloEscopoLoja }}</strong></span>
-      <span>{{ relatorio.quantidadeOs }} OS</span>
+      <span>OS finalizadas: <strong>{{ relatorio.quantidadeOs }}</strong></span>
       <span>Total: {{ formatarMoeda(relatorio.totalValor) }}</span>
       <span>Juros: {{ formatarMoeda(relatorio.totalJuros) }}</span>
       <span>Pe&ccedil;as: {{ formatarMoeda(relatorio.totalPecas) }}</span>
@@ -95,11 +113,13 @@
     <div class="resumo-cards" *ngIf="relatorio.porTecnico.length">
       <div class="resumo-card" *ngFor="let t of relatorio.porTecnico; trackBy: trackTecnico">
         <h3>{{ t.tecnicoNome }}</h3>
-        <div class="linha"><span>OS</span><strong>{{ t.quantidadeOs }}</strong></div>
+        <div class="linha"><span>OS finalizadas</span><strong>{{ t.quantidadeOs }}</strong></div>
         <div class="linha"><span>Total</span><strong>{{ formatarMoeda(t.totalValor) }}</strong></div>
         <div class="linha"><span>Juros</span><strong>{{ formatarMoeda(t.totalJuros) }}</strong></div>
         <div class="linha"><span>Pe&ccedil;as</span><strong>{{ formatarMoeda(t.totalPecas) }}</strong></div>
         <div class="liquido"><span>L&iacute;quido</span><span>{{ formatarMoeda(t.totalLiquido) }}</span></div>
+        <div class="linha media"><span>M&eacute;dia l&iacute;quida</span><strong>{{ formatarMoeda(mediaPorOs(t.totalLiquido, t.quantidadeOs)) }}</strong></div>
+        <div class="linha media"><span>M&eacute;dia bruta</span><strong>{{ formatarMoeda(mediaPorOs(t.totalValor, t.quantidadeOs)) }}</strong></div>
         <div class="previsao-linha" *ngIf="t.quantidadeAguardandoCliente > 0">
           <span>Pronto na loja</span>
           <strong>
