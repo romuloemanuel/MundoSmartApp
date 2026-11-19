@@ -24,9 +24,21 @@ function estaEmRotaPublica(): boolean {
   return path.startsWith('/login') || path.startsWith('/intake') || path.startsWith('/aparelho-fotos');
 }
 
+function comHeaders(origem: Parameters<HttpInterceptorFn>[0], access?: string | null) {
+  const headers: Record<string, string> = {};
+  if (access) headers['Authorization'] = `Bearer ${access}`;
+  try {
+    const ponto = localStorage.getItem('ms_ponto_aparelho_token');
+    if (ponto) headers['X-Ponto-Aparelho'] = ponto;
+  } catch {
+    /* ignore */
+  }
+  return Object.keys(headers).length ? origem.clone({ setHeaders: headers }) : origem;
+}
+
 /** Anexa Bearer JWT, renova com refresh token e redireciona para login em 401. */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  if (!environment.authEnabled) return next(req);
+  if (!environment.authEnabled) return next(comHeaders(req, null));
 
   const auth = inject(AppAuthService);
   const router = inject(Router);
@@ -36,9 +48,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     const token = auth.getToken();
     // URLs "públicas" (config GET, login…) ainda recebem Bearer se houver sessão —
     // senão o PUT admin (ex.: acréscimo estoque) falha sem Authorization.
-    const authReq = token
-      ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
-      : req;
+    const authReq = comHeaders(req, token);
 
     return next(authReq).pipe(
       catchError((err: unknown) => {
@@ -48,11 +58,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
         return auth.refresh().pipe(
           switchMap(() => {
-            const novo = auth.getToken();
-            const retry = novo
-              ? req.clone({ setHeaders: { Authorization: `Bearer ${novo}` } })
-              : req;
-            return next(retry);
+            return next(comHeaders(req, auth.getToken()));
           }),
           catchError(refreshErr => {
             auth.logout(false);

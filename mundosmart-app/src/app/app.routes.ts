@@ -66,6 +66,11 @@ export const routes: Routes = [
       { path: 'auth/callback', component: Callback },
       { path: 'conta/senha', component: AlterarSenhaPage },
       { path: 'usuarios', canActivate: [adminGuard], component: UsuariosLista },
+      {
+        path: 'ponto',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./pages/ponto/ponto').then(m => m.PontoPage),
+      },
       { path: 'clientes', component: ClientesLista },
       { path: 'clientes/novo', component: ClientesForm },
       { path: 'clientes/:id', component: ClientesForm },

@@ -65,6 +65,8 @@ builder.Services.AddSingleton<IBlingConfigRepository, BlingConfigRepository>();
 builder.Services.AddSingleton<IBlingEffectiveSettings, BlingEffectiveSettings>();
 builder.Services.AddSingleton<ITecnicoRepository, TecnicoRepository>();
 builder.Services.AddSingleton<IUsuarioRepository, UsuarioRepository>();
+builder.Services.AddSingleton<IPontoRepository, PontoRepository>();
+builder.Services.AddSingleton<IPontoService, PontoService>();
 builder.Services.AddSingleton<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddSingleton<IQrSessaoHandoffRepository, QrSessaoHandoffRepository>();
 builder.Services.AddSingleton<IAppAuthService, AppAuthService>();
@@ -363,6 +365,8 @@ try
         Console.WriteLine($"[MundoSmart API] Custos: {trafego} lançamento(s) marcados como tráfego pago.");
     var appAuth = app.Services.GetRequiredService<IAppAuthService>();
     await appAuth.GarantirSeedAsync();
+    await app.Services.GetRequiredService<IPontoService>().EnsureIndexesAsync();
+    Console.WriteLine("[MundoSmart API] Ponto eletrônico: até 3 aparelhos, só Admin/Root.");
     var sequences = app.Services.GetRequiredService<IDevSequenceRepository>();
     await osRepo.NormalizarNumeracaoSeNecessarioAsync(sequences, uploadsPath);
     _ = await osRepo.ListarParaListaAsync(null);

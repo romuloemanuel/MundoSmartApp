@@ -101,6 +101,7 @@ const SIDEBAR_AUTO_FECHAR_ATE = 1400;
           <a routerLink="/modelos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Modelos</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/tecnicos" routerLinkActive="active" (click)="fecharMenuSeEstreito()">T&eacute;cnicos</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/usuarios" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Usu&aacute;rios</a>
+          <a *ngIf="appAuth.isAdmin()" routerLink="/ponto" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Ponto</a>
           <div class="nav-section-label" *ngIf="appAuth.isAdmin()">Configura&ccedil;&otilde;es</div>
           <a *ngIf="appAuth.isAdmin()" routerLink="/contratos" [queryParams]="{ aba: 'modelos' }" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Contratos e termos</a>
           <a *ngIf="appAuth.isAdmin()" routerLink="/configuracoes/impressao-os" routerLinkActive="active" (click)="fecharMenuSeEstreito()">Impress&atilde;o da OS</a>
