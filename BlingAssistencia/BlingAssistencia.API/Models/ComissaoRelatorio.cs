@@ -12,6 +12,10 @@ public class ComissaoRelatorioResponse
     public decimal TotalJuros { get; set; }
     public decimal TotalPecas { get; set; }
     public decimal TotalLiquido { get; set; }
+    public int QuantidadeRetorno { get; set; }
+    public decimal TotalValorRetorno { get; set; }
+    public int QuantidadeCanceladas { get; set; }
+    public decimal TotalValorCanceladas { get; set; }
     public int QuantidadeAguardandoCliente { get; set; }
     public decimal TotalLiquidoAguardandoCliente { get; set; }
     public int QuantidadeAndamentoComPreco { get; set; }
@@ -31,6 +35,10 @@ public class ComissaoPorTecnico
     public decimal TotalJuros { get; set; }
     public decimal TotalPecas { get; set; }
     public decimal TotalLiquido { get; set; }
+    public int QuantidadeRetorno { get; set; }
+    public decimal TotalValorRetorno { get; set; }
+    public int QuantidadeCanceladas { get; set; }
+    public decimal TotalValorCanceladas { get; set; }
     public int QuantidadeAguardandoCliente { get; set; }
     public decimal TotalLiquidoAguardandoCliente { get; set; }
     public int QuantidadeAndamentoComPreco { get; set; }
@@ -51,4 +59,5 @@ public class ComissaoOsItem
     public decimal Juros { get; set; }
     public decimal ValorPecas { get; set; }
     public decimal ValorLiquido { get; set; }
+    public bool Retorno { get; set; }
 }

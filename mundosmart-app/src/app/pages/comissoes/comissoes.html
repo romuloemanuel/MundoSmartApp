@@ -6,6 +6,7 @@
   <p class="formula-hint">
     Relat&oacute;rio de <strong>comiss&atilde;o da assist&ecirc;ncia t&eacute;cnica</strong>.
     L&iacute;quido = valor total − juros − custo das pe&ccedil;as.
+    M&eacute;dias principais ignoram OS abaixo de R$ 10 (em geral retorno); a m&eacute;dia com todas fica logo abaixo.
     Em <strong class="previsao-txt">laranja</strong>: previs&atilde;o (pronto na loja e aberto/em teste) com o mesmo l&iacute;quido, descontando as pe&ccedil;as j&aacute; lan&ccedil;adas at&eacute; agora.
     Use <strong>Ver</strong> para abrir as OS na modal.
   </p>
@@ -70,19 +71,33 @@
       </article>
       <article class="kpi">
         <span>Valor m&eacute;dio por OS l&iacute;quido</span>
-        <strong>{{ formatarMoeda(mediaPorOs(relatorio.totalLiquido, relatorio.quantidadeOs)) }}</strong>
-        <small>L&iacute;quido &divide; OS finalizadas</small>
+        <strong>{{ formatarMoeda(mediaLiquidaPrincipal(relatorio.ordens)) }}</strong>
+        <small>Exclui OS com l&iacute;quido &lt; R$ 10</small>
+        <em class="kpi-todas">Todas as OS: {{ formatarMoeda(mediaPorOs(relatorio.totalLiquido, relatorio.quantidadeOs)) }}</em>
       </article>
       <article class="kpi">
         <span>Valor m&eacute;dio por OS bruto</span>
-        <strong>{{ formatarMoeda(mediaPorOs(relatorio.totalValor, relatorio.quantidadeOs)) }}</strong>
-        <small>Valor total &divide; OS finalizadas</small>
+        <strong>{{ formatarMoeda(mediaBrutaPrincipal(relatorio.ordens)) }}</strong>
+        <small>Exclui OS com total &lt; R$ 10</small>
+        <em class="kpi-todas">Todas as OS: {{ formatarMoeda(mediaPorOs(relatorio.totalValor, relatorio.quantidadeOs)) }}</em>
+      </article>
+      <article class="kpi kpi-extra">
+        <span>Retornos</span>
+        <strong>{{ relatorio.quantidadeRetorno }}</strong>
+        <small>{{ formatarMoeda(relatorio.totalValorRetorno) }} no per&iacute;odo</small>
+      </article>
+      <article class="kpi kpi-extra">
+        <span>Cancelados</span>
+        <strong>{{ relatorio.quantidadeCanceladas }}</strong>
+        <small>{{ formatarMoeda(relatorio.totalValorCanceladas) }} no per&iacute;odo</small>
       </article>
     </div>
 
     <div class="resumo-geral">
       <span>Escopo: <strong>{{ rotuloEscopoLoja }}</strong></span>
       <span>OS finalizadas: <strong>{{ relatorio.quantidadeOs }}</strong></span>
+      <span>Retornos: <strong>{{ relatorio.quantidadeRetorno }}</strong> · {{ formatarMoeda(relatorio.totalValorRetorno) }}</span>
+      <span>Cancelados: <strong>{{ relatorio.quantidadeCanceladas }}</strong> · {{ formatarMoeda(relatorio.totalValorCanceladas) }}</span>
       <span>Total: {{ formatarMoeda(relatorio.totalValor) }}</span>
       <span>Juros: {{ formatarMoeda(relatorio.totalJuros) }}</span>
       <span>Pe&ccedil;as: {{ formatarMoeda(relatorio.totalPecas) }}</span>
@@ -118,8 +133,12 @@
         <div class="linha"><span>Juros</span><strong>{{ formatarMoeda(t.totalJuros) }}</strong></div>
         <div class="linha"><span>Pe&ccedil;as</span><strong>{{ formatarMoeda(t.totalPecas) }}</strong></div>
         <div class="liquido"><span>L&iacute;quido</span><span>{{ formatarMoeda(t.totalLiquido) }}</span></div>
-        <div class="linha media"><span>M&eacute;dia l&iacute;quida</span><strong>{{ formatarMoeda(mediaPorOs(t.totalLiquido, t.quantidadeOs)) }}</strong></div>
-        <div class="linha media"><span>M&eacute;dia bruta</span><strong>{{ formatarMoeda(mediaPorOs(t.totalValor, t.quantidadeOs)) }}</strong></div>
+        <div class="linha media"><span>M&eacute;dia l&iacute;quida</span><strong>{{ formatarMoeda(mediaLiquidaPrincipal(ordensDoTecnico(t.tecnicoNome))) }}</strong></div>
+        <div class="linha todas"><span>Todas as OS</span><strong>{{ formatarMoeda(mediaPorOs(t.totalLiquido, t.quantidadeOs)) }}</strong></div>
+        <div class="linha media"><span>M&eacute;dia bruta</span><strong>{{ formatarMoeda(mediaBrutaPrincipal(ordensDoTecnico(t.tecnicoNome))) }}</strong></div>
+        <div class="linha todas"><span>Todas as OS</span><strong>{{ formatarMoeda(mediaPorOs(t.totalValor, t.quantidadeOs)) }}</strong></div>
+        <div class="linha extra"><span>Retornos</span><strong>{{ t.quantidadeRetorno }} · {{ formatarMoeda(t.totalValorRetorno) }}</strong></div>
+        <div class="linha extra"><span>Cancelados</span><strong>{{ t.quantidadeCanceladas }} · {{ formatarMoeda(t.totalValorCanceladas) }}</strong></div>
         <div class="previsao-linha" *ngIf="t.quantidadeAguardandoCliente > 0">
           <span>Pronto na loja</span>
           <strong>

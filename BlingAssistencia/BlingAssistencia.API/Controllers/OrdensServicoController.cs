@@ -76,6 +76,22 @@ public class OrdensServicoController : ControllerBase
             incluirSemTecnico,
             lojaFiltro);
 
+        List<OsLocalData> canceladasLocais;
+        try
+        {
+            canceladasLocais = await _localRepo.ListarCanceladasParaComissaoAsync(
+                dataConclusaoInicio?.Date,
+                dataConclusaoFim?.Date,
+                tecnicos,
+                incluirSemTecnico,
+                lojaFiltro);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MundoSmart API] Comissão: canceladas falhou, relatório concluído segue. {ex.Message}");
+            canceladasLocais = [];
+        }
+
         List<OsLocalData> previsaoLocais;
         try
         {
@@ -91,14 +107,16 @@ public class OrdensServicoController : ControllerBase
         }
 
         var custosRef = await _estoqueLote.ObterCustosReferenciaPecasAsync(
-            locais.Concat(previsaoLocais)
+            locais.Concat(previsaoLocais).Concat(canceladasLocais)
                 .SelectMany(os => os.Itens ?? [])
                 .Where(ItemEhPecaComissao)
                 .Where(i => i.CustoPeca is not > 0 && !string.IsNullOrWhiteSpace(i.PecaId))
                 .Select(i => i.PecaId!));
 
         var ordens = locais.Select(os => MapearComissaoItem(os, custosRef)).ToList();
+        var canceladas = canceladasLocais.Select(os => MapearComissaoItem(os, custosRef)).ToList();
         var previsao = previsaoLocais.Select(os => MapearComissaoItem(os, custosRef)).ToList();
+        var retornos = ordens.Where(o => o.Retorno).ToList();
 
         var aguardandoCliente = previsao
             .Where(o => string.Equals(
@@ -117,7 +135,7 @@ public class OrdensServicoController : ControllerBase
             })
             .ToList();
 
-        var porTecnico = MontarPorTecnico(ordens, aguardandoCliente, andamentoComPreco);
+        var porTecnico = MontarPorTecnico(ordens, aguardandoCliente, andamentoComPreco, canceladas);
 
         return Ok(new ComissaoRelatorioResponse
         {
@@ -135,6 +153,10 @@ public class OrdensServicoController : ControllerBase
             TotalJuros = ordens.Sum(x => x.Juros),
             TotalPecas = ordens.Sum(x => x.ValorPecas),
             TotalLiquido = ordens.Sum(x => x.ValorLiquido),
+            QuantidadeRetorno = retornos.Count,
+            TotalValorRetorno = retornos.Sum(x => x.ValorTotal),
+            QuantidadeCanceladas = canceladas.Count,
+            TotalValorCanceladas = canceladas.Sum(x => x.ValorTotal),
             QuantidadeAguardandoCliente = aguardandoCliente.Count,
             TotalLiquidoAguardandoCliente = aguardandoCliente.Sum(x => x.ValorLiquido),
             QuantidadeAndamentoComPreco = andamentoComPreco.Count,
@@ -164,18 +186,22 @@ public class OrdensServicoController : ControllerBase
             ClienteNome = local.ContatoNome,
             Equipamento = local.Equipamento ?? local.ModeloNome,
             Situacao = OsSituacaoHelper.Normalizar(local.Situacao),
-            DataConclusao = local.DataConclusao,
+            DataConclusao = local.DataConclusao
+                ?? local.DataAtualizacao
+                ?? local.DataUltimaAlteracaoSituacao,
             ValorTotal = valorTotal,
             Juros = juros,
             ValorPecas = valorPecas,
             ValorLiquido = valorTotal - juros - valorPecas,
+            Retorno = local.Retorno,
         };
     }
 
     private static List<ComissaoPorTecnico> MontarPorTecnico(
         List<ComissaoOsItem> concluidas,
         List<ComissaoOsItem> aguardandoCliente,
-        List<ComissaoOsItem> andamentoComPreco)
+        List<ComissaoOsItem> andamentoComPreco,
+        List<ComissaoOsItem> canceladas)
     {
         var nomes = concluidas.Select(o => o.TecnicoNome)
             .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -183,7 +209,8 @@ public class OrdensServicoController : ControllerBase
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
         foreach (var nome in aguardandoCliente.Select(o => o.TecnicoNome)
-                     .Concat(andamentoComPreco.Select(o => o.TecnicoNome)))
+                     .Concat(andamentoComPreco.Select(o => o.TecnicoNome))
+                     .Concat(canceladas.Select(o => o.TecnicoNome)))
         {
             if (string.IsNullOrWhiteSpace(nome)) continue;
             if (nomes.Any(n => string.Equals(n, nome, StringComparison.OrdinalIgnoreCase))) continue;
@@ -199,6 +226,8 @@ public class OrdensServicoController : ControllerBase
             var ok = DoTecnico(concluidas, chave);
             var loja = DoTecnico(aguardandoCliente, chave);
             var andamento = DoTecnico(andamentoComPreco, chave);
+            var retornosTec = ok.Where(o => o.Retorno).ToArray();
+            var cans = DoTecnico(canceladas, chave);
             return new ComissaoPorTecnico
             {
                 TecnicoNome = chave,
@@ -207,6 +236,10 @@ public class OrdensServicoController : ControllerBase
                 TotalJuros = ok.Sum(x => x.Juros),
                 TotalPecas = ok.Sum(x => x.ValorPecas),
                 TotalLiquido = ok.Sum(x => x.ValorLiquido),
+                QuantidadeRetorno = retornosTec.Length,
+                TotalValorRetorno = retornosTec.Sum(x => x.ValorTotal),
+                QuantidadeCanceladas = cans.Length,
+                TotalValorCanceladas = cans.Sum(x => x.ValorTotal),
                 QuantidadeAguardandoCliente = loja.Length,
                 TotalLiquidoAguardandoCliente = loja.Sum(x => x.ValorLiquido),
                 QuantidadeAndamentoComPreco = andamento.Length,

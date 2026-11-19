@@ -24,6 +24,13 @@ public interface IOsLocalRepository
         IReadOnlyList<string>? tecnicos = null,
         bool incluirSemTecnico = true,
         string? lojaOrigem = null);
+    /// <summary>OS canceladas no período (data de atualização) — indicadores da comissão.</summary>
+    Task<List<OsLocalData>> ListarCanceladasParaComissaoAsync(
+        DateTime? dataInicio,
+        DateTime? dataFim,
+        IReadOnlyList<string>? tecnicos = null,
+        bool incluirSemTecnico = true,
+        string? lojaOrigem = null);
     /// <summary>OS em aberto, em teste ou aguardando retirada — previsão de comissão do mês.</summary>
     Task<List<OsLocalData>> ListarPrevisaoComissaoAsync(
         IReadOnlyList<string>? tecnicos = null,
@@ -257,11 +264,64 @@ public class OsLocalRepository : IOsLocalRepository
             .Include(x => x.Itens)
             .Include(x => x.Equipamento)
             .Include(x => x.ModeloNome)
-            .Include(x => x.LojaOrigem);
+            .Include(x => x.LojaOrigem)
+            .Include(x => x.Retorno);
 
         return await _collection.Find(filtro)
             .Project<OsLocalData>(projection)
             .Sort(Builders<OsLocalData>.Sort.Descending(x => x.DataConclusao).Descending(x => x.BlingId))
+            .Limit(5000)
+            .ToListAsync();
+    }
+
+    public async Task<List<OsLocalData>> ListarCanceladasParaComissaoAsync(
+        DateTime? dataInicio,
+        DateTime? dataFim,
+        IReadOnlyList<string>? tecnicos = null,
+        bool incluirSemTecnico = true,
+        string? lojaOrigem = null)
+    {
+        var filtro = Builders<OsLocalData>.Filter.Regex(
+            x => x.Situacao,
+            new BsonRegularExpression(@"^cancelad[oa]$", "i"));
+
+        if (dataInicio.HasValue || dataFim.HasValue)
+        {
+            var inicio = dataInicio?.Date ?? new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var fim = (dataFim ?? DateTime.UtcNow).Date.AddDays(1).AddTicks(-1);
+            filtro &= Builders<OsLocalData>.Filter.Or(
+                Builders<OsLocalData>.Filter.And(
+                    Builders<OsLocalData>.Filter.Gte(x => x.DataAtualizacao, inicio),
+                    Builders<OsLocalData>.Filter.Lte(x => x.DataAtualizacao, fim)),
+                Builders<OsLocalData>.Filter.And(
+                    Builders<OsLocalData>.Filter.Gte(x => x.DataUltimaAlteracaoSituacao, inicio),
+                    Builders<OsLocalData>.Filter.Lte(x => x.DataUltimaAlteracaoSituacao, fim)));
+        }
+
+        filtro &= FiltroLojaTecnicos(lojaOrigem, tecnicos, incluirSemTecnico);
+
+        var projection = Builders<OsLocalData>.Projection
+            .Include(x => x.BlingId)
+            .Include(x => x.OsNumero)
+            .Include(x => x.Situacao)
+            .Include(x => x.DataConclusao)
+            .Include(x => x.DataAtualizacao)
+            .Include(x => x.DataUltimaAlteracaoSituacao)
+            .Include(x => x.ContatoNome)
+            .Include(x => x.TecnicoNome)
+            .Include(x => x.ValorTotal)
+            .Include(x => x.ValorTotalAcordado)
+            .Include(x => x.ValorAVista)
+            .Include(x => x.Juros)
+            .Include(x => x.Itens)
+            .Include(x => x.Equipamento)
+            .Include(x => x.ModeloNome)
+            .Include(x => x.LojaOrigem)
+            .Include(x => x.Retorno);
+
+        return await _collection.Find(filtro)
+            .Project<OsLocalData>(projection)
+            .Sort(Builders<OsLocalData>.Sort.Descending(x => x.DataAtualizacao).Descending(x => x.BlingId))
             .Limit(5000)
             .ToListAsync();
     }

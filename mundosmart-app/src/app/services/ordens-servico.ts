@@ -44,6 +44,7 @@ export interface ComissaoOsItem {
   juros: number;
   valorPecas: number;
   valorLiquido: number;
+  retorno?: boolean;
 }
 
 export interface ComissaoPorTecnico {
@@ -53,6 +54,10 @@ export interface ComissaoPorTecnico {
   totalJuros: number;
   totalPecas: number;
   totalLiquido: number;
+  quantidadeRetorno: number;
+  totalValorRetorno: number;
+  quantidadeCanceladas: number;
+  totalValorCanceladas: number;
   quantidadeAguardandoCliente: number;
   totalLiquidoAguardandoCliente: number;
   quantidadeAndamentoComPreco: number;
@@ -69,6 +74,10 @@ export interface ComissaoRelatorio {
   totalJuros: number;
   totalPecas: number;
   totalLiquido: number;
+  quantidadeRetorno: number;
+  totalValorRetorno: number;
+  quantidadeCanceladas: number;
+  totalValorCanceladas: number;
   quantidadeAguardandoCliente: number;
   totalLiquidoAguardandoCliente: number;
   quantidadeAndamentoComPreco: number;

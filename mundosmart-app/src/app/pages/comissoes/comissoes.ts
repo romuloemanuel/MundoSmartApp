@@ -101,6 +101,25 @@ import { LOJAS_OS_FILTRO, labelLojaOs, siglaLojaOs } from '../../config/os-loja.
       font-size: 11px;
       color: #64748b;
     }
+    .kpi-todas {
+      font-size: 12px;
+      font-style: normal;
+      color: #475569;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-extra {
+      border-color: #e2e8f0;
+    }
+    .kpi-extra span { color: #475569; }
+    .kpi-extra strong { color: #0f172a; }
+    .resumo-card .linha.todas {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: -2px;
+      margin-bottom: 6px;
+    }
+    .resumo-card .linha.todas strong { color: #64748b; font-weight: 600; }
+    .resumo-card .linha.extra { color: #57534e; }
     .resumo-geral {
       display: flex;
       flex-wrap: wrap;
@@ -375,6 +394,30 @@ export class ComissoesPage implements OnInit {
   mediaPorOs(total?: number | null, quantidade?: number | null): number | null {
     if (!quantidade) return null;
     return (total ?? 0) / quantidade;
+  }
+
+  private readonly minimoMedia = 10;
+
+  ordensDoTecnico(nome: string): ComissaoOsItem[] {
+    return (this.relatorio?.ordens ?? []).filter(
+      o => (o.tecnicoNome || '').toLowerCase() === (nome || '').toLowerCase(),
+    );
+  }
+
+  mediaLiquidaPrincipal(ordens: ComissaoOsItem[] | undefined): number | null {
+    const lista = (ordens ?? []).filter(o => (o.valorLiquido ?? 0) >= this.minimoMedia);
+    return this.mediaPorOs(
+      lista.reduce((s, o) => s + (o.valorLiquido ?? 0), 0),
+      lista.length,
+    );
+  }
+
+  mediaBrutaPrincipal(ordens: ComissaoOsItem[] | undefined): number | null {
+    const lista = (ordens ?? []).filter(o => (o.valorTotal ?? 0) >= this.minimoMedia);
+    return this.mediaPorOs(
+      lista.reduce((s, o) => s + (o.valorTotal ?? 0), 0),
+      lista.length,
+    );
   }
 
   formatarMoeda(v?: number | null): string {
