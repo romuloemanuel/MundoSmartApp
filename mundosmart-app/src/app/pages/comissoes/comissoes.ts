@@ -104,7 +104,9 @@ import { LOJAS_OS_FILTRO, labelLojaOs, siglaLojaOs } from '../../config/os-loja.
     .kpi-todas {
       font-size: 12px;
       font-style: normal;
-      color: #475569;
+      font-weight: 700;
+      line-height: 1.1;
+      color: #dc2626;
       font-variant-numeric: tabular-nums;
     }
     .kpi-extra {
@@ -114,11 +116,12 @@ import { LOJAS_OS_FILTRO, labelLojaOs, siglaLojaOs } from '../../config/os-loja.
     .kpi-extra strong { color: #0f172a; }
     .resumo-card .linha.todas {
       font-size: 11px;
-      color: #94a3b8;
+      color: #dc2626;
       margin-top: -2px;
       margin-bottom: 6px;
+      justify-content: flex-end;
     }
-    .resumo-card .linha.todas strong { color: #64748b; font-weight: 600; }
+    .resumo-card .linha.todas strong { color: #dc2626; font-weight: 700; font-size: 11px; }
     .resumo-card .linha.extra { color: #57534e; }
     .resumo-geral {
       display: flex;
