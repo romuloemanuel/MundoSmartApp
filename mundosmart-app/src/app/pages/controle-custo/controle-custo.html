@@ -231,7 +231,7 @@
         </div>
         <div class="campo">
           <label for="custo-inicio">{{ custoRecorrencia === 'unico' ? 'Mês do custo' : 'A partir de' }}</label>
-          <input id="custo-inicio" name="inicio" type="month" [max]="mesAtual" [(ngModel)]="custoInicio" />
+          <input id="custo-inicio" name="inicio" type="month" [max]="limiteInicioCusto" [(ngModel)]="custoInicio" />
         </div>
         <div class="campo">
           <label for="custo-categoria">Tipo</label>

@@ -476,7 +476,10 @@ public class ControleCustoService : IControleCustoService
 
     private async Task<ControleCustoLancamentoData> PrepararCustoAsync(CustoControleRequest req, CancellationToken cancellationToken)
     {
-        var mes = ExigirMesLancavel(req.Competencia);
+        var recorrencia = ControleCustoRecorrencia.Normalizar(req.Recorrencia, req.Meses, out var quantidade);
+        var mes = ExigirMesLancavel(
+            req.Competencia,
+            recorrencia == ControleCustoCatalogo.RecorrenciaParcelado);
         var categoria = (req.Categoria ?? "").Trim().ToLowerInvariant();
         if (!ControleCustoCatalogo.Categorias.Contains(categoria))
             throw new ArgumentException("Escolha o tipo de custo.");
@@ -495,7 +498,6 @@ public class ControleCustoService : IControleCustoService
             colaboradorNome = pessoa.Nome;
         }
 
-        var recorrencia = ControleCustoRecorrencia.Normalizar(req.Recorrencia, req.Meses, out var quantidade);
         var descricao = (req.Descricao ?? "").Trim();
         if (string.IsNullOrEmpty(descricao))
             descricao = colaboradorNome ?? ControleCustoCatalogo.NomeCategoria(categoria);
@@ -863,11 +865,16 @@ public class ControleCustoService : IControleCustoService
         return mes;
     }
 
-    private static string ExigirMesLancavel(string? competencia)
+    private static string ExigirMesLancavel(string? competencia, bool parcelamentoFuturo = false)
     {
         var mes = ExigirCompetencia(competencia);
-        if (string.CompareOrdinal(mes, MesAtual()) > 0)
+        var atual = MesAtual();
+        if (string.CompareOrdinal(mes, atual) <= 0) return mes;
+        if (!parcelamentoFuturo)
             throw new ArgumentException("O lançamento só pode ser no mês atual ou em um mês passado.");
+        var limite = ControleCustoRecorrencia.SomarMeses(atual, 60);
+        if (string.CompareOrdinal(mes, limite) > 0)
+            throw new ArgumentException("O parcelamento pode começar no máximo daqui a 60 meses.");
         return mes;
     }
 

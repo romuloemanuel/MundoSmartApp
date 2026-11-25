@@ -113,7 +113,7 @@ export const SETORES_CUSTO: { id: string; nome: string }[] = [
 export const RECORRENCIAS_CUSTO: { id: string; nome: string; dica: string }[] = [
   { id: 'unico', nome: 'Único', dica: 'Entra só no mês de início.' },
   { id: 'fixo', nome: 'Fixo', dica: 'O mesmo valor todo mês, sem prazo para acabar.' },
-  { id: 'parcelado', nome: 'Parcelado', dica: 'O valor total dividido pela quantidade de meses.' },
+  { id: 'parcelado', nome: 'Parcelado', dica: 'O valor total dividido pela quantidade de meses. A primeira parcela pode ser no mês seguinte.' },
   { id: 'anual', nome: 'Anual', dica: 'Uma vez por ano, pela quantidade de anos.' },
 ];
 

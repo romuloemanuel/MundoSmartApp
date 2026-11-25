@@ -275,8 +275,12 @@ export class ControleCustoPage implements OnInit {
       this.falhar('Informe o mês do custo.');
       return;
     }
-    if (this.custoInicio > this.mesAtual) {
+    if (this.custoInicio > this.mesAtual && this.custoRecorrencia !== 'parcelado') {
       this.falhar('O custo só pode ser lançado no mês atual ou em um mês passado.');
+      return;
+    }
+    if (this.custoRecorrencia === 'parcelado' && this.custoInicio > this.somarMeses(this.mesAtual, 60)) {
+      this.falhar('O parcelamento pode começar no máximo daqui a 60 meses.');
       return;
     }
     if (this.custoCategoria === 'colaborador' && !this.custoColaboradorId) {
@@ -292,6 +296,7 @@ export class ControleCustoPage implements OnInit {
       return;
     }
     const editando = this.custoEditandoId;
+    const mesVista = this.competencia <= this.mesAtual ? this.competencia : this.mesAtual;
     const body = {
       competencia: this.custoInicio,
       categoria: this.custoCategoria,
@@ -312,7 +317,14 @@ export class ControleCustoPage implements OnInit {
       this.custoEditandoId = '';
       this.custoDescricao = '';
       this.custoValor = null;
-      if (!editando && this.custoInicio !== this.competencia) this.competencia = this.custoInicio;
+      if (this.custoInicio > this.mesAtual) {
+        if (this.competencia !== mesVista) {
+          this.competencia = mesVista;
+          this.carregar();
+        }
+      } else if (!editando && this.custoInicio !== this.competencia) {
+        this.competencia = this.custoInicio;
+      }
       this.voltarContasFixas();
     });
   }
@@ -486,6 +498,12 @@ export class ControleCustoPage implements OnInit {
 
   get minimoMeses(): number {
     return this.custoRecorrencia === 'parcelado' ? 2 : 1;
+  }
+
+  get limiteInicioCusto(): string {
+    return this.custoRecorrencia === 'parcelado'
+      ? this.somarMeses(this.mesAtual, 60)
+      : this.mesAtual;
   }
 
   get rotuloQuantidade(): string {
@@ -687,6 +705,12 @@ export class ControleCustoPage implements OnInit {
       acc += percentual;
       this.rateio[id] = percentual;
     });
+  }
+
+  private somarMeses(competencia: string, meses: number): string {
+    const [ano, mes] = competencia.split('-').map(Number);
+    const data = new Date(ano, mes - 1 + meses, 1);
+    return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`;
   }
 
   private zerarRateio(): void {
