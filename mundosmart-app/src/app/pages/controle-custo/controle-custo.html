@@ -63,8 +63,19 @@
         </thead>
         <tbody>
           <tr *ngFor="let linha of comparativo?.linhas" [class.grupo]="linha.grupo === 'total'">
-            <td>{{ linha.nome }}</td>
-            <td *ngFor="let valor of linha.valores; let i = index" [class.marcado]="mesDoComparativo(i) === mesAtual" [class.futuro]="mesDoComparativo(i) > mesAtual">
+            <td
+              [class.quebra]="linha.id === 'custos'"
+              (mouseenter)="linha.id === 'custos' && abrirQuebraCusto($event, null)"
+              (mouseleave)="fecharQuebraCusto()"
+            >{{ linha.nome }}</td>
+            <td
+              *ngFor="let valor of linha.valores; let i = index"
+              [class.marcado]="mesDoComparativo(i) === mesAtual"
+              [class.futuro]="mesDoComparativo(i) > mesAtual"
+              [class.quebra]="linha.id === 'custos'"
+              (mouseenter)="linha.id === 'custos' && abrirQuebraCusto($event, i)"
+              (mouseleave)="fecharQuebraCusto()"
+            >
               <button *ngIf="mesDoComparativo(i) <= mesAtual" type="button" class="celula-mes" (click)="verMes(mesDoComparativo(i))" [attr.aria-label]="'Ver custos de ' + formatarMes(mesDoComparativo(i))">{{ dinheiro(valor) }}</button>
               <span *ngIf="mesDoComparativo(i) > mesAtual">{{ dinheiro(valor) }}</span>
             </td>
@@ -74,6 +85,20 @@
           </tr>
         </tbody>
       </table>
+    </div>
+    <div
+      class="custo-tip"
+      *ngIf="quebraTip"
+      [class.abaixo]="quebraTip.abaixo"
+      [class.acima]="!quebraTip.abaixo"
+      [style.left.px]="quebraTip.x"
+      [style.top.px]="quebraTip.y"
+    >
+      <p class="custo-tip-titulo">Custos de {{ quebraTip.mes }}</p>
+      <p class="custo-tip-linha"><span>Custo de investimento</span><strong>{{ dinheiro(quebraTip.investimento) }}</strong></p>
+      <p class="custo-tip-linha"><span>Custo salarial</span><strong>{{ dinheiro(quebraTip.salarial) }}</strong></p>
+      <p class="custo-tip-linha"><span>Custo fixo</span><strong>{{ dinheiro(quebraTip.fixo) }}</strong></p>
+      <p class="custo-tip-total"><span>Total</span><strong>{{ dinheiro(quebraTip.total) }}</strong></p>
     </div>
   </section>
 

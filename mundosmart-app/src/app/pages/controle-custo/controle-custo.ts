@@ -43,6 +43,50 @@ import {
     }
     .comparativo .celula-mes { font-weight: 500; width: 100%; }
     .comparativo .mes-btn:hover, .comparativo .celula-mes:hover { text-decoration: underline; }
+    .comparativo td.quebra { cursor: help; }
+    .custo-tip {
+      position: fixed;
+      z-index: 40;
+      width: 248px;
+      padding: 12px 14px 10px;
+      border-radius: 12px;
+      background: #0f172a;
+      color: #e2e8f0;
+      pointer-events: none;
+    }
+    .custo-tip.abaixo { transform: translate(-50%, 0); }
+    .custo-tip.acima { transform: translate(-50%, -100%); }
+    .custo-tip-titulo {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #93c5fd;
+    }
+    .custo-tip-linha {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 6px;
+      font-size: 13px;
+    }
+    .custo-tip-linha strong {
+      font-variant-numeric: tabular-nums;
+      color: #fff;
+    }
+    .custo-tip-total {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 8px 0 0;
+      padding-top: 8px;
+      border-top: 1px solid rgba(226, 232, 240, 0.2);
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .custo-tip-total strong { font-variant-numeric: tabular-nums; }
     .subiu { color: #9a3412; }
     .caiu { color: #166534; }
     .totais { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 16px; color: #334155; font-size: 14px; }
@@ -113,6 +157,16 @@ export class ControleCustoPage implements OnInit {
   private focarCustos = false;
   painel: ControleCustoPainel | null = null;
   comparativo: ControleCustoComparativo | null = null;
+  quebraTip: {
+    x: number;
+    y: number;
+    abaixo: boolean;
+    mes: string;
+    investimento: number;
+    salarial: number;
+    fixo: number;
+    total: number;
+  } | null = null;
   previsao: ControleCustoPrevisao | null = null;
   carregando = false;
   salvando = false;
@@ -198,6 +252,38 @@ export class ControleCustoPage implements OnInit {
 
   mesDoComparativo(indice: number): string {
     return this.comparativo?.meses?.[indice] ?? '';
+  }
+
+  abrirQuebraCusto(event: MouseEvent, indice: number | null): void {
+    const i = indice ?? this.comparativo?.meses?.indexOf(this.mesAtual) ?? -1;
+    if (i < 0) return;
+    const alvo = event.currentTarget as HTMLElement;
+    const rect = alvo.getBoundingClientRect();
+    const abaixo = rect.top < 160;
+    const partes = this.partesCusto(i);
+    this.quebraTip = {
+      x: rect.left + rect.width / 2,
+      y: abaixo ? rect.bottom + 10 : rect.top - 10,
+      abaixo,
+      mes: this.formatarMes(this.mesDoComparativo(i)),
+      ...partes,
+    };
+  }
+
+  fecharQuebraCusto(): void {
+    this.quebraTip = null;
+  }
+
+  private partesCusto(indice: number): { investimento: number; salarial: number; fixo: number; total: number } {
+    const salarial = this.valorComparativo('colaborador', indice);
+    const investimento = this.valorComparativo('outro', indice);
+    const total = this.valorComparativo('custos', indice);
+    const fixo = Math.round((total - salarial - investimento) * 100) / 100;
+    return { investimento, salarial, fixo, total };
+  }
+
+  private valorComparativo(id: string, indice: number): number {
+    return this.comparativo?.linhas.find(linha => linha.id === id)?.valores?.[indice] ?? 0;
   }
 
   abrirContasFixas(): void {
