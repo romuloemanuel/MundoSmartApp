@@ -304,7 +304,19 @@
             [title]="tituloUrgencia(os)"
             >até {{ prazoPecaLabel(os) }}</span>
         </td>
-        <td class="col-tecnico" [title]="os.tecnicoNome || ''">{{ os.tecnicoNome || '—' }}</td>
+        <td class="col-tecnico">
+          <select
+            class="grid-tecnico-select"
+            [ngModel]="tecnicoExibido(os)"
+            (ngModelChange)="onTecnicoChange(os, $event)"
+            [disabled]="alterandoTecnicoId === os.id || !podeTrocarTecnico(os)"
+            [title]="tituloTecnico(os)"
+          >
+            <option *ngIf="!tecnicoObrigatorio(os)" value="">—</option>
+            <option *ngIf="tecnicoObrigatorio(os) && !tecnicoExibido(os)" value="" disabled>Escolher</option>
+            <option *ngFor="let nome of tecnicosDaOs(os)" [value]="nome">{{ nome }}</option>
+          </select>
+        </td>
         <td class="col-ret">
           <span class="badge grid-retorno-badge" [class.badge-retorno]="os.retorno">{{ os.retorno ? 'S' : 'N' }}</span>
         </td>

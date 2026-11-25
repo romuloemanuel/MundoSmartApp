@@ -231,6 +231,20 @@ export class OrdensServicoService {
     );
   }
 
+  alterarTecnico(id: number, tecnicoNome: string): Observable<void> {
+    return this.http.patch<void>(`${this.apiUrl}/${id}/tecnico`, {
+      tecnicoNome: tecnicoNome || null,
+    }).pipe(
+      tap(() => {
+        this.invalidarListaCache();
+        const cached = this.obterCache.get(id);
+        if (cached) {
+          this.obterCache.set(id, { ...cached, tecnicoNome: tecnicoNome || undefined });
+        }
+      }),
+    );
+  }
+
   alterarSituacao(
     id: number,
     situacao: string,

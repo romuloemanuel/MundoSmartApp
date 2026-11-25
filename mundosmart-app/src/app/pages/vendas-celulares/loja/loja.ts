@@ -1634,6 +1634,7 @@ interface FichaEntrada {
                 <p class="sub" *ngIf="a.testes?.length">{{ testesResumo(a) }}</p>
                 <div class="acoes-ficha">
                   <button type="button" *ngIf="podeEditar(a)" (click)="abrirEdicao(a)">Editar cadastro</button>
+                  <button type="button" *ngIf="a.status === 'em_assistencia'" [disabled]="salvando" (click)="liberar(a)">Liberar para venda</button>
                   <a *ngIf="a.status === 'em_estoque'" class="secundario" [routerLink]="['/vendas-celulares/venda']" [queryParams]="{ codigo: a.codigo }">Vender</a>
                   <a *ngIf="a.status === 'em_estoque'" class="secundario" [routerLink]="['/vendas-celulares/troca']" [queryParams]="{ codigo: a.codigo }">Trocar</a>
                   <button type="button" class="perigo" *ngIf="isAdmin && podeExcluirAparelho(a)" [disabled]="salvando" (click)="excluirAparelho(a)">Excluir aparelho</button>

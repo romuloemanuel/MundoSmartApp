@@ -21,6 +21,7 @@ import {
   osEhLojaMundoSmart,
   osSituacaoForaFiltroPadrao,
   osPrecisaEscolherTecnico,
+  osSituacaoExigeTecnico,
   resolverTecnicoFixo,
   situacoesDisponiveisParaCliente,
   ajustarSituacaoParaLoja,
@@ -105,8 +106,8 @@ import { FiltroOrigemAparelho } from '../../../components/filtro-origem-aparelho
     /* Larguras fixas em px: a grade rola na horizontal em vez de esmagar/sobrepor colunas. */
     .os-grid {
       table-layout: fixed;
-      width: 1288px;
-      min-width: 1288px;
+      width: 1326px;
+      min-width: 1326px;
       max-width: none;
       border-collapse: separate;
       border-spacing: 0;
@@ -131,10 +132,11 @@ import { FiltroOrigemAparelho } from '../../../components/filtro-origem-aparelho
     .os-grid .col-imei { width: 140px; min-width: 140px; max-width: 140px; font-variant-numeric: tabular-nums; font-size: 12px; }
     .os-grid .col-sit { width: 132px; min-width: 132px; max-width: 132px; }
     .os-grid .col-tecnico {
-      width: 110px;
-      min-width: 110px;
-      max-width: 110px;
+      width: 148px;
+      min-width: 148px;
+      max-width: 148px;
       font-size: 12px;
+      overflow: visible;
     }
     .os-grid .col-ret { width: 48px; min-width: 48px; max-width: 48px; text-align: center; }
     .os-grid .col-loja { width: 52px; min-width: 52px; max-width: 52px; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
@@ -184,8 +186,7 @@ import { FiltroOrigemAparelho } from '../../../components/filtro-origem-aparelho
     }
 
     .os-grid .col-equip,
-    .os-grid .col-imei,
-    .os-grid .col-tecnico {
+    .os-grid .col-imei {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -270,9 +271,25 @@ import { FiltroOrigemAparelho } from '../../../components/filtro-origem-aparelho
       color: #1e40af;
       cursor: pointer;
     }
+    .grid-tecnico-select {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: 3px 2px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      background: #fff;
+      color: #0f172a;
+      cursor: pointer;
+    }
     .grid-situacao-select:disabled,
+    .grid-tecnico-select:disabled,
     .grid-situacao-badge {
       opacity: 0.85;
+      cursor: default;
     }
     .grid-situacao-badge {
       display: inline-block;
@@ -519,6 +536,7 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
   erro = '';
   filtrosAbertos = false;
   alterandoSituacaoId?: number;
+  alterandoTecnicoId?: number;
   osJustificativaAtraso: BlingOrdemServico | null = null;
   salvandoJustificativaAtraso = false;
   erroJustificativaAtraso: string | null = null;
@@ -1182,6 +1200,59 @@ export class OrdensServicoLista implements OnInit, OnDestroy {
 
   osSituacaoFinalizada(os: BlingOrdemServico): boolean {
     return osSituacaoFinalizada(os.situacao);
+  }
+
+  tecnicoObrigatorio(os: BlingOrdemServico): boolean {
+    return osSituacaoExigeTecnico(os.situacao);
+  }
+
+  tecnicoFixo(os: BlingOrdemServico): string | null {
+    return resolverTecnicoFixo(os.situacao, this.tecnicosAtivos);
+  }
+
+  tecnicoExibido(os: BlingOrdemServico): string {
+    return this.tecnicoFixo(os) || os.tecnicoNome || '';
+  }
+
+  tecnicosDaOs(os: BlingOrdemServico): string[] {
+    const fixo = this.tecnicoFixo(os);
+    if (fixo) return [fixo];
+    const nomes = this.tecnicosAtivos.map(t => t.nome);
+    const atual = os.tecnicoNome?.trim();
+    if (atual && !nomes.some(nome => nome.toLowerCase() === atual.toLowerCase())) {
+      nomes.unshift(atual);
+    }
+    return nomes;
+  }
+
+  podeTrocarTecnico(os: BlingOrdemServico): boolean {
+    return this.podeEditarOs(os) && !this.tecnicoFixo(os);
+  }
+
+  tituloTecnico(os: BlingOrdemServico): string {
+    if (this.tecnicoFixo(os)) return 'Reparo em placa fica com este técnico.';
+    if (!this.podeEditarOs(os)) return this.tituloEditarOs(os);
+    return 'Trocar o técnico';
+  }
+
+  onTecnicoChange(os: BlingOrdemServico, novo: string): void {
+    if (!os.id || !this.podeTrocarTecnico(os)) return;
+    const anterior = os.tecnicoNome || '';
+    if ((novo || '') === anterior) return;
+
+    os.tecnicoNome = novo || undefined;
+    this.erro = '';
+    this.alterandoTecnicoId = os.id;
+    this.service.alterarTecnico(os.id, novo).subscribe({
+      next: () => {
+        this.alterandoTecnicoId = undefined;
+      },
+      error: (err) => {
+        os.tecnicoNome = anterior || undefined;
+        this.alterandoTecnicoId = undefined;
+        this.erro = err?.error?.erro ?? 'Erro ao trocar o técnico da OS.';
+      },
+    });
   }
 
   /** Ver é livre; editar/situação só na loja permitida. Admin/Root também editam OS finalizadas. */

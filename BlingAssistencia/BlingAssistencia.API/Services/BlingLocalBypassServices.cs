@@ -340,6 +340,25 @@ public class BlingOrdemServicoServiceLocalBypass : IBlingOrdemServicoService
             $"Situação: {situacaoAnterior} → {local.Situacao}");
     }
 
+    public async Task AlterarTecnicoAsync(long id, string? tecnicoNome)
+    {
+        var local = await _localRepo.ObterPorBlingIdAsync(id)
+            ?? throw new KeyNotFoundException($"Ordem de Serviço {id} não encontrada.");
+        if (local.ExcluidoEm.HasValue)
+            throw new KeyNotFoundException($"Ordem de Serviço {id} foi excluída.");
+
+        var anterior = string.IsNullOrWhiteSpace(local.TecnicoNome) ? null : local.TecnicoNome.Trim();
+        if (!BlingOrdemServicoService.AplicarTrocaTecnico(local, tecnicoNome))
+            return;
+
+        var novo = string.IsNullOrWhiteSpace(local.TecnicoNome) ? null : local.TecnicoNome.Trim();
+        await _localRepo.SalvarAsync(local);
+        await _historico.RegistrarAsync(
+            local,
+            OsHistoricoAcoes.Atualizar,
+            $"Técnico: {anterior ?? "—"} → {novo ?? "—"}");
+    }
+
     public async Task ExcluirAsync(long id)
     {
         var local = await _localRepo.ObterPorBlingIdAsync(id)

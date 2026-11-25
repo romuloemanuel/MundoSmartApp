@@ -226,7 +226,7 @@ public class OrdensServicoController : ControllerBase
             var ok = DoTecnico(concluidas, chave);
             var loja = DoTecnico(aguardandoCliente, chave);
             var andamento = DoTecnico(andamentoComPreco, chave);
-            var retornosTec = ok.Where(o => o.Retorno).ToArray();
+            var retornos = ok.Where(o => o.Retorno).ToArray();
             var cans = DoTecnico(canceladas, chave);
             return new ComissaoPorTecnico
             {
@@ -236,8 +236,8 @@ public class OrdensServicoController : ControllerBase
                 TotalJuros = ok.Sum(x => x.Juros),
                 TotalPecas = ok.Sum(x => x.ValorPecas),
                 TotalLiquido = ok.Sum(x => x.ValorLiquido),
-                QuantidadeRetorno = retornosTec.Length,
-                TotalValorRetorno = retornosTec.Sum(x => x.ValorTotal),
+                QuantidadeRetorno = retornos.Length,
+                TotalValorRetorno = retornos.Sum(x => x.ValorTotal),
                 QuantidadeCanceladas = cans.Length,
                 TotalValorCanceladas = cans.Sum(x => x.ValorTotal),
                 QuantidadeAguardandoCliente = loja.Length,
@@ -500,6 +500,40 @@ public class OrdensServicoController : ControllerBase
         }
     }
 
+    [HttpPatch("{id:long}/tecnico")]
+    public async Task<IActionResult> AlterarTecnico(long id, [FromBody] AlterarTecnicoRequest request)
+    {
+        try
+        {
+            await GarantirAcessoOsAsync(id);
+            var existente = await _localRepo.ObterPorBlingIdAsync(id)
+                ?? throw new KeyNotFoundException($"Ordem de Serviço {id} não encontrada.");
+            if (OsSituacaoHelper.EhFinalizada(existente.Situacao) && !UsuarioEhAdminOuRoot())
+                throw new InvalidOperationException("Não é possível trocar o técnico de uma OS concluída ou cancelada.");
+
+            var tecnicoNome = await TecnicoDaSituacaoAsync(existente.Situacao, request?.TecnicoNome);
+            await OsOrdemValidacao.ValidarTecnicoAsync(existente.Situacao, tecnicoNome, _tecnicos);
+            await _service.AlterarTecnicoAsync(id, tecnicoNome);
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { erro = ex.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { erro = "Ordem de serviço não encontrada." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { erro = ex.Message });
+        }
+    }
+
     [HttpPatch("{id:long}/justificativa-atraso")]
     public async Task<IActionResult> JustificarAtraso(long id, [FromBody] JustificarAtrasoRequest request)
     {
@@ -678,7 +712,7 @@ public class OrdensServicoController : ControllerBase
             os.Id ??= enviado.Id;
             if (string.IsNullOrWhiteSpace(os.Defeito))
                 os.Defeito = enviado.Defeito;
-            if (string.IsNullOrWhiteSpace(os.Situacao))
+            if (OsSituacaoHelper.EhFinalizada(enviado.Situacao) || string.IsNullOrWhiteSpace(os.Situacao))
                 os.Situacao = enviado.Situacao;
             os.Contato ??= enviado.Contato;
             os.ValorAssistenciaInformado = enviado.ValorAssistenciaInformado;
@@ -726,5 +760,6 @@ public record AlterarSituacaoRequest(
     string? AlertaPermanente = null,
     bool ValorAssistenciaInformado = false,
     decimal? ValorAssistencia = null);
+public record AlterarTecnicoRequest(string? TecnicoNome);
 public record JustificarAtrasoRequest(string JustificativaAtraso);
 public record AtualizarCategoriaFotoRequest(string? Categoria, string? DescricaoFoco = null);

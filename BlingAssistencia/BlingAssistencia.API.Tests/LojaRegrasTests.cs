@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using MundoSmart.BlingAssistencia.API.Config;
+using MundoSmart.BlingAssistencia.API.Models.Bling;
 using MundoSmart.BlingAssistencia.API.Models.Mongo;
 using MundoSmart.BlingAssistencia.API.Repositories;
 using MundoSmart.BlingAssistencia.API.Services;
@@ -551,6 +552,48 @@ public class LojaRegrasTests
         Assert.Equal(1500m, Num(liberado["custoTotal"]));
         var vendido = await Post("/api/aparelhos-loja/venda", Venda(retido["id"]!.GetValue<string>(), cliente, 1500));
         Assert.Equal(1500m, Num(ExigirOperacao(vendido, imei, "venda")["dinheiroRecebido"]));
+    }
+
+    [Fact]
+    public async Task Os_concluida_libera_o_celular_do_estoque_mesmo_com_situacao_diferente_no_retorno()
+    {
+        await GarantirClienteLoja();
+        var imei = NovoImei();
+        var modelo = await PrimeiroModelo();
+        var ficha = Aparelho(imei, modelo.Marca, modelo.Nome, passaPorAssistencia: true);
+        ficha["modeloId"] = modelo.Id;
+        var comprado = await Post("/api/aparelhos-loja/compra", new
+        {
+            valorPago = 900,
+            fornecedorNome = "Fornecedor teste",
+            aparelho = ficha,
+        });
+        var retido = ExigirEstoque(comprado, imei);
+        Assert.Equal("em_assistencia", retido["status"]!.GetValue<string>());
+        var osLojaId = retido["osEntradaId"]!.GetValue<long>();
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var osRepo = scope.ServiceProvider.GetRequiredService<IOsLocalRepository>();
+        var local = await osRepo.ObterPorBlingIdAsync(osLojaId);
+        Assert.NotNull(local);
+        local!.Situacao = "Concluído";
+        await osRepo.SalvarAsync(local);
+
+        var liberado = ExigirEstoque(await Get("/api/aparelhos-loja"), imei);
+        Assert.Equal("em_estoque", liberado["status"]!.GetValue<string>());
+
+        var loja = scope.ServiceProvider.GetRequiredService<IAparelhoLojaService>();
+        await loja.RegistrarCustoOsAsync(new BlingOrdemServico
+        {
+            Id = osLojaId,
+            Imei = imei,
+            Numero = retido["osEntradaNumero"]?.GetValue<string>(),
+            Situacao = "Atendido",
+            Contato = new BlingContatoRef { Nome = "Mundo Smart" },
+        });
+
+        var fichaDepois = await Get($"/api/aparelhos-loja/{retido["id"]!.GetValue<string>()}");
+        Assert.Equal("em_estoque", fichaDepois["status"]!.GetValue<string>());
     }
 
     [Fact]

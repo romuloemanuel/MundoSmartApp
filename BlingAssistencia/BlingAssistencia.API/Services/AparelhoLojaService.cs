@@ -1203,6 +1203,7 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         await _codigos.CompletarFaltantesAsync(cancellationToken);
         var estoque = await _repo.ListarEstoqueAsync(cancellationToken);
         await CompletarJustificativaAssistenciaAsync(estoque, cancellationToken);
+        await LiberarOsConcluidasAsync(estoque, cancellationToken);
         var comCusto = await _repo.ListarComCustoOsAsync(cancellationToken);
         var operacoes = await _repo.ListarOperacoesAsync(500, cancellationToken);
         var ativas = await _repo.ListarOperacoesAtivasAsync(cancellationToken);
@@ -2557,6 +2558,22 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         }
     }
 
+    private async Task LiberarOsConcluidasAsync(
+        List<AparelhoLojaData> estoque,
+        CancellationToken cancellationToken)
+    {
+        foreach (var aparelho in estoque)
+        {
+            if (aparelho.Status != AparelhoLojaStatus.EmAssistencia || aparelho.OsEntradaId is not > 0)
+                continue;
+            var os = await _os.ObterPorBlingIdAsync(aparelho.OsEntradaId.Value);
+            if (os is null || !OsSituacaoHelper.EhConcluida(os.Situacao))
+                continue;
+            aparelho.Status = AparelhoLojaStatus.EmEstoque;
+            await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);
+        }
+    }
+
     private static bool EstaNaLoja(string status) =>
         status is AparelhoLojaStatus.EmEstoque or AparelhoLojaStatus.EmAssistencia;
 
@@ -2805,7 +2822,19 @@ public sealed class AparelhoLojaService : IAparelhoLojaService
         aparelho.CustoPecas = aparelho.CustosOs.Sum(c => c.Pecas);
         aparelho.CustoMaoDeObra = aparelho.CustosOs.Sum(c => c.MaoDeObra);
 
-        if (!OsSituacaoHelper.EhFinalizada(os.Situacao))
+        var situacao = os.Situacao;
+        if (os.Id is > 0 && !OsSituacaoHelper.EhFinalizada(situacao))
+        {
+            var gravada = await _os.ObterPorBlingIdAsync(os.Id.Value);
+            if (gravada is not null && OsSituacaoHelper.EhFinalizada(gravada.Situacao))
+                situacao = gravada.Situacao;
+        }
+
+        if (OsSituacaoHelper.EhConcluida(situacao)
+            && aparelho.Status == AparelhoLojaStatus.EmAssistencia
+            && aparelho.OsEntradaId == os.Id)
+            aparelho.Status = AparelhoLojaStatus.EmEstoque;
+        else if (!OsSituacaoHelper.EhFinalizada(situacao))
             ReterNaAssistencia(aparelho, os, os.Contato?.Nome, os.Contato?.Id);
 
         await _repo.SalvarAparelhoAsync(aparelho, cancellationToken);

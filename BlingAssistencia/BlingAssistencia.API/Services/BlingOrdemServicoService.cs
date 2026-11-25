@@ -16,6 +16,7 @@ public interface IBlingOrdemServicoService
     Task<BlingOrdemServico> CriarAsync(BlingOrdemServico os);
     Task<BlingOrdemServico> AtualizarAsync(long id, BlingOrdemServico os);
     Task AlterarSituacaoAsync(long id, string situacao, string? motivoCancelamento = null, DateTime? dataPrazoPeca = null, string? tecnicoNome = null, bool permitirOsFinalizada = false);
+    Task AlterarTecnicoAsync(long id, string? tecnicoNome);
     Task JustificarAtrasoAsync(long id, string justificativaAtraso);
     Task ExcluirAsync(long id);
 }
@@ -245,6 +246,17 @@ public class BlingOrdemServicoService : IBlingOrdemServicoService
         }
     }
 
+    public async Task AlterarTecnicoAsync(long id, string? tecnicoNome)
+    {
+        var local = await _localRepo.ObterPorBlingIdAsync(id)
+            ?? throw new KeyNotFoundException($"Ordem de Serviço {id} não encontrada.");
+        if (local.ExcluidoEm.HasValue)
+            throw new KeyNotFoundException($"Ordem de Serviço {id} foi excluída.");
+        if (!AplicarTrocaTecnico(local, tecnicoNome))
+            return;
+        await _localRepo.SalvarAsync(local);
+    }
+
     public Task ExcluirAsync(long id) =>
         throw new InvalidOperationException("Exclusão de OS disponível apenas no modo local.");
 
@@ -277,6 +289,22 @@ public class BlingOrdemServicoService : IBlingOrdemServicoService
         local.JustificativaAtrasoLegado = null;
         local.DataAtualizacao = HorarioBrasil.Agora;
         await _localRepo.SalvarAsync(local);
+    }
+
+    internal static bool AplicarTrocaTecnico(OsLocalData local, string? tecnicoNome)
+    {
+        var novo = string.IsNullOrWhiteSpace(tecnicoNome) ? null : tecnicoNome.Trim();
+        if (OsSituacaoHelper.EhReparoAvancadoPlaca(local.Situacao))
+            novo = OsSituacaoHelper.ResolverTecnico(local.Situacao, novo ?? local.TecnicoNome);
+        novo = string.IsNullOrWhiteSpace(novo) ? null : novo.Trim();
+
+        var anterior = string.IsNullOrWhiteSpace(local.TecnicoNome) ? null : local.TecnicoNome.Trim();
+        if (string.Equals(anterior, novo, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        local.TecnicoNome = novo;
+        local.DataAtualizacao = HorarioBrasil.Agora;
+        return true;
     }
 
     private static void AplicarDadosLocais(BlingOrdemServico os, OsLocalData local)
